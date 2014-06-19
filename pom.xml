@@ -53,6 +53,16 @@
     	<artifactId>spark-core_2.10</artifactId>
     	<version>1.0.0</version>
     </dependency>
+    <dependency>
+    	<groupId>org.apache.spark</groupId>
+    	<artifactId>spark-mllib_2.10</artifactId>
+    	<version>1.0.0</version>
+    </dependency>
+    <dependency>
+    	<groupId>org.scalanlp</groupId>
+    	<artifactId>breeze_2.10</artifactId>
+    	<version>0.8.1</version>
+    </dependency>
   </dependencies>
 
   <build>
