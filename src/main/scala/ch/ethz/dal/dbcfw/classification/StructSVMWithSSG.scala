@@ -20,16 +20,35 @@ class StructSVMWithSSG(
   val lossFn: (Vector[Double], Vector[Double]) ⇒ Double, // (yTruth, yPredict) => LossValue
   val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) ⇒ Vector[Double], // (model, y_i, x_i) => Label
   val predictFn: (StructSVMModel, Matrix[Double]) ⇒ Vector[Double]) {
-  
-  val optimizer: SSGSolver = new SSGSolver(data,
+
+  var lambda: Double = 1.0
+  var numPasses: Int = 2
+
+  def withRegularizer(lambda: Double): StructSVMWithSSG = {
+    this.lambda = lambda
+    this
+  }
+
+  def withNumPasses(numPasses: Int): StructSVMWithSSG = {
+    this.numPasses = numPasses
+    this
+  }
+
+  /*val optimizer: SSGSolver = new SSGSolver(data,
       featureFn,
       lossFn,
       oracleFn,
       predictFn,
-      1.0,
-      2)
-  
+      lambda,
+      numPasses)*/
+
   def trainModel(): StructSVMModel =
-    optimizer.optimize()
+    new SSGSolver(data,
+      featureFn,
+      lossFn,
+      oracleFn,
+      predictFn,
+      lambda,
+      numPasses).optimize()
 
 }

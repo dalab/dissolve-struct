@@ -9,7 +9,7 @@ import ch.ethz.dal.dbcfw.regression.LabeledObject
  * Each data point (x_i, y_i) is composed of:
  * x_i, the feature Matrix containing Doubles
  * y_i, the label Vector containing Doubles
- * 
+ *
  * allPatterns is a vector of x_i Matrices
  * allLabels is a vector of y_i Vectors
  */
@@ -34,6 +34,9 @@ class SSGSolver(
 
   val maxOracle = oracleFn
   val phi = featureFn
+  val debugOn: Boolean = true;
+  // Number of dimensions of \phi(x, y)
+  val ndims: Int = phi(data(0).label, data(0).pattern).size
 
   /**
    * SSG optimizer
@@ -42,15 +45,22 @@ class SSGSolver(
 
     var k: Integer = 0
     val n: Int = data.length
-    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(n),
+    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(ndims),
       0.0,
-      DenseVector.zeros(n),
+      DenseVector.zeros(ndims),
       featureFn,
       lossFn,
       oracleFn,
       predictFn)
 
-    for (passNum ← 1 until numPasses) {
+    if (debugOn) {
+      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
+    }
+
+    for (passNum ← 0 until numPasses) {
+
+      if (debugOn)
+        println("Starting pass #%d".format(passNum))
 
       for (dummy ← 1 until n) {
         // 1) Pick example
@@ -75,6 +85,8 @@ class SSGSolver(
         k = k + 1
 
       }
+      if (debugOn)
+        println("Completed pass #%d".format(passNum))
 
     }
 

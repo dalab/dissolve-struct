@@ -3,25 +3,24 @@
  */
 package ch.ethz.dal.dbcfw.demo
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-import org.apache.spark.SparkConf
-import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.regression.LabeledPoint
-import breeze.linalg._
-import breeze.numerics._
+import scala.Array.canBuildFrom
+
+import breeze.linalg.DenseMatrix
+import breeze.linalg.DenseVector
+import breeze.linalg.Matrix
+import breeze.linalg.Vector
+import breeze.linalg.max
+import breeze.numerics.abs
+import ch.ethz.dal.dbcfw.classification.StructSVMModel
+import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 import ch.ethz.dal.dbcfw.regression.LabeledObject
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
-import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
-import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
 
 /**
  *
  */
 object DBCFWStructBinaryDemo {
+
+  val debugOn: Boolean = true
 
   /**
    * Feature function
@@ -81,6 +80,8 @@ object DBCFWStructBinaryDemo {
     var n: Int = 0
     var ndims: Int = 0
 
+    if (debugOn)
+      println("Obtaining data metadata")
     // First pass, get number of data points and number of features
     for (line ← scala.io.Source.fromFile(filename).getLines()) {
       n += 1
@@ -93,18 +94,27 @@ object DBCFWStructBinaryDemo {
     // val patterns: DenseVector[DenseMatrix[Double]] = DenseVector.fill(n) { DenseMatrix.zeros(1, ndims) }
     // Create LabeledObject s
 
+    if (debugOn)
+      println("Obtained data with %d datapoints, and ndims %d".format(n, ndims))
+
     // Second pass - Fill in data
     val data: Vector[LabeledObject] = DenseVector.fill(n) { new LabeledObject(DenseVector.zeros(1), DenseMatrix.zeros(1, ndims)) }
+    if (debugOn)
+      println("Creating LabeledObject Vector with size %d, pattern=%dx%d, label=%dx1".format(data.size, data(0).pattern.rows, data(0).pattern.cols, data(0).label.size))
     var row: Int = 0
     for (line ← scala.io.Source.fromFile(filename).getLines()) {
+      // Convert one line in libSVM format to a string array
       val content: Array[String] = line.split(" ")
+      // Read 1st column (Label)
       data(row).label(0) = content(0) toInt
 
+      // Read rest of the columns (Patterns)
       for (ele ← content.slice(1, content.size)) {
-        val col = ele.split(":")(0) toInt
+        val col = (ele.split(":")(0) toInt) - 1
         val item = ele.split(":")(1) toDouble
 
-        data(row).pattern(1, col) = item
+        // println("row=%d column=%d".format(row, col))
+        data(row).pattern(0, col) = item
       }
       row += 1
     }
@@ -114,15 +124,40 @@ object DBCFWStructBinaryDemo {
 
   def main(args: Array[String]): Unit = {
     val data: Vector[LabeledObject] = loadLibSVMFile("data/a1a.txt")
+    println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(data.size, data(0).pattern.rows, data(0).pattern.cols, data(0).label.size))
 
-    val trainer: StructSVMWithSSG = new StructSVMWithSSG(data,
+    // Fix seed for reproducibility
+    util.Random.setSeed(1)
+
+    // Split data into training and test datasets
+    val trnPrc = 0.80
+    val perm: List[Int] = util.Random.shuffle((0 until data.size) toList)
+    val cutoffIndex: Int = (trnPrc * perm.size) toInt
+    val train_data = data(perm.slice(0, cutoffIndex)) toVector // Obtain in range [0, cutoffIndex)
+    val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
+
+    val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
       lossFn,
       oracleFn,
       predictFn)
-    
-    val model:StructSVMModel = trainer.trainModel()
+      .withNumPasses(5)
+      .withRegularizer(0.01)
 
+    val model: StructSVMModel = trainer.trainModel()
+
+    var truePredictions = 0
+    val totalPredictions = test_data.size
+
+    for (item ← test_data) {
+      val prediction = model.predictFn(model, item.pattern)
+      if (prediction(0) == item.label(0))
+        truePredictions += 1
+    }
+
+    println("Accuracy on Test set = %d/%d = %.4f".format(truePredictions,
+      totalPredictions,
+      (truePredictions.toDouble / totalPredictions.toDouble) * 100))
   }
 
 }
