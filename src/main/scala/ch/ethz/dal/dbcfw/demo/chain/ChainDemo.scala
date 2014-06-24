@@ -76,7 +76,7 @@ object ChainDemo {
     val offset = numStates * numDims + 2 * numStates
     for (i ← 0 until numVars - 1) {
       val idx = y(i).toInt + numStates * y(i + 1).toInt
-      phi(offset + idx + 1) = phi(offset + idx + 1) + 1
+      phi(offset + idx) = phi(offset + idx) + 1
     }
 
     phi
@@ -201,7 +201,7 @@ object ChainDemo {
     val l: Int = yi.size
     for (i ← 0 until numVars) {
       thetaUnary(::, i) := thetaUnary(::, i) + 1.0 / l
-      val idx = yi(i).toInt + 1
+      val idx = yi(i).toInt
       thetaUnary(idx, i) = thetaUnary(idx, i) - 1.0 / l
     }
 
@@ -234,9 +234,16 @@ object ChainDemo {
     label
   }
 
+  /**
+   * Convert Vector[Double] to respective String representation
+   */
   def labelVectorToString(vec: Vector[Double]): String =
-    "%c".format((vec(0).toInt + 97).toChar) +
-      (if (vec.size == 1) "" else labelVectorToString(vec(1 to -1)))
+    if (vec.size == 0)
+      ""
+    else if (vec.size == 1)
+      (vec(0).toInt + 97).toChar + ""
+    else
+      (vec(0).toInt + 97).toChar + labelVectorToString(vec(1 until vec.size))
 
   def main(args: Array[String]): Unit = {
 
@@ -274,7 +281,8 @@ object ChainDemo {
 
     for (item ← test_data) {
       val prediction = model.predictFn(model, item.pattern)
-      println("True = %s\tPrediction = %s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
+      println("True = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
+      // println("True = %d\tPrediction=%d".format(item.label.size, prediction.size))
       if (prediction == item.label)
         truePredictions += 1
     }
