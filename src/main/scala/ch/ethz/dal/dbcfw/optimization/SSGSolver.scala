@@ -45,7 +45,8 @@ class SSGSolver(
 
     var k: Integer = 0
     val n: Int = data.length
-    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(ndims),
+    // Use first example to determine dimension of w
+    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(featureFn(data(0).label, data(0).pattern).size),
       0.0,
       DenseVector.zeros(ndims),
       featureFn,
