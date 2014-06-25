@@ -43,6 +43,7 @@ object ChainDemo {
       val thisPattern: Matrix[Double] = DenseVector(patVals).toDenseMatrix.reshape(patNumRows, patNumCols)
 
       val labVals: Array[Double] = labLine.slice(2, labLine.size).toArray[Double]
+      assert(List.fromArray(labVals).count(x ⇒ x < 0 || x > 26) == 0, "Elements in Labels should be in the range [0, 25]")
       val thisLabel: DenseVector[Double] = DenseVector(labVals)
 
       data(i) = new LabeledObject(thisLabel, thisPattern)
@@ -53,30 +54,36 @@ object ChainDemo {
 
   /**
    * Returns a vector, capturing unary, bias and pairwise features of the word
+   *
+   * x is a Pattern matrix, of dimensions numDims x NumVars (say 129 x 9)
+   * y is a Label vector, of dimension numVars (9 for above x)
    */
-  def featureFn(y: Vector[Double], x: Matrix[Double]): Vector[Double] = {
+  def featureFn(y: Vector[Double], xM: Matrix[Double]): Vector[Double] = {
+    val x = xM.toDenseMatrix
+    println(labelVectorToString(y))
     val numStates = 26
-    val numDims = x.rows
+    val numDims = x.rows // 129 in case of Chain OCR
     val numVars = x.cols
-    val phi: Vector[Double] = DenseVector.zeros(numStates * numDims + 2 * numStates + numStates * numStates)
+    // First term for unaries, Second term for first and last letter baises, Third term for Pairwise features
+    // Unaries are row-major ordered, i.e., [0,129) positions for 'a', [129, 258) for 'b' and so on 
+    val phi: DenseVector[Double] = DenseVector.zeros[Double]((numStates * numDims) + (2 * numStates) + (numStates * numStates))
 
     /* Unaries */
     for (i ← 0 until numVars) {
       val idx = (y(i).toInt * numDims)
-      // Wanted: x(::, i). But, looks like there is no clean way to do this
-      val temp1 = x(0 until x.rows, i to i).toDenseMatrix.toDenseVector
-      val temp2 = phi((idx + 1) to (idx + 1 + numDims - 1))
-      phi((idx + 1) to (idx + 1 + numDims - 1)) := phi((idx + 1) to (idx + 1 + numDims - 1)) + temp1
+      println("%s: %d - %d".format(labelVectorToString(y), idx, idx + numDims))
+      phi((idx) until (idx + numDims)) :=
+        phi((idx) until (idx + numDims)) + x(::, i)
     }
 
-    phi(numStates * numDims + y(0).toInt + 1) = 1.0
-    phi(numStates * numDims + numStates + y(-1).toInt + 1) = 1.0
+    phi(numStates * numDims + y(0).toInt) = 1.0
+    phi(numStates * numDims + numStates + y(-1).toInt) = 1.0
 
     /* Pairwise */
-    val offset = numStates * numDims + 2 * numStates
-    for (i ← 0 until numVars - 1) {
+    val offset = (numStates * numDims) + (2 * numStates)
+    for (i ← 0 until (numVars - 1)) {
       val idx = y(i).toInt + numStates * y(i + 1).toInt
-      phi(offset + idx) = phi(offset + idx) + 1
+      phi(offset + idx) = phi(offset + idx) + 1.0
     }
 
     phi
@@ -211,6 +218,12 @@ object ChainDemo {
     label
   }
 
+  /**
+   * Loss function
+   *
+   * TODO
+   * * Use MaxOracle instead of this (Use yi: Option<Vector[Double]>)
+   */
   def predictFn(model: StructSVMModel, xiM: Matrix[Double]): Vector[Double] = {
     val numStates = 26
     val xi = xiM.toDenseMatrix
@@ -245,6 +258,9 @@ object ChainDemo {
     else
       (vec(0).toInt + 97).toChar + labelVectorToString(vec(1 until vec.size))
 
+  /**
+   * Runner
+   */
   def main(args: Array[String]): Unit = {
 
     val data: Vector[LabeledObject] = loadData("data/ocr-patterns.csv", "data/ocr-labels.csv", "data/ocr-folds.csv")
@@ -271,7 +287,7 @@ object ChainDemo {
       lossFn,
       oracleFn,
       predictFn)
-      .withNumPasses(1)
+      .withNumPasses(5)
       .withRegularizer(0.01)
 
     val model: StructSVMModel = trainer.trainModel()
@@ -281,8 +297,8 @@ object ChainDemo {
 
     for (item ← test_data) {
       val prediction = model.predictFn(model, item.pattern)
-      println("True = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
-      // println("True = %d\tPrediction=%d".format(item.label.size, prediction.size))
+      if (debugOn)
+        println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
       if (prediction == item.label)
         truePredictions += 1
     }
