@@ -19,10 +19,10 @@ def main():
             xi = np.zeros((letter_shape[0] * letter_shape[1] + 1, num_letters))
             for letter_id in range(num_letters):
                 letter = pixels[letter_id] # Returns a 16x8 matrix
-                xi[:, letter_id] = np.append(letter.flatten(), [1.])
+                xi[:, letter_id] = np.append(letter.flatten(order='F'), [1.])
             # Vectorize the above matrix and store it
             # After flattening, order is column-major
-            xi_str = ','.join([`s` for s in xi.flatten()])
+            xi_str = ','.join([`s` for s in xi.flatten('F')])
             # FORMAT: id,#rows,#cols,x_0_0,x_0_1,...x_n_m
             fpat.write('%d,%d,%d,%s\n' % (i+1, np.shape(xi)[0], np.shape(xi)[1], xi_str))
 
