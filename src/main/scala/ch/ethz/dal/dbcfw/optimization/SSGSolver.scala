@@ -63,7 +63,7 @@ class SSGSolver(
       if (debugOn)
         println("Starting pass #%d".format(passNum))
 
-      for (dummy ← 1 until n) {
+      for (dummy ← 0 until n) {
         // 1) Pick example
         val i: Int = dummy
         val pattern: Matrix[Double] = data(i).pattern

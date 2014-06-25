@@ -6,11 +6,12 @@ import breeze.numerics._
 import breeze.generic._
 import ch.ethz.dal.dbcfw.classification.StructSVMModel
 import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
+import java.io.File
 
 object ChainDemo {
 
   val debugOn = true
-
+  
   /**
    * Reads data produced by the convert-ocr-data.py script and loads into memory as a vector of Labeled objects
    *
@@ -37,6 +38,9 @@ object ChainDemo {
 
       val patNumRows: Int = patLine(1) toInt
       val patNumCols: Int = patLine(2) toInt
+      val labNumEles: Int = labLine(1) toInt
+
+      assert(patNumCols == labNumEles, "pattern_i.cols == label_i.cols violated in data")
 
       val patVals: Array[Double] = patLine.slice(3, patLine.size).toArray[Double]
       // The pixel values should be Column-major ordered
@@ -45,6 +49,8 @@ object ChainDemo {
       val labVals: Array[Double] = labLine.slice(2, labLine.size).toArray[Double]
       assert(List.fromArray(labVals).count(x ⇒ x < 0 || x > 26) == 0, "Elements in Labels should be in the range [0, 25]")
       val thisLabel: DenseVector[Double] = DenseVector(labVals)
+
+      assert(thisPattern.cols == thisLabel.size, "pattern_i.cols == label_i.cols violated in Matrix representation")
 
       data(i) = new LabeledObject(thisLabel, thisPattern)
     }
@@ -60,7 +66,7 @@ object ChainDemo {
    */
   def featureFn(y: Vector[Double], xM: Matrix[Double]): Vector[Double] = {
     val x = xM.toDenseMatrix
-    println(labelVectorToString(y))
+    // println(labelVectorToString(y))
     val numStates = 26
     val numDims = x.rows // 129 in case of Chain OCR
     val numVars = x.cols
@@ -71,7 +77,7 @@ object ChainDemo {
     /* Unaries */
     for (i ← 0 until numVars) {
       val idx = (y(i).toInt * numDims)
-      println("%s: %d - %d".format(labelVectorToString(y), idx, idx + numDims))
+      //println("%s: %d - %d".format(labelVectorToString(y), idx, idx + numDims))
       phi((idx) until (idx + numDims)) :=
         phi((idx) until (idx + numDims)) + x(::, i)
     }
@@ -85,6 +91,9 @@ object ChainDemo {
       val idx = y(i).toInt + numStates * y(i + 1).toInt
       phi(offset + idx) = phi(offset + idx) + 1.0
     }
+    
+    if(debugOn)
+      csvwrite(new File("data/debug-phi.csv"), phi.toDenseMatrix)
 
     phi
   }
@@ -156,17 +165,17 @@ object ChainDemo {
     val nStates: Int = logNodePot.cols
 
     /*--- Forward pass ---*/
-    val alpha: DenseMatrix[Double] = DenseMatrix.zeros[Double](nNodes, nStates)
-    val mxState: DenseMatrix[Double] = DenseMatrix.zeros[Double](nNodes, nStates)
+    val alpha: DenseMatrix[Double] = DenseMatrix.zeros[Double](nNodes, nStates) // nx26 matrix
+    val mxState: DenseMatrix[Double] = DenseMatrix.zeros[Double](nNodes, nStates) // nx26 matrix
     alpha(0, ::) := logNodePot(0, ::)
     for (n ← 1 until nNodes) {
       /* Equivalent to `tmp = repmat(alpha(n-1, :)', 1, nStates) + logEdgePot` */
       // Create an empty 26x26 repmat term
       val alphaRepmat: DenseMatrix[Double] = DenseMatrix.zeros[Double](nStates, nStates)
-      for (row ← 0 until nStates) {
+      for (col ← 0 until nStates) {
         // Take the (n-1)th row from alpha and represent it as a column in repMat
         // alpha(n-1, ::) returns a Transposed view, so use the below workaround
-        alphaRepmat(::, row) := alpha.t(::, n - 1)
+        alphaRepmat(::, col) := alpha.t(::, n - 1)
       }
       val tmp: DenseMatrix[Double] = alphaRepmat + logEdgePot
       val colMaxTmp: DenseMatrix[Double] = columnwiseMax(tmp)
@@ -189,13 +198,17 @@ object ChainDemo {
    */
   def oracleFn(model: StructSVMModel, yi: Vector[Double], xiM: Matrix[Double]): Vector[Double] = {
     val numStates = 26
-    val xi = xiM.toDenseMatrix
-    val numDims = xi.rows
-    val numVars = xi.cols
+    val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
+    val numDims = xi.rows // 129 in Chain example 
+    val numVars = xi.cols // The length of word, say 9
 
+    // Convert the lengthy weight vector into an object, to ease representation
+    // weight.unary is a numDims x numStates Matrix (129 x 26 in above example)
+    // weight.firstBias and weight.lastBias is a numStates-dimensional vector
+    // weight.pairwise is a numStates x numStates Matrix
     val weight: Weight = weightVecToObj(model.getWeights(), numStates, numDims)
 
-    val thetaUnary: DenseMatrix[Double] = weight.unary.t * xi // Produces a 129x9 matrix
+    val thetaUnary: DenseMatrix[Double] = weight.unary.t * xi // Produces a 26 x n matrix
 
     // First position has a bias
     thetaUnary(::, 0) := thetaUnary(::, 0) + weight.firstBias
@@ -210,6 +223,15 @@ object ChainDemo {
       thetaUnary(::, i) := thetaUnary(::, i) + 1.0 / l
       val idx = yi(i).toInt
       thetaUnary(idx, i) = thetaUnary(idx, i) - 1.0 / l
+    }
+    
+    if(debugOn) {
+      println("Writing debug files")
+      csvwrite(new File("data/debug-weights.csv"), model.getWeights().toDenseVector.toDenseMatrix)
+      csvwrite(new File("data/debug-theta-unary.csv"), thetaUnary)
+      csvwrite(new File("data/debug-theta-pair.csv"), thetaPairwise)
+      csvwrite(new File("data/debug-xi.csv"), xi)
+      csvwrite(new File("data/debug-yi.csv"), yi.toDenseVector.toDenseMatrix)
     }
 
     // Solve inference problem
@@ -226,13 +248,17 @@ object ChainDemo {
    */
   def predictFn(model: StructSVMModel, xiM: Matrix[Double]): Vector[Double] = {
     val numStates = 26
-    val xi = xiM.toDenseMatrix
-    val numDims = xi.rows
-    val numVars = xi.cols
+    val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
+    val numDims = xi.rows // 129 in Chain example 
+    val numVars = xi.cols // The length of word, say 9
 
+    // Convert the lengthy weight vector into an object, to ease representation
+    // weight.unary is a numDims x numStates Matrix (129 x 26 in above example)
+    // weight.firstBias and weight.lastBias is a numStates-dimensional vector
+    // weight.pairwise is a numStates x numStates Matrix
     val weight: Weight = weightVecToObj(model.getWeights(), numStates, numDims)
 
-    val thetaUnary: DenseMatrix[Double] = weight.unary.t * xi // Produces a 129x9 matrix
+    val thetaUnary: DenseMatrix[Double] = weight.unary.t * xi // Produces a 26 x n matrix
 
     // First position has a bias
     thetaUnary(::, 0) := thetaUnary(::, 0) + weight.firstBias
@@ -263,16 +289,16 @@ object ChainDemo {
    */
   def main(args: Array[String]): Unit = {
 
-    val data: Vector[LabeledObject] = loadData("data/ocr-patterns.csv", "data/ocr-labels.csv", "data/ocr-folds.csv")
+    val data: Vector[LabeledObject] = loadData("data/head1-ocr-patterns.csv", "data/head1-ocr-labels.csv", "data/head1-ocr-folds.csv")
 
     if (debugOn)
       println("Loaded %d examples, pattern:%dx%d and labels:%dx1"
         .format(data.size,
           data(0).pattern.rows,
-          data(1).pattern.cols,
+          data(0).pattern.cols,
           data(0).label.size))
 
-    // Fix seed for reproducibility
+    /*    // Fix seed for reproducibility
     util.Random.setSeed(1)
 
     // Split data into training and test datasets
@@ -281,13 +307,16 @@ object ChainDemo {
     val cutoffIndex: Int = (trnPrc * perm.size) toInt
     val train_data = data(perm.slice(0, cutoffIndex)) toVector // Obtain in range [0, cutoffIndex)
     val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
+*/
 
+    val train_data = data
+    val test_data = data
     val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
       lossFn,
       oracleFn,
       predictFn)
-      .withNumPasses(5)
+      .withNumPasses(1)
       .withRegularizer(0.01)
 
     val model: StructSVMModel = trainer.trainModel()
