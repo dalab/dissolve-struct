@@ -4,7 +4,6 @@
 package ch.ethz.dal.dbcfw.demo
 
 import scala.Array.canBuildFrom
-
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Matrix
@@ -14,6 +13,7 @@ import breeze.numerics.abs
 import ch.ethz.dal.dbcfw.classification.StructSVMModel
 import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dal.dbcfw.optimization.SolverOptions
 
 /**
  *
@@ -135,14 +135,20 @@ object DBCFWStructBinaryDemo {
     val cutoffIndex: Int = (trnPrc * perm.size) toInt
     val train_data = data(perm.slice(0, cutoffIndex)) toVector // Obtain in range [0, cutoffIndex)
     val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
+    
+    val solverOptions: SolverOptions = new SolverOptions();
+    solverOptions.numPasses = 1
+    solverOptions.debug = true
+    solverOptions.xldebug = true
+    solverOptions.lambda = 0.01
+    solverOptions.doWeightedAveraging = false
 
     val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
       lossFn,
       oracleFn,
-      predictFn)
-      .withNumPasses(5)
-      .withRegularizer(0.01)
+      predictFn,
+      solverOptions)
 
     val model: StructSVMModel = trainer.trainModel()
 

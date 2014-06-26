@@ -7,6 +7,7 @@ import breeze.generic._
 import ch.ethz.dal.dbcfw.classification.StructSVMModel
 import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 import java.io.File
+import ch.ethz.dal.dbcfw.optimization.SolverOptions
 
 object ChainDemo {
 
@@ -276,35 +277,42 @@ object ChainDemo {
    */
   def main(args: Array[String]): Unit = {
 
-    val data: Vector[LabeledObject] = loadData("data/patterns.csv", "data/labels.csv", "data/folds.csv")
+    val train_data_unord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val test_data: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
 
-    if (debugOn)
-      println("Loaded %d examples, pattern:%dx%d and labels:%dx1"
-        .format(data.size,
-          data(0).pattern.rows,
-          data(0).pattern.cols,
-          data(0).label.size))
+    // Read order from the file and permute the Vector accordingly
+    val trainOrder: String = "data/perm_train.csv"
+    val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
+    assert(permLine.size == 1)
+    val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
+    val train_data = train_data_unord(List.fromArray(perm))
 
-    // Fix seed for reproducibility
-    util.Random.setSeed(1)
+    if (debugOn) {
+      println("Loaded %d training examples, pattern:%dx%d and labels:%dx1"
+        .format(train_data.size,
+          train_data(0).pattern.rows,
+          train_data(0).pattern.cols,
+          train_data(0).label.size))
+      println("Loaded %d test examples, pattern:%dx%d and labels:%dx1"
+        .format(test_data.size,
+          test_data(0).pattern.rows,
+          test_data(0).pattern.cols,
+          test_data(0).label.size))
+    }
 
-    // Split data into training and test datasets
-    val trnPrc = 0.80
-    val perm: List[Int] = util.Random.shuffle((0 until data.size) toList)
-    val cutoffIndex: Int = (trnPrc * perm.size) toInt
-    val train_data = data(perm.slice(0, cutoffIndex)) toVector // Obtain in range [0, cutoffIndex)
-    val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
-
-    /*val train_data = data
-    val test_data = data*/
+    val solverOptions: SolverOptions = new SolverOptions();
+    solverOptions.numPasses = 1
+    solverOptions.debug = true
+    solverOptions.xldebug = true
+    solverOptions.lambda = 0.01
+    solverOptions.doWeightedAveraging = false
 
     val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
       lossFn,
       oracleFn,
-      predictFn)
-      .withNumPasses(10)
-      .withRegularizer(0.01)
+      predictFn,
+      solverOptions)
 
     val model: StructSVMModel = trainer.trainModel()
 

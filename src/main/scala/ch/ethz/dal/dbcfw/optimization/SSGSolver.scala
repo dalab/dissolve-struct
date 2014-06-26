@@ -3,6 +3,7 @@ package ch.ethz.dal.dbcfw.optimization
 import breeze.linalg._
 import ch.ethz.dal.dbcfw.classification.StructSVMModel
 import ch.ethz.dal.dbcfw.regression.LabeledObject
+import java.io.File
 
 /**
  * Input:
@@ -22,19 +23,15 @@ class SSGSolver(
   val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) ⇒ Vector[Double], // (model, y_i, x_i) => Label
   val predictFn: (StructSVMModel, Matrix[Double]) ⇒ Vector[Double],
   // Parameters
-  val lambda: Double,
-  // val gapThreshold: Double,
-  // val gapCheck: Boolean,
-  val numPasses: Integer /*,
-  val doLinesearch: Boolean,
-  val doWeightedAveraging: Boolean,
-  val timeBudget: Integer,
-  val randSeed: Integer,
-  val sample: String*/ ) {
+  val solverOptions: SolverOptions) {
+
+  val numPasses = solverOptions.numPasses
+  val lambda = solverOptions.lambda
+  val debugOn: Boolean = solverOptions.debug
+  val xldebug: Boolean = solverOptions.xldebug
 
   val maxOracle = oracleFn
   val phi = featureFn
-  val debugOn: Boolean = true;
   // Number of dimensions of \phi(x, y)
   val ndims: Int = phi(data(0).label, data(0).pattern).size
 
@@ -74,13 +71,16 @@ class SSGSolver(
 
         // 3) Get the subgradient
         val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
-        val w_s: Vector[Double] = psi_i :* (1 / n * lambda);
+        val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
+
+        if (xldebug)
+          csvwrite(new File("data/debug/scala-w-%d.csv".format(dummy + 1)), w_s.toDenseVector.toDenseMatrix)
 
         // 4) Step size gamma
-        val gamma: Double = 1 / (k + 1)
+        val gamma: Double = 1.0 / (k + 1.0)
 
         // 5) Update the weights of the model
-        val newWeights: Vector[Double] = (model.getWeights() :* (1 - gamma)) :+ (w_s :* gamma)
+        val newWeights: Vector[Double] = (model.getWeights() :* (1 - gamma)) + (w_s :* (gamma * n))
         model.updateWeights(newWeights)
 
         k = k + 1
