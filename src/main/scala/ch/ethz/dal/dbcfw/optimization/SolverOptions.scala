@@ -12,6 +12,7 @@ class SolverOptions {
   var debugMultiplier: Int = 0
   var lambda: Double = 0.01 // FIXME This is 1/n in Matlab code
   var testData: Vector[LabeledObject] = null
+  var doLineSearch: Boolean = false
 
-  var xldebug: Boolean = true
+  var xldebug: Boolean = false
 }

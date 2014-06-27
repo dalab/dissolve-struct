@@ -18,7 +18,7 @@ import breeze.linalg._
  */
 class StructSVMModel(
   var weights: Vector[Double],
-  val ell: Double,
+  var ell: Double,
   val ellMat: Vector[Double],
   val featureFn: (Vector[Double], Matrix[Double]) ⇒ Vector[Double],
   val lossFn: (Vector[Double], Vector[Double]) ⇒ Double,
@@ -33,4 +33,6 @@ class StructSVMModel(
     weights = newWeights
   }
 
+  def updateEll(newEll: Double) =
+    ell = newEll
 }

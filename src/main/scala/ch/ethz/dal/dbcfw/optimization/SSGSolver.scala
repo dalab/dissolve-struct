@@ -55,12 +55,12 @@ class SSGSolver(
       println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
     }
 
-    for (passNum ← 0 until numPasses) {
+    for (passNum <- 0 until numPasses) {
 
       if (debugOn)
         println("Starting pass #%d".format(passNum))
 
-      for (dummy ← 0 until n) {
+      for (dummy <- 0 until n) {
         // 1) Pick example
         val i: Int = dummy
         val pattern: Matrix[Double] = data(i).pattern
@@ -73,8 +73,9 @@ class SSGSolver(
         val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
         val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
 
-        if (xldebug)
-          csvwrite(new File("data/debug/scala-w-%d.csv".format(dummy + 1)), w_s.toDenseVector.toDenseMatrix)
+        if (xldebug && dummy == (n-1))
+          csvwrite(new File("data/debug/scala-w-%d.csv".format(passNum+1)), w_s.toDenseVector.toDenseMatrix)
+          // csvwrite(new File("data/debug/scala-w.csv"), w_s.toDenseVector.toDenseMatrix)
 
         // 4) Step size gamma
         val gamma: Double = 1.0 / (k + 1.0)

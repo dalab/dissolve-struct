@@ -8,6 +8,7 @@ import ch.ethz.dal.dbcfw.classification.StructSVMModel
 import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 import java.io.File
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
+import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
 
 object ChainDemo {
 
@@ -99,7 +100,7 @@ object ChainDemo {
    * Return Normalized Hamming distance
    */
   def lossFn(yTruth: Vector[Double], yPredict: Vector[Double]): Double =
-    sum((yTruth :== yPredict).map(x => if (x) 1 else 0)) / yTruth.size.toDouble
+    sum((yTruth :== yPredict).map(x => if (x) 0 else 1)) / yTruth.size.toDouble
 
   /**
    * Readable representation of the weight vector
@@ -303,11 +304,21 @@ object ChainDemo {
     val solverOptions: SolverOptions = new SolverOptions();
     solverOptions.numPasses = 1
     solverOptions.debug = true
-    solverOptions.xldebug = true
+    solverOptions.xldebug = false
     solverOptions.lambda = 0.01
-    solverOptions.doWeightedAveraging = false
+    solverOptions.doWeightedAveraging = true
+    solverOptions.doLineSearch = true
 
-    val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
+    /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
+      featureFn,
+      lossFn,
+      oracleFn,
+      predictFn,
+      solverOptions)*/
+    
+    println(Double.MinPositiveValue)
+    
+    val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
       featureFn,
       lossFn,
       oracleFn,
@@ -316,16 +327,23 @@ object ChainDemo {
 
     val model: StructSVMModel = trainer.trainModel()
 
-    var truePredictions = 0
-    val totalPredictions = test_data.size
+    var avgTrainLoss: Double = 0.0
+    for (item <- train_data) {
+      val prediction = model.predictFn(model, item.pattern)
+      avgTrainLoss += lossFn(item.label, prediction)
+      // if (debugOn)
+        // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
+    }
+    println("Average loss on training set = %f".format(avgTrainLoss/train_data.size))
 
+    var avgTestLoss: Double = 0.0
     for (item <- test_data) {
       val prediction = model.predictFn(model, item.pattern)
-      if (debugOn)
-        println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
-      if (prediction == item.label)
-        truePredictions += 1
+      avgTestLoss += lossFn(item.label, prediction)
+      // if (debugOn)
+        // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
     }
+    println("Average loss on test set = %f".format(avgTestLoss/test_data.size))
 
   }
 
