@@ -32,6 +32,9 @@ class StructSVMModel(
   def updateWeights(newWeights: Vector[Double]) = {
     weights = newWeights
   }
+  
+  def getEll(): Double = 
+    ell
 
   def updateEll(newEll: Double) =
     ell = newEll

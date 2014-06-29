@@ -6,13 +6,19 @@ class SolverOptions {
   var numPasses: Int = 50
   var doWeightedAveraging: Boolean = true
   var timeBudget = Int.MaxValue
-  var debug: Boolean = false
+  
   var randSeed: Int = 1
   var sample: String = "iter" // "uniform", "perm" or "iter"
   var debugMultiplier: Int = 0
   var lambda: Double = 0.01 // FIXME This is 1/n in Matlab code
   var testData: Vector[LabeledObject] = null
   var doLineSearch: Boolean = false
-
+  
+  // For debugging/Testing purposes
+  // Basic debugging flag
+  var debug: Boolean = false
+  // More verbose debugging flag
   var xldebug: Boolean = false
+  // Write weights to CSV after each pass
+  var debugWeights: Boolean = false
 }

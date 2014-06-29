@@ -20,7 +20,7 @@ object ChainDemo {
    *  TODO
    *  * Take foldNumber as a parameter and return training and test set
    */
-  def loadData(patternsFilename: String, labelsFilename: String, foldFilename: String): Vector[LabeledObject] = {
+  def loadData(patternsFilename: String, labelsFilename: String, foldFilename: String): DenseVector[LabeledObject] = {
     val patterns: Array[String] = scala.io.Source.fromFile(patternsFilename).getLines().toArray[String]
     val labels: Array[String] = scala.io.Source.fromFile(labelsFilename).getLines().toArray[String]
     val folds: Array[String] = scala.io.Source.fromFile(foldFilename).getLines().toArray[String]
@@ -30,7 +30,7 @@ object ChainDemo {
     assert(patterns.size == labels.size, "#Patterns=%d, but #Labels=%d".format(patterns.size, labels.size))
     assert(patterns.size == folds.size, "#Patterns=%d, but #Folds=%d".format(patterns.size, folds.size))
 
-    val data: Vector[LabeledObject] = DenseVector.fill(n) { null }
+    val data: DenseVector[LabeledObject] = DenseVector.fill(n) { null }
 
     for (i <- 0 until n) {
       // Expected format: id, #rows, #cols, (pixels_i_j,)* pixels_n_m
@@ -302,7 +302,7 @@ object ChainDemo {
     }
 
     val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 1
+    solverOptions.numPasses = 5
     solverOptions.debug = true
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -315,8 +315,6 @@ object ChainDemo {
       oracleFn,
       predictFn,
       solverOptions)*/
-    
-    println(Double.MinPositiveValue)
     
     val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
       featureFn,

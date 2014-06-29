@@ -16,15 +16,22 @@ import java.io.File
  *
  */
 class BCFWSolver /*extends Optimizer*/ (
-  // val allPatterns: Vector[Matrix[Double]],
-  // val allLabels: Vector[Vector[Double]],
   val data: Vector[LabeledObject],
   val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
   val lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
   val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
   val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-  // Parameters
-  val solverOptions: SolverOptions) {
+  val solverOptions: SolverOptions,
+  val testData: Vector[LabeledObject]) {
+
+  // Constructor without test data
+  def this(
+    data: Vector[LabeledObject],
+    featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
+    lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
+    oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
+    predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
+    solverOptions: SolverOptions) = this(data, featureFn, lossFn, oracleFn, predictFn, solverOptions, null)
 
   val numPasses = solverOptions.numPasses
   val lambda = solverOptions.lambda
@@ -60,6 +67,14 @@ class BCFWSolver /*extends Optimizer*/ (
       else null
     var lAvg: Double = 0.0
 
+    var debugIter = if (solverOptions.debugMultiplier == 0) {
+      solverOptions.debugMultiplier = 100
+      n
+    } else {
+      1
+    }
+    val debugModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
+
     if (debugOn) {
       println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
     }
@@ -83,10 +98,6 @@ class BCFWSolver /*extends Optimizer*/ (
         val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
         val loss_i: Double = lossFn(label, ystar_i)
         val ell_s: Double = (1.0 / n) * loss_i
-
-        if (xldebug && dummy == (n - 1))
-          csvwrite(new File("data/debug/scala-w-%d.csv".format(passNum + 1)), w_s.toDenseVector.toDenseMatrix)
-        // csvwrite(new File("data/debug/scala-w.csv"), w_s.toDenseVector.toDenseMatrix)
 
         // 4) Get step-size gamma
         val gamma: Double =
@@ -116,7 +127,34 @@ class BCFWSolver /*extends Optimizer*/ (
           lAvg = (lAvg * (1.0 - rho)) + (ell * rho)
         }
 
+        /**
+         * DEBUG/TEST code
+         */
+        // If this is the last pass and debugWeights flag is true, dump weight vector to CSV
+        if (solverOptions.debugWeights && dummy == (n - 1))
+          csvwrite(new File("data/debug/debugWeights/scala-w-%d.csv".format(passNum + 1)),
+            { if (solverOptions.doWeightedAveraging) wAvg else model.getWeights }.toDenseVector.toDenseMatrix)
+
         k = k + 1
+
+        if (debugOn && k >= debugIter) {
+          if (solverOptions.doWeightedAveraging) {
+            debugModel.updateWeights(wAvg)
+            debugModel.updateEll(lAvg)
+          } else {
+            debugModel.updateWeights(model.getWeights)
+            debugModel.updateEll(model.getEll)
+          }
+          val f = -SolverUtils.objectiveFunction(debugModel.getWeights, debugModel.getEll, lambda)
+          val gapTup = SolverUtils.dualityGap(data, phi, lossFn, maxOracle, debugModel, lambda)
+          val gap = gapTup._1
+          val primal = f + gap
+          val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
+          println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
+            .format(passNum, k, primal, f, gap, trainError))
+
+          debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
+        }
 
       }
       if (debugOn)
