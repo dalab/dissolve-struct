@@ -2,6 +2,8 @@ package ch.ethz.dal.dbcfw.optimization
 
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 
+import breeze.linalg.Vector
+
 class SolverOptions {
   var numPasses: Int = 50
   var doWeightedAveraging: Boolean = true
@@ -21,4 +23,6 @@ class SolverOptions {
   var xldebug: Boolean = false
   // Write weights to CSV after each pass
   var debugWeights: Boolean = false
+  // Dump loss through iterations
+  var debugLoss: Boolean = true
 }

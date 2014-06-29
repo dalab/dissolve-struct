@@ -308,6 +308,8 @@ object ChainDemo {
     solverOptions.lambda = 0.01
     solverOptions.doWeightedAveraging = true
     solverOptions.doLineSearch = true
+    solverOptions.debugLoss = true
+    solverOptions.testData = test_data
 
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,

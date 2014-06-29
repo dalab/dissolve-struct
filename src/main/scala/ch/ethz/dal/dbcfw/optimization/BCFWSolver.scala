@@ -11,6 +11,7 @@ import breeze.linalg._
 import breeze.numerics._
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import java.io.File
+import java.io.PrintWriter
 
 /**
  *
@@ -44,6 +45,7 @@ class BCFWSolver /*extends Optimizer*/ (
   val ndims: Int = phi(data(0).label, data(0).pattern).size
 
   val eps: Double = 2.2204E-16
+  val lossWriterFileName = "data/debug/loss.csv"
 
   /**
    * BCFW optimizer
@@ -74,6 +76,14 @@ class BCFWSolver /*extends Optimizer*/ (
       1
     }
     val debugModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
+
+    val lossWriter = if (solverOptions.debugLoss) new PrintWriter(new File(lossWriterFileName)) else null
+    if (solverOptions.debugLoss) {
+      if (solverOptions.testData != null)
+        lossWriter.write("pass_num,iter,primal,dual,duality_gap,train_error,test_error\n")
+      else
+        lossWriter.write("pass_num,iter,primal,dual,duality_gap,train_error\n")
+    }
 
     if (debugOn) {
       println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
@@ -150,8 +160,20 @@ class BCFWSolver /*extends Optimizer*/ (
           val gap = gapTup._1
           val primal = f + gap
           val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
-          println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
-            .format(passNum, k, primal, f, gap, trainError))
+
+          if (solverOptions.testData != null) {
+            val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, debugModel)
+            println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
+              .format(passNum+1, k, primal, f, gap, trainError, testError))
+
+            if (solverOptions.debugLoss)
+              lossWriter.write("%d,%d,%f,%f,%f,%f,%f\n".format(passNum+1, k, primal, f, gap, trainError, testError))
+          } else {
+            println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
+              .format(passNum+1, k, primal, f, gap, trainError))
+            if (solverOptions.debugLoss)
+              lossWriter.write("%d,%d,%f,%f,%f,%f\n".format(passNum+1, k, primal, f, gap, trainError))
+          }
 
           debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
         }
@@ -168,6 +190,9 @@ class BCFWSolver /*extends Optimizer*/ (
     } else {
       model.updateEll(ell)
     }
+
+    if (lossWriter != null)
+      lossWriter.close()
 
     return model
   }
