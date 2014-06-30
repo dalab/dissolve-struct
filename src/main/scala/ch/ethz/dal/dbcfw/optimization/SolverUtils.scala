@@ -73,4 +73,32 @@ object SolverUtils {
     (gap, w_s, ell_s)
   }
 
+  /**
+   * Primal objective
+   */
+  def primalObjective(data: Vector[LabeledObject],
+    featureFn: (Vector[Double], Matrix[Double]) => Vector[Double],
+    lossFn: (Vector[Double], Vector[Double]) => Double,
+    oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double],
+    model: StructSVMModel,
+    lambda: Double): Double = {
+
+    var hingeLosses: Double = 0.0
+    for (i <- 0 until data.size) {
+      val yStar_i = oracleFn(model, data(i).label, data(i).pattern)
+      val loss_i = lossFn(data(i).label, yStar_i)
+      val psi_i = featureFn(data(i).label, data(i).pattern) - featureFn(yStar_i, data(i).pattern)
+
+      val hingeloss_i = loss_i - model.getWeights().t * psi_i
+      // println("loss_i = %f, other_loss = %f".format(loss_i, model.getWeights().t * psi_i))
+      // assert(hingeloss_i >= 0.0)
+
+      hingeLosses += hingeloss_i
+    }
+
+    // Compute the primal and return it
+    0.5 * lambda * (model.getWeights.t * model.getWeights) + hingeLosses / data.size
+
+  }
+
 }

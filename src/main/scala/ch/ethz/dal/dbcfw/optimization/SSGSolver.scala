@@ -1,9 +1,11 @@
 package ch.ethz.dal.dbcfw.optimization
 
 import breeze.linalg._
+import breeze.numerics._
 import ch.ethz.dal.dbcfw.classification.StructSVMModel
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import java.io.File
+import java.io.PrintWriter
 
 /**
  * Input:
@@ -35,6 +37,9 @@ class SSGSolver(
   // Number of dimensions of \phi(x, y)
   val ndims: Int = phi(data(0).label, data(0).pattern).size
 
+  // Filenames
+  val lossWriterFileName = "data/debug/ssg-loss.csv"
+
   /**
    * SSG optimizer
    */
@@ -42,6 +47,7 @@ class SSGSolver(
 
     var k: Integer = 0
     val n: Int = data.length
+    val d: Int = featureFn(data(0).label, data(0).pattern).size
     // Use first example to determine dimension of w
     val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(featureFn(data(0).label, data(0).pattern).size),
       0.0,
@@ -50,6 +56,28 @@ class SSGSolver(
       lossFn,
       oracleFn,
       predictFn)
+
+    // Initialization in case of Weighted Averaging
+    var wAvg: DenseVector[Double] =
+      if (solverOptions.doWeightedAveraging)
+        DenseVector.zeros(d)
+      else null
+
+    var debugIter = if (solverOptions.debugMultiplier == 0) {
+      solverOptions.debugMultiplier = 100
+      n
+    } else {
+      1
+    }
+    val debugModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
+
+    val lossWriter = if (solverOptions.debugLoss) new PrintWriter(new File(lossWriterFileName)) else null
+    if (solverOptions.debugLoss) {
+      if (solverOptions.testData != null)
+        lossWriter.write("pass_num,iter,primal,dual,duality_gap,train_error,test_error\n")
+      else
+        lossWriter.write("pass_num,iter,primal,dual,duality_gap,train_error\n")
+    }
 
     if (debugOn) {
       println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
@@ -73,9 +101,9 @@ class SSGSolver(
         val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
         val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
 
-        if (xldebug && dummy == (n-1))
-          csvwrite(new File("data/debug/scala-w-%d.csv".format(passNum+1)), w_s.toDenseVector.toDenseMatrix)
-          // csvwrite(new File("data/debug/scala-w.csv"), w_s.toDenseVector.toDenseMatrix)
+        if (xldebug && dummy == (n - 1))
+          csvwrite(new File("data/debug/scala-w-%d.csv".format(passNum + 1)), w_s.toDenseVector.toDenseMatrix)
+        // csvwrite(new File("data/debug/scala-w.csv"), w_s.toDenseVector.toDenseMatrix)
 
         // 4) Step size gamma
         val gamma: Double = 1.0 / (k + 1.0)
@@ -85,6 +113,38 @@ class SSGSolver(
         model.updateWeights(newWeights)
 
         k = k + 1
+
+        if (solverOptions.doWeightedAveraging) {
+          val rho: Double = 2.0 / (k + 2.0)
+          wAvg = wAvg * (1.0 - rho) + model.getWeights() * rho
+        }
+
+        /*if (debugOn && k >= debugIter) {
+          if (solverOptions.doWeightedAveraging) {
+            debugModel.updateWeights(wAvg)
+          } else {
+            debugModel.updateWeights(model.getWeights)
+          }
+
+          val primal = SolverUtils.primalObjective(data, featureFn, lossFn, oracleFn, debugModel, lambda)
+          val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
+
+          if (solverOptions.testData != null) {
+            val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, debugModel)
+            println("Pass %d Iteration %d, SVM primal = %f, Train error = %f, Test error = %f"
+              .format(passNum + 1, k, primal, trainError, testError))
+
+            if (solverOptions.debugLoss)
+              lossWriter.write("%d,%d,%f,%f,%f\n".format(passNum + 1, k, primal, trainError, testError))
+          } else {
+            println("Pass %d Iteration %d, SVM primal = %f, Train error = %f"
+              .format(passNum + 1, k, primal, trainError))
+            if (solverOptions.debugLoss)
+              lossWriter.write("%d,%d,%f,%f,\n".format(passNum + 1, k, primal, trainError))
+          }
+
+          debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
+        }*/
 
       }
       if (debugOn)

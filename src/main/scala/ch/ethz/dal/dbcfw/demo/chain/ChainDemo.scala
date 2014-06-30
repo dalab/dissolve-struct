@@ -302,7 +302,7 @@ object ChainDemo {
     }
 
     val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 5
+    solverOptions.numPasses = 150
     solverOptions.debug = true
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01

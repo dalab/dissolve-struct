@@ -45,7 +45,7 @@ class BCFWSolver /*extends Optimizer*/ (
   val ndims: Int = phi(data(0).label, data(0).pattern).size
 
   val eps: Double = 2.2204E-16
-  val lossWriterFileName = "data/debug/loss.csv"
+  val lossWriterFileName = "data/debug/bcfw-loss.csv"
 
   /**
    * BCFW optimizer

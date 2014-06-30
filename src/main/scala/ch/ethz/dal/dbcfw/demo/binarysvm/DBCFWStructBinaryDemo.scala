@@ -1,7 +1,7 @@
 /**
  *
  */
-package ch.ethz.dal.dbcfw.demo
+package ch.ethz.dal.dbcfw.demo.binarysvm
 
 import scala.Array.canBuildFrom
 import breeze.linalg.DenseMatrix
@@ -11,9 +11,10 @@ import breeze.linalg.Vector
 import breeze.linalg.max
 import breeze.numerics.abs
 import ch.ethz.dal.dbcfw.classification.StructSVMModel
-import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
+import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
+import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 
 /**
  *
@@ -47,7 +48,9 @@ object DBCFWStructBinaryDemo {
     abs(yTruth - yPredict)
 
   def lossFn(yTruth: Vector[Double], yPredict: Vector[Double]): Double =
-    abs(yTruth(0) - yPredict(0))
+    if (yTruth(0) == yPredict(0))
+      0.0
+    else 1.0
 
   /**
    * Maximization Oracle
@@ -135,13 +138,16 @@ object DBCFWStructBinaryDemo {
     val cutoffIndex: Int = (trnPrc * perm.size) toInt
     val train_data = data(perm.slice(0, cutoffIndex)) toVector // Obtain in range [0, cutoffIndex)
     val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
-    
+
     val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 1
+    solverOptions.numPasses = 100
     solverOptions.debug = true
-    solverOptions.xldebug = true
+    solverOptions.xldebug = false
     solverOptions.lambda = 0.01
     solverOptions.doWeightedAveraging = false
+    solverOptions.doLineSearch = true
+    solverOptions.debugLoss = false
+    solverOptions.testData = test_data
 
     val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
@@ -149,6 +155,13 @@ object DBCFWStructBinaryDemo {
       oracleFn,
       predictFn,
       solverOptions)
+
+    /*val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
+      featureFn,
+      lossFn,
+      oracleFn,
+      predictFn,
+      solverOptions)*/
 
     val model: StructSVMModel = trainer.trainModel()
 
