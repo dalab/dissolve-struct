@@ -23,7 +23,7 @@ class StructSVMModel(
   val featureFn: (Vector[Double], Matrix[Double]) ⇒ Vector[Double],
   val lossFn: (Vector[Double], Vector[Double]) ⇒ Double,
   val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) ⇒ Vector[Double],
-  val predictFn: (StructSVMModel, Matrix[Double]) ⇒ Vector[Double]) {
+  val predictFn: (StructSVMModel, Matrix[Double]) ⇒ Vector[Double]) extends Serializable {
 
   def getWeights(): Vector[Double] = {
     weights
@@ -32,10 +32,20 @@ class StructSVMModel(
   def updateWeights(newWeights: Vector[Double]) = {
     weights = newWeights
   }
-  
-  def getEll(): Double = 
+
+  def getEll(): Double =
     ell
 
   def updateEll(newEll: Double) =
     ell = newEll
+
+  override def clone(): StructSVMModel = {
+    new StructSVMModel(this.weights.copy,
+      ell,
+      this.ellMat.copy,
+      featureFn,
+      lossFn,
+      oracleFn,
+      predictFn)
+  }
 }

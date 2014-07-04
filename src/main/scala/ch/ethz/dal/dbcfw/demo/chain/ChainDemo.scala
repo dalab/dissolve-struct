@@ -9,6 +9,11 @@ import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 import java.io.File
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+import org.apache.spark.SparkConf
+import org.apache.spark.rdd.RDD
+import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
 
 object ChainDemo {
 
@@ -274,9 +279,16 @@ object ChainDemo {
       (vec(0).toInt + 97).toChar + labelVectorToString(vec(1 until vec.size))
 
   /**
-   * Runner
+   * ****************************************************************
+   *    ___   _____ ____ _      __
+   *   / _ ) / ___// __/| | /| / /
+   *  / _  |/ /__ / _/  | |/ |/ / 
+   * /____/ \___//_/    |__/|__/  
+   *
+   * (Averaging of primal variables after each round)
+   * ****************************************************************
    */
-  def main(args: Array[String]): Unit = {
+  def chainBCFW(): Unit = {
 
     val train_data_unord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val test_data: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -317,7 +329,7 @@ object ChainDemo {
       oracleFn,
       predictFn,
       solverOptions)*/
-    
+
     val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
       featureFn,
       lossFn,
@@ -332,19 +344,101 @@ object ChainDemo {
       val prediction = model.predictFn(model, item.pattern)
       avgTrainLoss += lossFn(item.label, prediction)
       // if (debugOn)
-        // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
+      // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
     }
-    println("Average loss on training set = %f".format(avgTrainLoss/train_data.size))
+    println("Average loss on training set = %f".format(avgTrainLoss / train_data.size))
 
     var avgTestLoss: Double = 0.0
     for (item <- test_data) {
       val prediction = model.predictFn(model, item.pattern)
       avgTestLoss += lossFn(item.label, prediction)
       // if (debugOn)
-        // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
+      // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
     }
-    println("Average loss on test set = %f".format(avgTestLoss/test_data.size))
+    println("Average loss on test set = %f".format(avgTestLoss / test_data.size))
 
+  }
+
+  /**
+   * ****************************************************************
+   *    ___        ___   _____ ____ _      __
+   *   / _ \ ____ / _ ) / ___// __/| | /| / /
+   *  / // //___// _  |/ /__ / _/  | |/ |/ / 
+   * /____/     /____/ \___//_/    |__/|__/  
+   *
+   * ****************************************************************
+   */
+  def chainDBCFW(): Unit = {
+
+    val NUM_ROUNDS: Int = 5
+
+    val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+
+    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local")
+    val sc = new SparkContext(conf)
+
+    // Read order from the file and permute the Vector accordingly
+    val trainOrder: String = "data/perm_train.csv"
+    val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
+    assert(permLine.size == 1)
+    val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
+    val train_data = trainDataUnord(List.fromArray(perm))
+
+    val train_rdd: RDD[LabeledObject] = sc.parallelize(train_data.toArray, 2)
+
+    val solverOptions: SolverOptions = new SolverOptions();
+    solverOptions.numPasses = 5 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.debug = false
+    solverOptions.xldebug = false
+    solverOptions.lambda = 0.01
+    solverOptions.doWeightedAveraging = true
+    solverOptions.doLineSearch = true
+    solverOptions.debugLoss = false
+
+    val d: Int = featureFn(train_rdd.first.label, train_rdd.first.pattern).size
+    // Let the initial model contain zeros for all weights
+    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+
+    for (roundNum <- 1 to NUM_ROUNDS) {
+      /**
+       * Map step. Each partition of the training data produces an individual model
+       * TODO Maybe convert more efficiently using an aggregate?
+       */
+      val trainedModels = train_rdd.mapPartitions(trainDataPartition => DBCFWSolver.optimize(trainDataPartition,
+        model, featureFn, lossFn, oracleFn,
+        predictFn, solverOptions), true)
+      /**
+       * Reduce step. Combine models into a single model.
+       */
+      val nextModel = DBCFWSolver.combineModels(trainedModels)
+      /**
+       * Communication step. Communicate the new model to all nodes. Resume training.
+       */
+      model.updateWeights(nextModel.getWeights)
+      model.updateEll(nextModel.getEll)
+
+      /**
+       * TODO
+       * Collect progress, current training and test error, duality gap
+       */
+      var avgTestLoss: Double = 0.0
+      for (item <- testDataUnord) {
+        val prediction = model.predictFn(model, item.pattern)
+        avgTestLoss += lossFn(item.label, prediction)
+      }
+      println("[Pass #%d] Average loss on test set = %f".format(roundNum, avgTestLoss / testDataUnord.size))
+
+      /**
+       * Shuffle maybe?
+       */
+    }
+
+  }
+
+  def main(args: Array[String]): Unit = {
+    //chainDBCFW()
+    chainBCFW()
   }
 
 }

@@ -57,7 +57,7 @@ class BCFWSolver /*extends Optimizer*/ (
     val n: Int = data.length
     val d: Int = featureFn(data(0).label, data(0).pattern).size
     // Use first example to determine dimension of w
-    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
+    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
     val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
     var ell: Double = 0.0
     val ellMat: DenseVector[Double] = DenseVector.zeros[Double](n)
@@ -89,12 +89,12 @@ class BCFWSolver /*extends Optimizer*/ (
       println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
     }
 
-    for (passNum <- 0 until numPasses) yield {
+    for (passNum <- 0 until numPasses) {
 
       if (debugOn)
         println("Starting pass #%d".format(passNum))
 
-      for (dummy <- 0 until n) yield {
+      for (dummy <- 0 until n) {
         // 1) Pick example
         val i: Int = dummy
         val pattern: Matrix[Double] = data(i).pattern
@@ -164,15 +164,15 @@ class BCFWSolver /*extends Optimizer*/ (
           if (solverOptions.testData != null) {
             val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, debugModel)
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
-              .format(passNum+1, k, primal, f, gap, trainError, testError))
+              .format(passNum + 1, k, primal, f, gap, trainError, testError))
 
             if (solverOptions.debugLoss)
-              lossWriter.write("%d,%d,%f,%f,%f,%f,%f\n".format(passNum+1, k, primal, f, gap, trainError, testError))
+              lossWriter.write("%d,%d,%f,%f,%f,%f,%f\n".format(passNum + 1, k, primal, f, gap, trainError, testError))
           } else {
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
-              .format(passNum+1, k, primal, f, gap, trainError))
+              .format(passNum + 1, k, primal, f, gap, trainError))
             if (solverOptions.debugLoss)
-              lossWriter.write("%d,%d,%f,%f,%f,%f\n".format(passNum+1, k, primal, f, gap, trainError))
+              lossWriter.write("%d,%d,%f,%f,%f,%f\n".format(passNum + 1, k, primal, f, gap, trainError))
           }
 
           debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
