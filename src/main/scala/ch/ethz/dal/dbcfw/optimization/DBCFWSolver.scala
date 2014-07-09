@@ -12,14 +12,17 @@ object DBCFWSolver {
   /**
    * Takes as input a set of data and builds a SSVM model trained using BCFW
    */
-  def optimize(// sc: SparkContext,
+  def optimize( // sc: SparkContext,
     dataIterator: Iterator[LabeledObject],
     model: StructSVMModel,
     featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
     lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
     oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
     predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-    solverOptions: SolverOptions): Iterator[StructSVMModel] = {
+    solverOptions: SolverOptions,
+    returnDiff: Boolean): Iterator[StructSVMModel] = {
+
+    val prevModel: StructSVMModel = model.clone()
 
     val numPasses = solverOptions.numPasses
     val lambda = solverOptions.lambda
@@ -104,6 +107,12 @@ object DBCFWSolver {
       model.updateEll(ell)
     }
 
+    // If this flag is set, return only the change in w's
+    if (returnDiff) {
+      model.updateWeights(model.getWeights() - prevModel.getWeights())
+      model.updateEll(model.getEll() - prevModel.getEll())
+    }
+
     // Finally return a single element iterator
     { List.empty[StructSVMModel] :+ model }.toIterator
   }
@@ -112,14 +121,14 @@ object DBCFWSolver {
    * Combines multiple StructSVMModels into a single StructSVMModel
    * Works by taking the average of Weights and Ells over multiple models
    */
-  def combineModels(// sc: SparkContext,
-      models: RDD[StructSVMModel]): StructSVMModel = {
+  def combineModels( // sc: SparkContext,
+    models: RDD[StructSVMModel]): StructSVMModel = {
     val numModels: Long = models.count
     val d: Int = models.first.getWeights.size
     // TODO Convert into an aggregate function
     val sumWeights = models.map(model => model.getWeights).reduce((weightA, weightB) => weightA + weightB).toDenseVector
     val sumElls = models.map(model => model.getEll).reduce((ellA, ellB) => ellA + ellB)
-    
+
     /*val zeroModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d),
       0.0,
       DenseVector.zeros(d),
@@ -127,7 +136,7 @@ object DBCFWSolver {
       models.first.lossFn,
       models.first.oracleFn,
       models.first.predictFn)*/
-    
+
     new StructSVMModel(sumWeights / numModels.toDouble,
       sumElls / numModels,
       DenseVector.zeros(d),

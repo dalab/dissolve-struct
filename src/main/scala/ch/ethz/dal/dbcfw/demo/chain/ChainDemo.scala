@@ -282,8 +282,8 @@ object ChainDemo {
    * ****************************************************************
    *    ___   _____ ____ _      __
    *   / _ ) / ___// __/| | /| / /
-   *  / _  |/ /__ / _/  | |/ |/ / 
-   * /____/ \___//_/    |__/|__/  
+   *  / _  |/ /__ / _/  | |/ |/ /
+   * /____/ \___//_/    |__/|__/
    *
    * (Averaging of primal variables after each round)
    * ****************************************************************
@@ -363,12 +363,13 @@ object ChainDemo {
    * ****************************************************************
    *    ___        ___   _____ ____ _      __
    *   / _ \ ____ / _ ) / ___// __/| | /| / /
-   *  / // //___// _  |/ /__ / _/  | |/ |/ / 
-   * /____/     /____/ \___//_/    |__/|__/  
+   *  / // //___// _  |/ /__ / _/  | |/ |/ /
+   * /____/     /____/ \___//_/    |__/|__/
    *
+   * (With averaging of primal variables)
    * ****************************************************************
    */
-  def chainDBCFW(): Unit = {
+  def chainDBCFWwAvg(): Unit = {
 
     val NUM_ROUNDS: Int = 5
 
@@ -407,7 +408,7 @@ object ChainDemo {
        */
       val trainedModels = train_rdd.mapPartitions(trainDataPartition => DBCFWSolver.optimize(trainDataPartition,
         model, featureFn, lossFn, oracleFn,
-        predictFn, solverOptions), true)
+        predictFn, solverOptions, false), true)
       /**
        * Reduce step. Combine models into a single model.
        */
@@ -436,9 +437,81 @@ object ChainDemo {
 
   }
 
+  /**
+   * ****************************************************************
+   *    ___        ___   _____ ____ _      __
+   *   / _ \ ____ / _ ) / ___// __/| | /| / /
+   *  / // //___// _  |/ /__ / _/  | |/ |/ /
+   * /____/     /____/ \___//_/    |__/|__/
+   *
+   * (CoCoA)
+   * ****************************************************************
+   */
+  def chainDBCFWCoCoA(): Unit = {
+    val NUM_ROUNDS: Int = 5
+
+    val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+
+    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local")
+    val sc = new SparkContext(conf)
+
+    // Read order from the file and permute the Vector accordingly
+    val trainOrder: String = "data/perm_train.csv"
+    val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
+    assert(permLine.size == 1)
+    val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
+    val train_data = trainDataUnord(List.fromArray(perm))
+
+    val train_rdd: RDD[LabeledObject] = sc.parallelize(train_data.toArray, 2)
+
+    val solverOptions: SolverOptions = new SolverOptions();
+    solverOptions.numPasses = 5 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.debug = false
+    solverOptions.xldebug = false
+    solverOptions.lambda = 0.01
+    solverOptions.doWeightedAveraging = true
+    solverOptions.doLineSearch = true
+    solverOptions.debugLoss = false
+
+    val d: Int = featureFn(train_rdd.first.label, train_rdd.first.pattern).size
+    // Let the initial model contain zeros for all weights
+    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+
+    for (roundNum <- 1 to NUM_ROUNDS) {
+      /**
+       * Map step. Each partition of the training data produces a model.
+       * But, the model's weights only reflects changes in w's
+       */
+      val trainedModels = train_rdd.mapPartitions(trainDataPartition => DBCFWSolver.optimize(trainDataPartition,
+        model, featureFn, lossFn, oracleFn,
+        predictFn, solverOptions, true), true)
+      /**
+       * Reduce step. Combine models into a single model.
+       */
+      val diffModel = DBCFWSolver.combineModels(trainedModels)
+      /**
+       * Communication step. Communicate the new model to all nodes. Resume training.
+       */
+      model.updateWeights(model.getWeights + diffModel.getWeights)
+      model.updateEll(model.getEll + diffModel.getEll)
+
+      /**
+       * After each round, collect experimental data
+       */
+      var avgTestLoss: Double = 0.0
+      for (item <- testDataUnord) {
+        val prediction = model.predictFn(model, item.pattern)
+        avgTestLoss += lossFn(item.label, prediction)
+      }
+      println("[Pass #%d] Average loss on test set = %f".format(roundNum, avgTestLoss / testDataUnord.size))
+    }
+  }
+
   def main(args: Array[String]): Unit = {
-    //chainDBCFW()
-    chainBCFW()
+    // chainDBCFW()
+    // chainBCFW()
+    chainDBCFWCoCoA()
   }
 
 }
