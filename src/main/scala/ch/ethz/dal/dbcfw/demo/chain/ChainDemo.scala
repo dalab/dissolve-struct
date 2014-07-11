@@ -14,8 +14,22 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
 import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
+import java.io.PrintWriter
+import ch.ethz.dal.dbcfw.optimization.SolverUtils
+import org.apache.log4j.Logger
+import collection.JavaConversions.enumerationAsScalaIterator
+import org.apache.log4j.PropertyConfigurator
 
-object ChainDemo {
+/**
+ * LogHelper is a trait you can mix in to provide easy log4j logging
+ * for your scala classes.
+ */
+trait LogHelper {
+  val loggerName = this.getClass.getName
+  lazy val logger = Logger.getLogger(loggerName)
+}
+
+object ChainDemo extends LogHelper {
 
   val debugOn = true
 
@@ -371,7 +385,7 @@ object ChainDemo {
    */
   def chainDBCFWwAvg(): Unit = {
 
-    val NUM_ROUNDS: Int = 5
+    val NUM_ROUNDS: Int = 20
 
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -419,16 +433,11 @@ object ChainDemo {
       model.updateWeights(nextModel.getWeights)
       model.updateEll(nextModel.getEll)
 
-      /**
-       * TODO
-       * Collect progress, current training and test error, duality gap
-       */
-      var avgTestLoss: Double = 0.0
-      for (item <- testDataUnord) {
-        val prediction = model.predictFn(model, item.pattern)
-        avgTestLoss += lossFn(item.label, prediction)
-      }
-      println("[Pass #%d] Average loss on test set = %f".format(roundNum, avgTestLoss / testDataUnord.size))
+      val trainError = SolverUtils.averageLoss(trainDataUnord, lossFn, predictFn, model)
+      val testError = SolverUtils.averageLoss(testDataUnord, lossFn, predictFn, model)
+
+      logger.info("[DATA] %d,%f,%f\n".format(roundNum, trainError, testError))
+      println("[Round #%d] Test loss = %f, Train loss = %f\n".format(roundNum, testError, trainError))
 
       /**
        * Shuffle maybe?
@@ -448,7 +457,12 @@ object ChainDemo {
    * ****************************************************************
    */
   def chainDBCFWCoCoA(): Unit = {
-    val NUM_ROUNDS: Int = 5
+    val NUM_ROUNDS: Int = 20
+
+    /* Debugging stuff*/
+    // val debugOut: Boolean = true // Dumps training and test error after each round
+    // val debugWriterFileName: String = "data/dbcfw_cococa_out.csv"
+    // val debugWriter: PrintWriter = if (debugOut) new PrintWriter(new File(debugWriterFileName)) else null
 
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -465,7 +479,7 @@ object ChainDemo {
 
     val train_rdd: RDD[LabeledObject] = sc.parallelize(train_data.toArray, 2)
 
-    val solverOptions: SolverOptions = new SolverOptions();
+    val solverOptions: SolverOptions = new SolverOptions()
     solverOptions.numPasses = 5 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
     solverOptions.xldebug = false
@@ -477,6 +491,12 @@ object ChainDemo {
     val d: Int = featureFn(train_rdd.first.label, train_rdd.first.pattern).size
     // Let the initial model contain zeros for all weights
     val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+
+    // Write headers to debugOut CSV file
+    // if (debugOut)
+    // debugWriter.write("round,train_error,test_error\n")
+
+    logger.info("[DATA] round,train_error,test_error")
 
     for (roundNum <- 1 to NUM_ROUNDS) {
       /**
@@ -496,22 +516,20 @@ object ChainDemo {
       model.updateWeights(model.getWeights + diffModel.getWeights)
       model.updateEll(model.getEll + diffModel.getEll)
 
-      /**
-       * After each round, collect experimental data
-       */
-      var avgTestLoss: Double = 0.0
-      for (item <- testDataUnord) {
-        val prediction = model.predictFn(model, item.pattern)
-        avgTestLoss += lossFn(item.label, prediction)
-      }
-      println("[Pass #%d] Average loss on test set = %f".format(roundNum, avgTestLoss / testDataUnord.size))
+      val trainError = SolverUtils.averageLoss(trainDataUnord, lossFn, predictFn, model)
+      val testError = SolverUtils.averageLoss(testDataUnord, lossFn, predictFn, model)
+
+      logger.info("[DATA] %d,%f,%f\n".format(roundNum, trainError, testError))
+      println("[Round #%d] Test loss = %f, Train loss = %f\n".format(roundNum, testError, trainError))
     }
   }
 
   def main(args: Array[String]): Unit = {
     // chainDBCFW()
     // chainBCFW()
-    chainDBCFWCoCoA()
+    PropertyConfigurator.configure("conf/log4j.properties")
+    // chainDBCFWCoCoA()
+    chainDBCFWwAvg()
   }
 
 }
