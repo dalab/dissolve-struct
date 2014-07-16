@@ -19,6 +19,8 @@ import ch.ethz.dal.dbcfw.optimization.SolverUtils
 import org.apache.log4j.Logger
 import collection.JavaConversions.enumerationAsScalaIterator
 import org.apache.log4j.PropertyConfigurator
+import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dal.dbcfw.regression.LabeledObject
 
 /**
  * LogHelper is a trait you can mix in to provide easy log4j logging
@@ -213,9 +215,9 @@ object ChainDemo extends LogHelper {
   /**
    * The Maximization Oracle
    */
-  def oracleFn(model: StructSVMModel, yi: Vector[Double], xiM: Matrix[Double]): Vector[Double] = {
+  def oracleFn(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] = {
     val numStates = 26
-    val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
+    // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
     val numVars = xi.cols // The length of word, say 9
 
@@ -254,9 +256,9 @@ object ChainDemo extends LogHelper {
    * TODO
    * * Use MaxOracle instead of this (Use yi: Option<Vector[Double]>)
    */
-  def predictFn(model: StructSVMModel, xiM: Matrix[Double]): Vector[Double] = {
+  def predictFn(model: StructSVMModel, xi: Matrix[Double]): Vector[Double] = {
     val numStates = 26
-    val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
+    // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
     val numVars = xi.cols // The length of word, say 9
 
@@ -385,7 +387,7 @@ object ChainDemo extends LogHelper {
    */
   def chainDBCFWwAvg(): Unit = {
 
-    val NUM_ROUNDS: Int = 20
+    val NUM_ROUNDS: Int = 5
 
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -407,7 +409,7 @@ object ChainDemo extends LogHelper {
     solverOptions.debug = false
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
-    solverOptions.doWeightedAveraging = true
+    solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = false
 
@@ -457,12 +459,8 @@ object ChainDemo extends LogHelper {
    * ****************************************************************
    */
   def chainDBCFWCoCoA(): Unit = {
-    val NUM_ROUNDS: Int = 20
-
-    /* Debugging stuff*/
-    // val debugOut: Boolean = true // Dumps training and test error after each round
-    // val debugWriterFileName: String = "data/dbcfw_cococa_out.csv"
-    // val debugWriter: PrintWriter = if (debugOut) new PrintWriter(new File(debugWriterFileName)) else null
+    val NUM_ROUNDS: Int = 5
+    val NUM_PART: Int = 2
 
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -475,52 +473,57 @@ object ChainDemo extends LogHelper {
     val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
-    val train_data = trainDataUnord(List.fromArray(perm))
-
-    val train_rdd: RDD[LabeledObject] = sc.parallelize(train_data.toArray, 2)
+    val train_data: Vector[LabeledObject] = trainDataUnord(List.fromArray(perm))
 
     val solverOptions: SolverOptions = new SolverOptions()
-    solverOptions.numPasses = 5 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.numPasses = 1 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
     solverOptions.xldebug = false
-    solverOptions.lambda = 0.01
-    solverOptions.doWeightedAveraging = true
+    solverOptions.lambda = 0.1
+    solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = false
 
-    val d: Int = featureFn(train_rdd.first.label, train_rdd.first.pattern).size
+    logger.info("[DATA] lambda = " + solverOptions.lambda)
+
+    val d: Int = featureFn(trainDataUnord(0).label, trainDataUnord(0).pattern).size
     // Let the initial model contain zeros for all weights
     val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
 
-    // Write headers to debugOut CSV file
-    // if (debugOut)
-    // debugWriter.write("round,train_error,test_error\n")
+    // Create a list containing LabeledObjects zipped with their w_i's and l_i's
+    val zippedTrainData: List[(LabeledObject, DenseVector[Double], Double)] = for (i <- (0 until train_data.size).toList) yield (train_data(i), DenseVector.zeros[Double](d), 0.0)
+    val train_rdd: RDD[(LabeledObject, DenseVector[Double], Double)] = sc.parallelize(zippedTrainData)
 
     logger.info("[DATA] round,train_error,test_error")
+    // train_rdd.cache()
 
     for (roundNum <- 1 to NUM_ROUNDS) {
       /**
        * Map step. Each partition of the training data produces a model.
        * But, the model's weights only reflects changes in w's
        */
-      val trainedModels = train_rdd.mapPartitions(trainDataPartition => DBCFWSolver.optimize(trainDataPartition,
+      /*val trainedZippedData: RDD[(LabeledObject, DenseVector[Double], Double)] = train_rdd.mapPartitions(trainDataPartition => DBCFWSolver.bcfwOptimize(trainDataPartition,
         model, featureFn, lossFn, oracleFn,
-        predictFn, solverOptions, true), true)
+        predictFn, solverOptions), true)*/
       /**
        * Reduce step. Combine models into a single model.
        */
-      val diffModel = DBCFWSolver.combineModels(trainedModels)
+      // val newModel = DBCFWSolver.bcfwCombine(model, trainedZippedData)
+      val newDiffs: (Vector[Double], Double) = train_rdd.mapPartitions(trainDataPartition => DBCFWSolver.bcfwOptimize(trainDataPartition, model, featureFn, lossFn, oracleFn, predictFn, solverOptions), true)
+        .map(x => (x._2, x._3)) // Map each element in RDD to (\Delta w_i, \Delta ell_i)
+        .reduce((mA, mB) => (mA._1 + mB._1, mA._2 + mB._2)) //  Sum all \Delta w_i's and \Delta ell_i's
       /**
        * Communication step. Communicate the new model to all nodes. Resume training.
        */
-      model.updateWeights(model.getWeights + diffModel.getWeights)
-      model.updateEll(model.getEll + diffModel.getEll)
+      model.updateWeights(model.getWeights() + newDiffs._1)
+      model.updateEll(model.getEll() + newDiffs._2)
 
       val trainError = SolverUtils.averageLoss(trainDataUnord, lossFn, predictFn, model)
       val testError = SolverUtils.averageLoss(testDataUnord, lossFn, predictFn, model)
 
       logger.info("[DATA] %d,%f,%f\n".format(roundNum, trainError, testError))
       println("[Round #%d] Test loss = %f, Train loss = %f\n".format(roundNum, testError, trainError))
+
     }
   }
 
@@ -528,8 +531,8 @@ object ChainDemo extends LogHelper {
     // chainDBCFW()
     // chainBCFW()
     PropertyConfigurator.configure("conf/log4j.properties")
-    // chainDBCFWCoCoA()
-    chainDBCFWwAvg()
+    chainDBCFWCoCoA()
+    // chainDBCFWwAvg()
   }
 
 }
