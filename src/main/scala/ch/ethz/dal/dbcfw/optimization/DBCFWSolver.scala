@@ -9,7 +9,7 @@ import org.apache.spark.SparkContext
 import ch.ethz.dal.dbcfw.classification.Types._
 
 object DBCFWSolver {
-  
+
   /**
    * Takes as input a set of data and builds a SSVM model trained using BCFW
    */
@@ -20,7 +20,9 @@ object DBCFWSolver {
     oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
     predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
     solverOptions: SolverOptions,
-    returnDiff: Boolean): Iterator[(StructSVMModel, Array[(Index, Primal)])] = {
+    returnModelDiff: Boolean,
+    returnPrimalDiff: Boolean,
+    miniBatchEnabled: Boolean): Iterator[(StructSVMModel, Array[(Index, Primal)])] = {
 
     val prevModel: StructSVMModel = localModel.clone()
 
@@ -46,16 +48,18 @@ object DBCFWSolver {
 
     var k: Int = 0
     val n: Int = data.size
-    
+
     val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
     val ellMat: DenseVector[Double] = DenseVector.zeros[Double](n)
-    
+
     // Copy w_i's and l_i's into local wMat and ellMat
     for (i <- 0 until n) {
       wMat(::, i) := zippedData(i)._2._2._1
       ellMat(i) = zippedData(i)._2._2._2
     }
-    
+    val prevWMat: DenseMatrix[Double] = wMat.copy
+    val prevEllMat: DenseVector[Double] = ellMat.copy
+
     var ell: Double = localModel.getEll()
 
     // Initialization in case of Weighted Averaging
@@ -71,7 +75,11 @@ object DBCFWSolver {
       val label: Vector[Double] = data(i).label
 
       // 2) Solve loss-augmented inference for point i
-      val ystar_i: Vector[Double] = maxOracle(localModel, label, pattern)
+      val ystar_i: Vector[Double] =
+        if (!miniBatchEnabled)
+          maxOracle(localModel, label, pattern)
+        else
+          maxOracle(prevModel, label, pattern)
 
       // 3) Define the update quantities
       val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
@@ -82,7 +90,8 @@ object DBCFWSolver {
       // 4) Get step-size gamma
       val gamma: Double =
         if (solverOptions.doLineSearch) {
-          val gamma_opt = (localModel.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
+          val thisModel = if (miniBatchEnabled) prevModel else localModel
+          val gamma_opt = (thisModel.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
             ((wMat(::, i) - w_s).t * (wMat(::, i) - w_s) + eps)
           max(0.0, min(1.0, gamma_opt))
         } else {
@@ -116,49 +125,64 @@ object DBCFWSolver {
     }
 
     // If this flag is set, return only the change in w's
-    if (returnDiff) {
+    if (returnModelDiff) {
       localModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
       localModel.updateEll(localModel.getEll() - prevModel.getEll())
     }
-    
-    val localIndexedPrimals: Array[(Index, Primal)] = zippedData.map(x => x._1).zip(for (k <- (0 until n).toList) yield (wMat(::, k), ellMat(k)))
+
+    val localIndexedPrimals: Array[(Index, Primal)] = zippedData.map(x => x._1).zip(
+      if (returnPrimalDiff)
+        for (k <- (0 until n).toList) yield (wMat(::, k), ellMat(k))
+      else
+        for (k <- (0 until n).toList) yield (wMat(::, k) - prevWMat(::, k), ellMat(k) - prevEllMat(k)))
 
     // Finally return a single element iterator
     { List.empty[(StructSVMModel, Array[(Index, Primal)])] :+ (localModel, localIndexedPrimals) }.iterator
   }
-  
-  
+
   def combineModelsCoCoA( // sc: SparkContext,
     zippedModels: RDD[(StructSVMModel, Array[(Index, Primal)])],
     oldGlobalModel: StructSVMModel,
-    d: Int): (StructSVMModel, RDD[(Index, Primal)]) = {
-    
+    d: Int,
+    betaByK: Double,
+    miniBatchEnabled: Boolean): (StructSVMModel, RDD[(Index, Primal)]) = {
+
     val numModels: Long = zippedModels.count
-    
-    val sumWeights = zippedModels.map(model => model._1.getWeights()).reduce((weightA, weightB) => weightA + weightB).toDenseVector
-    val sumElls = zippedModels.map(model => model._1.getEll).reduce((ellA, ellB) => ellA + ellB)
+
+    val sumWeights =
+      if (!miniBatchEnabled)
+        zippedModels.map(model => model._1.getWeights()).reduce((weightA, weightB) => weightA + weightB)
+      else
+        zippedModels.flatMap(item => item._2).map(indPrimal => indPrimal._2._1).reduce((weightA, weightB) => weightA + weightB)
+    val sumElls =
+      if (!miniBatchEnabled)
+        zippedModels.map(model => model._1.getEll).reduce((ellA, ellB) => ellA + ellB)
+      else
+        zippedModels.flatMap(item => item._2).map(indPrimal => indPrimal._2._2).reduce((ellA, ellB) => ellA + ellB)
 
     /**
      * Create the new global model
      */
     val sampleModel = zippedModels.first._1
-    val newGlobalModel = new StructSVMModel(oldGlobalModel.getWeights() + (sumWeights / numModels.toDouble),
-      oldGlobalModel.getEll() + (sumElls / numModels),
+    val newGlobalModel = new StructSVMModel(oldGlobalModel.getWeights() + (sumWeights / numModels.toDouble) * betaByK,
+      oldGlobalModel.getEll() + (sumElls / numModels) * betaByK,
       DenseVector.zeros(d),
       sampleModel.featureFn,
       sampleModel.lossFn,
       sampleModel.oracleFn,
       sampleModel.predictFn)
-    
+
     /**
      * Merge all the w_i's and l_i's
      */
-    val indexedPrimals: RDD[(Index, Primal)] = zippedModels.flatMap(x => x._2)
-    
+    val indexedPrimals: RDD[(Index, Primal)] =
+      if (!miniBatchEnabled)
+        zippedModels.flatMap(x => x._2)
+      else null // In case minibatch is enabled, new Primals are obtained through a different pipeline
+
     (newGlobalModel, indexedPrimals)
   }
 
-  
   def bcfwOptimizeMiniBatch(dataIterator: Iterator[(LabeledObject, (Vector[Double], Double))],
     model: StructSVMModel,
     featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
@@ -247,7 +271,7 @@ object DBCFWSolver {
 
   def bcfwCombine(prevModel: StructSVMModel,
     zippedTrainedData: RDD[(LabeledObject, (DenseVector[Double], Double))]): StructSVMModel = {
-    
+
     val zippedArray = zippedTrainedData.toArray()
 
     val numModels: Long = zippedTrainedData.count
