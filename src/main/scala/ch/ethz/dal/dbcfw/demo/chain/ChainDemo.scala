@@ -605,12 +605,12 @@ object ChainDemo extends LogHelper {
      *  2. indexedPrimals (Index, Primal) where Primal = (w_i, l_i) <- This changes in each round
      */
     val indexedTrainData: Array[(Index, LabeledObject)] = (0 until train_data.size).toArray.zip(train_data)
-    val indexedPrimals: Array[(Index, Primal)] = (0 until train_data.size).toArray.zip(
+    val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until train_data.size).toArray.zip(
       Array.fill(train_data.size)((DenseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
       )
 
     val indexedTrainDataRDD: RDD[(Index, LabeledObject)] = sc.parallelize(indexedTrainData, NUM_PART)
-    var indexedPrimalsRDD: RDD[(Index, Primal)] = sc.parallelize(indexedPrimals, NUM_PART)
+    var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, NUM_PART)
     
     println("Beginning training of %d data points in %d passes with lambda=%f".format(train_data.size, NUM_ROUNDS, solverOptions.lambda))
 
@@ -619,14 +619,97 @@ object ChainDemo extends LogHelper {
 
     for (roundNum <- 1 to NUM_ROUNDS) {
 
-      val temp: RDD[(StructSVMModel, Array[(Index, Primal)])] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => DBCFWSolver.optimizeCoCoA(x, globalModel, featureFn, lossFn, oracleFn,
-        predictFn, solverOptions, returnModelDiff=true, returnPrimalDiff=false, miniBatchEnabled=false), preservesPartitioning=true)
+      val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)])] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => DBCFWSolver.optimizeCoCoA(x, globalModel, featureFn, lossFn, oracleFn,
+        predictFn, solverOptions, miniBatchEnabled=false), preservesPartitioning=true)
 
-      val reducedData: (StructSVMModel, RDD[(Index, Primal)]) = DBCFWSolver.combineModelsCoCoA(temp, globalModel, d, 1.0, miniBatchEnabled=false)
+      val reducedData: (StructSVMModel, RDD[(Index, PrimalInfo)]) = DBCFWSolver.combineModelsCoCoA(temp, indexedPrimalsRDD, globalModel, d, beta=1.0)
 
       globalModel = reducedData._1
       indexedPrimalsRDD = reducedData._2
 
+      val trainError = SolverUtils.averageLoss(DenseVector(train_data), lossFn, predictFn, globalModel)
+      val testError = SolverUtils.averageLoss(testDataUnord, lossFn, predictFn, globalModel)
+
+      val elapsedTime = (System.currentTimeMillis() - startTime).toDouble / 1000.0
+
+      logger.info("[DATA] %d,%f,%f,%f\n".format(roundNum, elapsedTime, trainError, testError))
+      println("[Round #%d] Train loss = %f, Test loss = %f\n".format(roundNum, trainError, testError))
+
+    }
+
+  }
+  
+  /**
+   * ****************************************************************
+   *    ___        ___   _____ ____ _      __
+   *   / _ \ ____ / _ ) / ___// __/| | /| / /
+   *  / // //___// _  |/ /__ / _/  | |/ |/ /
+   * /____/     /____/ \___//_/    |__/|__/
+   *
+   * (The actual CoCoA + minibatch)
+   * ****************************************************************
+   */
+  def chainDBCFCoCoACombined(): Unit = {
+
+    val NUM_ROUNDS: Int = 5
+    val NUM_PART: Int = 1
+    val PERC_TRAIN: Double = 0.1 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+
+    val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+
+    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local").set("spark.cores.max", "1")
+    val sc = new SparkContext(conf)
+
+    // Read order from the file and permute the Vector accordingly
+    val trainOrder: String = "data/perm_train.csv"
+    val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
+    assert(permLine.size == 1)
+    val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
+    // val train_data = trainDataUnord(List.fromArray(perm))
+    val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
+
+    val solverOptions: SolverOptions = new SolverOptions()
+    solverOptions.numPasses = 1 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.debug = false
+    solverOptions.xldebug = false
+    solverOptions.lambda = 0.01
+    solverOptions.doWeightedAveraging = false
+    solverOptions.doLineSearch = true
+    solverOptions.debugLoss = false
+
+    val d: Int = featureFn(train_data(0).label, train_data(0).pattern).size
+    // Let the initial model contain zeros for all weights
+    var globalModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+
+    /**
+     *  Create two RDDs:
+     *  1. indexedTrainData = (Index, LabeledObject) and
+     *  2. indexedPrimals (Index, Primal) where Primal = (w_i, l_i) <- This changes in each round
+     */
+    val indexedTrainData: Array[(Index, LabeledObject)] = (0 until train_data.size).toArray.zip(train_data)
+    val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until train_data.size).toArray.zip(
+      Array.fill(train_data.size)((DenseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
+      )
+
+    val indexedTrainDataRDD: RDD[(Index, LabeledObject)] = sc.parallelize(indexedTrainData, NUM_PART)
+    var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, NUM_PART)
+    
+    println("Beginning training of %d data points in %d passes with lambda=%f".format(train_data.size, NUM_ROUNDS, solverOptions.lambda))
+
+    logger.info("[DATA] round,time,train_error,test_error")
+    val startTime = System.currentTimeMillis()
+
+    for (roundNum <- 1 to NUM_ROUNDS) {
+
+      val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)])] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => DBCFWSolver.optimizeCoCoA(x, globalModel, featureFn, lossFn, oracleFn,
+        predictFn, solverOptions, miniBatchEnabled=true), preservesPartitioning=true)
+
+      val reducedData: (StructSVMModel, RDD[(Index, PrimalInfo)]) = DBCFWSolver.combineModelsCoCoA(temp, indexedPrimalsRDD, globalModel, d, beta=1.0)
+
+      globalModel = reducedData._1
+      // indexedPrimalsRDD = indexedPrimalsRDD.join(temp.flatMap(_._2)).reduce(f)
+      
       val trainError = SolverUtils.averageLoss(DenseVector(train_data), lossFn, predictFn, globalModel)
       val testError = SolverUtils.averageLoss(testDataUnord, lossFn, predictFn, globalModel)
 
@@ -688,12 +771,12 @@ object ChainDemo extends LogHelper {
      *  2. indexedPrimals (Index, Primal) where Primal = (w_i, l_i) <- This changes in each round
      */
     val indexedTrainData: Array[(Index, LabeledObject)] = (0 until train_data.size).toArray.zip(train_data)
-    val indexedPrimals: Array[(Index, Primal)] = (0 until train_data.size).toArray.zip(
+    val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until train_data.size).toArray.zip(
       Array.fill(train_data.size)((DenseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
       )
 
     val indexedTrainDataRDD: RDD[(Index, LabeledObject)] = sc.parallelize(indexedTrainData, NUM_PART)
-    var indexedPrimalsRDD: RDD[(Index, Primal)] = sc.parallelize(indexedPrimals, NUM_PART)
+    var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, NUM_PART)
     
     println("Beginning training of %d data points in %d passes with lambda=%f".format(train_data.size, NUM_ROUNDS, solverOptions.lambda))
 
@@ -702,14 +785,14 @@ object ChainDemo extends LogHelper {
 
     for (roundNum <- 1 to NUM_ROUNDS) {
 
-      val temp: RDD[(StructSVMModel, Array[(Index, Primal)])] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => DBCFWSolver.optimizeCoCoA(x, globalModel, featureFn, lossFn, oracleFn,
-        predictFn, solverOptions, returnModelDiff=true, returnPrimalDiff=true, miniBatchEnabled=true), preservesPartitioning=true)
+      val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)])] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => DBCFWSolver.optimizeCoCoA(x, globalModel, featureFn, lossFn, oracleFn,
+        predictFn, solverOptions, miniBatchEnabled=true), preservesPartitioning=true)
         
       // Obtained delta_w and delta_ell in previous step. Add them to previous values.
-      val newPrimals: RDD[(Index, Primal)] = temp.flatMap(x => x._2).join(indexedPrimalsRDD).map(x => (x._1, (x._2._1._1 + x._2._2._1, x._2._1._2 + x._2._2._2)))
+      val newPrimals: RDD[(Index, PrimalInfo)] = temp.flatMap(x => x._2).join(indexedPrimalsRDD).map(x => (x._1, (x._2._1._1 + x._2._2._1, x._2._1._2 + x._2._2._2)))
 
       // Obtain the new global model
-      val reducedData: (StructSVMModel, RDD[(Index, Primal)]) = DBCFWSolver.combineModelsCoCoA(temp, globalModel, d, 1.0, miniBatchEnabled=true)
+      val reducedData: (StructSVMModel, RDD[(Index, PrimalInfo)]) = DBCFWSolver.combineModelsCoCoA(temp, indexedPrimalsRDD, globalModel, d, 1.0)
 
       globalModel = reducedData._1
       indexedPrimalsRDD = newPrimals
@@ -732,8 +815,9 @@ object ChainDemo extends LogHelper {
     PropertyConfigurator.configure("conf/log4j.properties")
     // chainDBCFWCoCoA()
     // chainDBCFWwAvg()
-    chainDBCFCoCoAv2()
+    // chainDBCFCoCoAv2()
     // chainDBCFCMiniBatch()
+    chainDBCFCoCoACombined()
   }
 
 }
