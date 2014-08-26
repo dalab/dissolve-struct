@@ -514,7 +514,7 @@ object ChainDemo extends LogHelper {
     logger.info("[DATA] round,train_error,test_error")
     // train_rdd.cache()
 
-    for (roundNum <- 1 to NUM_ROUNDS) yield {
+    for (roundNum <- 1 to NUM_ROUNDS) {
       /**
        * Map step. Each partition of the training data produces a model.
        * But, the model's weights only reflects changes in w's
@@ -783,7 +783,7 @@ object ChainDemo extends LogHelper {
     logger.info("[DATA] round,time,train_error,test_error")
     val startTime = System.currentTimeMillis()
 
-    for (roundNum <- 1 to NUM_ROUNDS) yield {
+    for (roundNum <- 1 to NUM_ROUNDS) {
 
       val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)])] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => DBCFWSolver.optimizeCoCoA(x, globalModel, featureFn, lossFn, oracleFn,
         predictFn, solverOptions, miniBatchEnabled=true), preservesPartitioning=true)
