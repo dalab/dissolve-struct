@@ -14,13 +14,13 @@ object DBCFWSolver {
   /**
    * Takes as input a set of data and builds a SSVM model trained using BCFW
    */
-  def optimizeCoCoA(dataIterator: Iterator[(Index, (LabeledObject, PrimalInfo))],
+  def optimizeCoCoA(dataIterator: Iterator[(Index, (LabeledObject, PrimalInfo))],  // TODO: think about naming (interal solver on one block) and interface (not necessarily matrixes for x)
     localModel: StructSVMModel,
     featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
     lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
     oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
     predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-    solverOptions: SolverOptions,
+    solverOptions: SolverOptions, // TODO: maybe more into sovlerOptions?
     miniBatchEnabled: Boolean): Iterator[(StructSVMModel, Array[(Index, PrimalInfo)])] = {
 
     val prevModel: StructSVMModel = localModel.clone()

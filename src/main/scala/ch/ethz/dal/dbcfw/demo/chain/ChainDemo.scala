@@ -388,7 +388,7 @@ object ChainDemo extends LogHelper {
    * (With averaging of primal variables)
    * ****************************************************************
    */
-  def chainDBCFWwAvg(): Unit = {
+  def chainDBCFWwAvg(): Unit = { //TODO: delete (is a solver option already instead)
 
     val NUM_ROUNDS: Int = 50
     val NUM_PART: Int = 2
@@ -466,10 +466,10 @@ object ChainDemo extends LogHelper {
    *  / // //___// _  |/ /__ / _/  | |/ |/ /
    * /____/     /____/ \___//_/    |__/|__/
    *
-   * (CoCoA) (Mini-Batch)
+   * (Mini-Batch) (try)
    * ****************************************************************
    */
-  def chainDBCFWCoCoA(): Unit = {
+  def chainDBCFWminiBatch(): Unit = { //TODO: delete (is a solver option already instead)
     val NUM_ROUNDS: Int = 5
     val NUM_PART: Int = 2
     val PERC_TRAIN: Double = 0.1 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
@@ -514,7 +514,7 @@ object ChainDemo extends LogHelper {
     logger.info("[DATA] round,train_error,test_error")
     // train_rdd.cache()
 
-    for (roundNum <- 1 to NUM_ROUNDS) {
+    for (roundNum <- 1 to NUM_ROUNDS) yield {
       /**
        * Map step. Each partition of the training data produces a model.
        * But, the model's weights only reflects changes in w's
@@ -563,10 +563,10 @@ object ChainDemo extends LogHelper {
    *  / // //___// _  |/ /__ / _/  | |/ |/ /
    * /____/     /____/ \___//_/    |__/|__/
    *
-   * (The actual CoCoA)
+   * (The actual CoCoA) (try)
    * ****************************************************************
    */
-  def chainDBCFCoCoAv2(): Unit = {
+  def chainDBCFCoCoAv2(): Unit = { //TODO: delete
 
     val NUM_ROUNDS: Int = 5
     val NUM_PART: Int = 1
@@ -646,10 +646,10 @@ object ChainDemo extends LogHelper {
    *  / // //___// _  |/ /__ / _/  | |/ |/ /
    * /____/     /____/ \___//_/    |__/|__/
    *
-   * (The actual CoCoA + minibatch)
+   * (Supports both CoCoA and miniBatch)
    * ****************************************************************
    */
-  def chainDBCFCoCoACombined(): Unit = {
+  def chainDBCFCoCoACombined(): Unit = { //TODO: move to optimization package
 
     val NUM_ROUNDS: Int = 5
     val NUM_PART: Int = 1
@@ -732,7 +732,7 @@ object ChainDemo extends LogHelper {
    * (Mini batch)
    * ****************************************************************
    */
-  def chainDBCFCMiniBatch(): Unit = {
+  def chainDBCFCMiniBatchBuggy(): Unit = { //TODO: delete
 
     val NUM_ROUNDS: Int = 5
     val NUM_PART: Int = 1
@@ -783,7 +783,7 @@ object ChainDemo extends LogHelper {
     logger.info("[DATA] round,time,train_error,test_error")
     val startTime = System.currentTimeMillis()
 
-    for (roundNum <- 1 to NUM_ROUNDS) {
+    for (roundNum <- 1 to NUM_ROUNDS) yield {
 
       val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)])] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => DBCFWSolver.optimizeCoCoA(x, globalModel, featureFn, lossFn, oracleFn,
         predictFn, solverOptions, miniBatchEnabled=true), preservesPartitioning=true)
