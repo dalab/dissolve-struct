@@ -15,6 +15,9 @@ import ch.ethz.dal.dbcfw.regression.LabeledObject
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
 import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import ch.ethz.dal.dbcfw.classification.StructSVMWithDBCFW
 
 /**
  *
@@ -140,7 +143,7 @@ object DBCFWStructBinaryDemo {
     val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
 
     val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 100
+    solverOptions.numPasses = 5
     solverOptions.debug = true
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -149,14 +152,29 @@ object DBCFWStructBinaryDemo {
     solverOptions.debugLoss = false
     solverOptions.testData = test_data
 
-    val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
+    /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
+      featureFn,
+      lossFn,
+      oracleFn,
+      predictFn,
+      solverOptions)*/
+
+    val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
       featureFn,
       lossFn,
       oracleFn,
       predictFn,
       solverOptions)
 
-    /*val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
+    /*solverOptions.H = train_data.size
+    solverOptions.NUM_PART = 1
+    solverOptions.NUM_ROUNDS = 5
+
+    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local").set("spark.cores.max", "1")
+    val sc = new SparkContext(conf)
+
+    val trainer: StructSVMWithDBCFW = new StructSVMWithDBCFW(sc,
+      train_data,
       featureFn,
       lossFn,
       oracleFn,
@@ -168,7 +186,7 @@ object DBCFWStructBinaryDemo {
     var truePredictions = 0
     val totalPredictions = test_data.size
 
-    for (item ← test_data) {
+    for (item <- test_data) {
       val prediction = model.predictFn(model, item.pattern)
       if (prediction(0) == item.label(0))
         truePredictions += 1

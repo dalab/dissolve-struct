@@ -8,20 +8,119 @@ import ch.ethz.dal.dbcfw.classification.StructSVMModel
 import org.apache.spark.SparkContext
 import ch.ethz.dal.dbcfw.classification.Types._
 import org.apache.spark.SparkContext._
+import org.apache.log4j.Logger
 
-object DBCFWSolver {
+/**
+ * LogHelper is a trait you can mix in to provide easy log4j logging
+ * for your scala classes.
+ */
+/*trait LogHelper {
+  val loggerName = this.getClass.getName
+  lazy val logger = Logger.getLogger(loggerName)
+}*/
+
+class DBCFWSolver(
+  @transient val sc: SparkContext,
+  val data: Vector[LabeledObject],
+  val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
+  val lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
+  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
+  val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
+  val solverOptions: SolverOptions,
+  val miniBatchEnabled: Boolean) extends Serializable {
+
+  /**
+   * This runs on the Master node, and each round triggers a map-reduce job on the workers
+   */
+  def optimize(): StructSVMModel = {
+
+    // autoconfigure parameters
+    val NUM_DECODING_SAMPLES = 5
+    val NUM_COMMN_SAMPLES = 5
+
+    val d: Int = featureFn(data(0).label, data(0).pattern).size
+    // Let the initial model contain zeros for all weights
+    var globalModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+
+    /**
+     *  Create two RDDs:
+     *  1. indexedTrainData = (Index, LabeledObject) and
+     *  2. indexedPrimals (Index, Primal) where Primal = (w_i, l_i) <- This changes in each round
+     */
+    val indexedTrainData: Array[(Index, LabeledObject)] = (0 until data.size).toArray.zip(data.toArray)
+    val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until data.size).toArray.zip(
+      Array.fill(data.size)((DenseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
+      )
+
+    val indexedTrainDataRDD: RDD[(Index, LabeledObject)] = sc.parallelize(indexedTrainData, solverOptions.NUM_PART)
+    var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, solverOptions.NUM_PART)
+
+    println("Beginning training of %d data points in %d passes with lambda=%f".format(data.size, solverOptions.NUM_ROUNDS, solverOptions.lambda))
+
+    /**
+     * In this mode, the optimal H and NUM_ROUNDS is calculated based on:
+     * a. Time taken for decoding
+     * b. Time taken for a single round of communication
+     */
+    if (solverOptions.autoconfigure) {
+
+      /**
+       * Obtain average time required to decode
+       */
+      var decodeTimings =
+        for (i <- 0 until NUM_DECODING_SAMPLES) yield {
+          var randModel: StructSVMModel = new StructSVMModel(DenseVector.rand(d), Math.random(), DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+          var sampled_i = util.Random.nextInt(data.size + 1)
+
+          val startDecodingTime = System.currentTimeMillis()
+          oracleFn(randModel, data(sampled_i).label, data(sampled_i).pattern)
+          val endDecodingTime = System.currentTimeMillis()
+
+          endDecodingTime - startDecodingTime
+        }
+      var avgDecodeTime = decodeTimings.reduce((t1, t2) => t1 + t2).toDouble / NUM_DECODING_SAMPLES
+    }
+
+    // logger.info("[DATA] round,time,train_error,test_error")
+    val startTime = System.currentTimeMillis()
+
+    for (roundNum <- 1 to solverOptions.NUM_ROUNDS) {
+
+      println("First index: " + indexedPrimalsRDD.first()._1)
+
+      val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => mapper(x, globalModel, featureFn, lossFn, oracleFn,
+        predictFn, solverOptions, miniBatchEnabled), preservesPartitioning = true)
+
+      val reducedData: (StructSVMModel, RDD[(Index, PrimalInfo)]) = reducer(temp, indexedPrimalsRDD, globalModel, d, beta = 1.0)
+
+      // Update the global model and the primal for each i
+      globalModel = reducedData._1
+      indexedPrimalsRDD = reducedData._2
+
+      val elapsedTime = (System.currentTimeMillis() - startTime).toDouble / 1000.0
+
+      val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, globalModel)
+      val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, globalModel)
+
+      // logger.info("[DATA] %d,%f,%f,%f\n".format(roundNum, elapsedTime, trainError, testError))
+      println("[Round #%d] Train loss = %f, Test loss = %f\n".format(roundNum, trainError, testError))
+
+    }
+
+    globalModel
+  }
 
   /**
    * Takes as input a set of data and builds a SSVM model trained using BCFW
    */
-  def optimizeCoCoA(dataIterator: Iterator[(Index, (LabeledObject, PrimalInfo))],
+  def mapper(dataIterator: Iterator[(Index, (LabeledObject, PrimalInfo))],
     localModel: StructSVMModel,
     featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
     lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
     oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
     predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
     solverOptions: SolverOptions,
-    miniBatchEnabled: Boolean): Iterator[(StructSVMModel, Array[(Index, PrimalInfo)])] = {
+    miniBatchEnabled: Boolean): Iterator[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)] = {
 
     val prevModel: StructSVMModel = localModel.clone()
 
@@ -33,9 +132,9 @@ object DBCFWSolver {
     /**
      * Reorganize data for training
      */
-    val zippedData: Array[(Index, (LabeledObject, PrimalInfo))] = dataIterator.toArray
-    val data: Array[LabeledObject] = zippedData.sortBy(_._1).map(x => x._2._1)
-    val dataInd: Array[Index] = zippedData.sortBy(_._1).map(x => x._1)
+    val zippedData: Array[(Index, (LabeledObject, PrimalInfo))] = dataIterator.toArray.sortBy(_._1)
+    val data: Array[LabeledObject] = zippedData.map(x => x._2._1)
+    val dataInd: Array[Index] = zippedData.map(x => x._1)
     // Mapping of indexMapping(localIndex) -> globalIndex
     // val indexMapping: Array[Int] = zippedData.map(x => x._1).toArray // Creates a mapping where j = indexMapping(i) refers to i-th local (xi, yi) and j-th global (xj, yj)
 
@@ -65,6 +164,7 @@ object DBCFWSolver {
     val prevEllMat: DenseVector[Double] = ellMat.copy
 
     var ell: Double = localModel.getEll()
+    localModel.updateEll(0.0)
 
     // Initialization in case of Weighted Averaging
     var wAvg: DenseVector[Double] =
@@ -87,7 +187,7 @@ object DBCFWSolver {
 
       // 3) Define the update quantities
       val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
-      val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
+      val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
       val loss_i: Double = lossFn(label, ystar_i)
       val ell_s: Double = (1.0 / n) * loss_i
 
@@ -95,7 +195,7 @@ object DBCFWSolver {
       val gamma: Double =
         if (solverOptions.doLineSearch) {
           val thisModel = if (miniBatchEnabled) prevModel else localModel
-          val gamma_opt = (thisModel.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
+          val gamma_opt = (thisModel.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1.0 / lambda))) /
             ((wMat(::, i) - w_s).t * (wMat(::, i) - w_s) + eps)
           max(0.0, min(1.0, gamma_opt))
         } else {
@@ -129,6 +229,9 @@ object DBCFWSolver {
         wAvg = (wAvg * (1.0 - rho)) + (localModel.getWeights * rho)
         lAvg = (lAvg * (1.0 - rho)) + (ell * rho)
       }
+
+      k = k + 1
+
     }
 
     if (solverOptions.doWeightedAveraging) {
@@ -138,305 +241,65 @@ object DBCFWSolver {
       localModel.updateEll(ell)
     }
 
-    val localIndexedDeltaPrimals: Array[(Index, PrimalInfo)] = dataInd.zip(
-      for (k <- dataInd.toList) yield (wMat(::, k) - prevWMat(::, k), ellMat(k) - prevEllMat(k)))
+    // val localIndexedDeltaPrimals: Array[(Index, PrimalInfo)] = dataInd.zip(
+    //  for (k <- dataInd.toList) yield (wMat(::, k) - prevWMat(::, k), ellMat(k) - prevEllMat(k)))
+
+    val localIndexedDeltaPrimals: Array[(Index, PrimalInfo)] = zippedData.map(_._1).map(k => (k, (wMat(::, k) - prevWMat(::, k), ellMat(k) - prevEllMat(k))))
 
     // If this flag is set, return only the change in w's
-    // localModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
-    // localModel.updateEll(localModel.getEll() - prevModel.getEll())
+    localModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
+    localModel.updateEll(localModel.getEll() - prevModel.getEll())
+
+    // deltaLocalModel.updateWeights(deltaLocalModel.getWeights() - prevModel.getWeights())
+    // deltaLocalModel.updateEll(deltaLocalModel.getEll() - prevModel.getEll())
 
     // Finally return a single element iterator
-    { List.empty[(StructSVMModel, Array[(Index, PrimalInfo)])] :+ (deltaLocalModel, localIndexedDeltaPrimals) }.iterator
+    { List.empty[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)] :+ (localModel, localIndexedDeltaPrimals, deltaLocalModel) }.iterator
   }
 
-  def combineModelsCoCoA( // sc: SparkContext,
-    zippedModels: RDD[(StructSVMModel, Array[(Index, PrimalInfo)])], // The optimize step returns k blocks. Each block contains (\Delta LocalModel, [\Delta PrimalInfo_i]).
+  /**
+   * Takes as input a number of SVM Models, along with Primal information for each data point, and combines them into a single Model and Primal block
+   */
+  def reducer( // sc: SparkContext,
+    zippedModels: RDD[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)], // The optimize step returns k blocks. Each block contains (\Delta LocalModel, [\Delta PrimalInfo_i]).
     oldPrimalInfo: RDD[(Index, PrimalInfo)],
     oldGlobalModel: StructSVMModel,
     d: Int,
     beta: Double): (StructSVMModel, RDD[(Index, PrimalInfo)]) = {
 
-    val k: Long = zippedModels.count // This refers to the number of localModels generated
+    val k: Double = zippedModels.count.toDouble // This refers to the number of localModels generated
 
     // Here, map is applied k(=#workers) times
     val sumDeltaWeights =
-        zippedModels.map(model => model._1.getWeights()).reduce((deltaWeightA, deltaWeightB) => deltaWeightA + deltaWeightB)
+      zippedModels.map(model => model._1.getWeights()).reduce((deltaWeightA, deltaWeightB) => deltaWeightA + deltaWeightB)
     val sumDeltaElls =
-        zippedModels.map(model => model._1.getEll).reduce((ellA, ellB) => ellA + ellB)
+      zippedModels.map(model => model._1.getEll).reduce((ellA, ellB) => ellA + ellB)
 
     /**
      * Create the new global model
      */
-    val sampleModel = zippedModels.first._1
-    val newGlobalModel = new StructSVMModel(oldGlobalModel.getWeights() + (sumDeltaWeights / k.toDouble) * beta,
+    val newGlobalModel = new StructSVMModel(oldGlobalModel.getWeights() + (sumDeltaWeights / k) * beta,
       oldGlobalModel.getEll() + (sumDeltaElls / k) * beta,
       DenseVector.zeros(d),
-      sampleModel.featureFn,
-      sampleModel.lossFn,
-      sampleModel.oracleFn,
-      sampleModel.predictFn)
+      oldGlobalModel.featureFn,
+      oldGlobalModel.lossFn,
+      oldGlobalModel.oracleFn,
+      oldGlobalModel.predictFn)
 
     /**
      * Merge all the w_i's and l_i's
-     * 
+     *
      * First flatMap returns a [newDeltaPrimalInfo_k]. This is applied k times, returns a sequence of n deltaPrimalInfos
-     * 
+     *
      * After join, we have a sequence of (Index, (PrimalInfo_A, PrimalInfo_B))
      * where PrimalInfo_A = PrimalInfo_i at t-1
      * and   PrimalInfo_B = \Delta PrimalInfo_i
      */
     val indexedPrimals: RDD[(Index, PrimalInfo)] =
-      zippedModels.flatMap(x => x._2).map(x => (x._1, (x._2._1 * (beta/k), x._2._2 * (beta/k)))).join(oldPrimalInfo).map(x => (x._1, (x._2._1._1 + x._2._2._1,
+      zippedModels.flatMap(x => x._2).map(x => (x._1, (x._2._1 * (beta / k), x._2._2 * (beta / k)))).join(oldPrimalInfo).map(x => (x._1, (x._2._1._1 + x._2._2._1,
         x._2._1._2 + x._2._2._2)))
 
-    (newGlobalModel, indexedPrimals)
+    (newGlobalModel, indexedPrimals.sortByKey(true, 1))
   }
-
-  def bcfwOptimizeMiniBatch(dataIterator: Iterator[(LabeledObject, (Vector[Double], Double))],
-    model: StructSVMModel,
-    featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
-    lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
-    oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
-    predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-    solverOptions: SolverOptions): Iterator[(LabeledObject, (DenseVector[Double], Double))] = {
-
-    val numPasses = solverOptions.numPasses
-    val lambda = solverOptions.lambda
-    val debugOn: Boolean = solverOptions.debug
-    val xldebug: Boolean = solverOptions.xldebug
-
-    val zippedData: Array[(LabeledObject, (Vector[Double], Double))] = dataIterator.toArray
-
-    val maxOracle = oracleFn
-    val phi = featureFn
-    // Number of dimensions of \phi(x, y)
-    val d: Int = model.getWeights().size
-
-    val eps: Double = 2.2204E-16
-    val lossWriterFileName = "data/debug/dbcfw-loss.csv"
-
-    var k: Int = 0
-    val n: Int = zippedData.size
-
-    // Reconstruct wMat from w_i's obtained
-    val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
-    for (i <- 0 until n) {
-      wMat(::, i) := zippedData(i)._2._1
-    }
-    val wMat_prev = wMat.copy
-
-    var ell: Double = model.getEll()
-
-    // Reconstruct ellMat from the ell_i's obtained 
-    val ellMat: DenseVector[Double] = DenseVector.zeros[Double](n)
-    for (i <- 0 until n) {
-      ellMat(i) = zippedData(i)._2._2
-    }
-    val ellMat_prev = ellMat.copy
-
-    // for (passNum <- 0 until 5) {
-
-    // val i = scala.util.Random.nextInt(n)
-    // val datapoint = zippedData(i)
-
-    for ((datapoint, i) <- zippedData.zipWithIndex) {
-      // 1) Pick example
-      val pattern: Matrix[Double] = datapoint._1.pattern
-      val label: Vector[Double] = datapoint._1.label
-
-      // 2) Solve loss-augmented inference for point i
-      val ystar_i: Vector[Double] = maxOracle(model, label, pattern)
-
-      // 3) Define the update quantities
-      val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
-      val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
-      val loss_i: Double = lossFn(label, ystar_i)
-      val ell_s: Double = (1.0 / n) * loss_i
-
-      // 4) Get step-size gamma
-      val gamma: Double =
-        if (solverOptions.doLineSearch) {
-          val gamma_opt = (model.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
-            ((wMat(::, i) - w_s).t * (wMat(::, i) - w_s) + eps)
-          max(0.0, min(1.0, gamma_opt))
-        } else {
-          (2.0 * n) / (k + 2.0 * n)
-        }
-
-      // 5, 6) Compute w_i^{(k+1)} and l_i^{(k+1)}
-      wMat(::, i) := (wMat(::, i) * (1.0 - gamma)) + (w_s * gamma) // Obtain w_i^{(k+1)}
-      ellMat(i) = (ellMat(i) * (1.0 - gamma)) + (ell_s * gamma) // Obtain l_i^{(k+1)}
-    }
-    // }
-
-    // Finally return an iterator of datapoints zipped with w_i's and ell_i's
-    val newLocalData: List[(LabeledObject, (DenseVector[Double], Double))] = for (i <- (0 until n).toList) yield {
-      val diffW: DenseVector[Double] = wMat(::, i).toDenseVector
-      val diffL: Double = ellMat(i)
-      (zippedData(i)._1, (diffW, diffL))
-    }
-    newLocalData.toIterator
-  }
-
-  def bcfwCombine(prevModel: StructSVMModel,
-    zippedTrainedData: RDD[(LabeledObject, (DenseVector[Double], Double))]): StructSVMModel = {
-
-    val zippedArray = zippedTrainedData.toArray()
-
-    val numModels: Long = zippedTrainedData.count
-    val d: Int = zippedTrainedData.first._2._1.size
-    // TODO Convert into an aggregate function
-
-    // val sumDiffWeights: DenseVector[Double] = zippedTrainedData.map(tup => tup._2).reduce((x, y) => x + y)
-    // val sumDiffElls: Double = zippedTrainedData.map(tup => tup._3).reduce((x, y) => x + y)
-
-    val sumDiffs: (Vector[Double], Double) = zippedTrainedData.map(kv => kv._2).reduce((x, y) => (x._1 + y._1, x._2 + y._2))
-
-    new StructSVMModel(prevModel.getWeights() + sumDiffs._1,
-      prevModel.getEll() + sumDiffs._2,
-      DenseVector.zeros(d),
-      prevModel.featureFn,
-      prevModel.lossFn,
-      prevModel.oracleFn,
-      prevModel.predictFn)
-  }
-
-  /**
-   * Takes as input a set of data and builds a SSVM model trained using BCFW
-   */
-  def optimize(dataIterator: Iterator[LabeledObject],
-    model: StructSVMModel,
-    featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
-    lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
-    oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
-    predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-    solverOptions: SolverOptions,
-    returnDiff: Boolean): Iterator[StructSVMModel] = {
-
-    val prevModel: StructSVMModel = model.clone()
-
-    val numPasses = solverOptions.numPasses
-    val lambda = solverOptions.lambda
-    val debugOn: Boolean = solverOptions.debug
-    val xldebug: Boolean = solverOptions.xldebug
-
-    val data: Array[LabeledObject] = dataIterator.toArray
-
-    val maxOracle = oracleFn
-    val phi = featureFn
-    // Number of dimensions of \phi(x, y)
-    // val d: Int = phi(data(0).label, data(0).pattern).size
-    val d: Int = model.getWeights().size
-
-    val eps: Double = 2.2204E-16
-    val lossWriterFileName = "data/debug/dbcfw-loss.csv"
-
-    var k: Int = 0
-    val n: Int = data.size
-    val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
-    var ell: Double = 0.0
-    val ellMat: DenseVector[Double] = DenseVector.zeros[Double](n)
-
-    val debugModel: StructSVMModel = model.clone()
-
-    // Initialization in case of Weighted Averaging
-    var wAvg: DenseVector[Double] =
-      if (solverOptions.doWeightedAveraging)
-        DenseVector.zeros(d)
-      else null
-    var lAvg: Double = 0.0
-
-    for (passNum <- 0 until solverOptions.numPasses) {
-      for ((datapoint, i) <- data.zipWithIndex) {
-        // 1) Pick example
-        val pattern: Matrix[Double] = data(i).pattern
-        val label: Vector[Double] = data(i).label
-
-        // 2) Solve loss-augmented inference for point i
-        val ystar_i: Vector[Double] = maxOracle(model, label, pattern)
-
-        // 3) Define the update quantities
-        val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
-        val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
-        val loss_i: Double = lossFn(label, ystar_i)
-        val ell_s: Double = (1.0 / n) * loss_i
-
-        // 4) Get step-size gamma
-        val gamma: Double =
-          if (solverOptions.doLineSearch) {
-            val gamma_opt = (model.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
-              ((wMat(::, i) - w_s).t * (wMat(::, i) - w_s) + eps)
-            max(0.0, min(1.0, gamma_opt))
-          } else {
-            (2.0 * n) / (k + 2.0 * n)
-          }
-
-        // 5, 6, 7, 8) Update the weights of the model
-        val tempWeights1: Vector[Double] = model.getWeights() - wMat(::, i)
-        model.updateWeights(tempWeights1)
-        wMat(::, i) := (wMat(::, i) * (1.0 - gamma)) + (w_s * gamma)
-        val tempWeights2: Vector[Double] = model.getWeights() + wMat(::, i)
-        model.updateWeights(tempWeights2)
-
-        ell = ell - ellMat(i)
-        ellMat(i) = (ellMat(i) * (1.0 - gamma)) + (ell_s * gamma)
-        ell = ell + ellMat(i)
-
-        // 9) Optionally update the weighted average
-        if (solverOptions.doWeightedAveraging) {
-          val rho: Double = 2.0 / (k + 2.0)
-          wAvg = (wAvg * (1.0 - rho)) + (model.getWeights * rho)
-          lAvg = (lAvg * (1.0 - rho)) + (ell * rho)
-        }
-      }
-    }
-
-    if (solverOptions.doWeightedAveraging) {
-      model.updateWeights(wAvg)
-      model.updateEll(lAvg)
-    } else {
-      model.updateEll(ell)
-    }
-
-    // If this flag is set, return only the change in w's
-    if (returnDiff) {
-      model.updateWeights(model.getWeights() - prevModel.getWeights())
-      model.updateEll(model.getEll() - prevModel.getEll())
-    }
-
-    // Finally return a single element iterator
-    { List.empty[StructSVMModel] :+ model }.toIterator
-  }
-
-  /**
-   * Combines multiple StructSVMModels into a single StructSVMModel
-   * Works by taking the average of Weights and Ells over multiple models
-   */
-  def combineModels( // sc: SparkContext,
-    models: RDD[StructSVMModel]): StructSVMModel = {
-    val numModels: Long = models.count
-    val d: Int = models.first.getWeights.size
-    // TODO Convert into an aggregate function
-    val sumWeights = models.map(model => model.getWeights).reduce((weightA, weightB) => weightA + weightB).toDenseVector
-    val sumElls = models.map(model => model.getEll).reduce((ellA, ellB) => ellA + ellB)
-
-    /*val zeroModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d),
-      0.0,
-      DenseVector.zeros(d),
-      models.first.featureFn,
-      models.first.lossFn,
-      models.first.oracleFn,
-      models.first.predictFn)*/
-
-    new StructSVMModel(sumWeights / numModels.toDouble,
-      sumElls / numModels,
-      DenseVector.zeros(d),
-      models.first.featureFn,
-      models.first.lossFn,
-      models.first.oracleFn,
-      models.first.predictFn)
-  }
-
-  def main(args: Array[String]): Unit = {}
 
 }

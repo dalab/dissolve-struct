@@ -16,6 +16,12 @@ class SolverOptions extends Serializable {
   var testData: Vector[LabeledObject] = null
   var doLineSearch: Boolean = false
   
+  // DBCFW specific params
+  var autoconfigure: Boolean = false
+  var H: Int = 0 // Number of points to sample in each pass
+  var NUM_PART: Int = 1 // Number of paritions of the RDD
+  var NUM_ROUNDS: Int = 5 // Number of communication rounds
+  
   // For debugging/Testing purposes
   // Basic debugging flag
   var debug: Boolean = false
