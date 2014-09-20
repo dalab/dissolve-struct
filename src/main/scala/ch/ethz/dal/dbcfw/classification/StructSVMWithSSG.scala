@@ -17,10 +17,10 @@ class StructSVMWithSSG(
   // val labels: Vector[Vector[Double]],
   val data: Vector[LabeledObject],
   // val data: RDD[LabeledObject], // Consists of tuples (Label, Pattern)
-  val featureFn: (Vector[Double], Matrix[Double]) ⇒ Vector[Double], // (y, x) => FeatureVector
-  val lossFn: (Vector[Double], Vector[Double]) ⇒ Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) ⇒ Vector[Double], // (model, y_i, x_i) => Label
-  val predictFn: (StructSVMModel, Matrix[Double]) ⇒ Vector[Double],
+  val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVector
+  val lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossValue
+  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Label
+  val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
   val solverOptions: SolverOptions) {
 
   /*val optimizer: SSGSolver = new SSGSolver(data,

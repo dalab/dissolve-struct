@@ -20,10 +20,10 @@ class SSGSolver(
   // val allPatterns: Vector[Matrix[Double]],
   // val allLabels: Vector[Vector[Double]],
   val data: Vector[LabeledObject],
-  val featureFn: (Vector[Double], Matrix[Double]) ⇒ Vector[Double], // (y, x) => FeatureVector
-  val lossFn: (Vector[Double], Vector[Double]) ⇒ Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) ⇒ Vector[Double], // (model, y_i, x_i) => Label
-  val predictFn: (StructSVMModel, Matrix[Double]) ⇒ Vector[Double],
+  val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVector
+  val lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossValue
+  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Label
+  val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
   // Parameters
   val solverOptions: SolverOptions) {
 

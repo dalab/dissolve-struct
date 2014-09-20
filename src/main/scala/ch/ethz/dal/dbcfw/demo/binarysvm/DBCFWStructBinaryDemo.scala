@@ -89,9 +89,9 @@ object DBCFWStructBinaryDemo {
     if (debugOn)
       println("Obtaining data metadata")
     // First pass, get number of data points and number of features
-    for (line ← scala.io.Source.fromFile(filename).getLines()) {
+    for (line <- scala.io.Source.fromFile(filename).getLines()) {
       n += 1
-      ndims = max(ndims, max(line.split(" ").slice(1, line.split(" ").size).map(s ⇒ s.split(":")(0) toInt)))
+      ndims = max(ndims, max(line.split(" ").slice(1, line.split(" ").size).map(s => s.split(":")(0) toInt)))
     }
 
     // Create a n-dim vector, each element containing a 1-dim vector
@@ -108,14 +108,14 @@ object DBCFWStructBinaryDemo {
     if (debugOn)
       println("Creating LabeledObject Vector with size %d, pattern=%dx%d, label=%dx1".format(data.size, data(0).pattern.rows, data(0).pattern.cols, data(0).label.size))
     var row: Int = 0
-    for (line ← scala.io.Source.fromFile(filename).getLines()) {
+    for (line <- scala.io.Source.fromFile(filename).getLines()) {
       // Convert one line in libSVM format to a string array
       val content: Array[String] = line.split(" ")
       // Read 1st column (Label)
       data(row).label(0) = content(0) toInt
 
       // Read rest of the columns (Patterns)
-      for (ele ← content.slice(1, content.size)) {
+      for (ele <- content.slice(1, content.size)) {
         val col = (ele.split(":")(0) toInt) - 1
         val item = ele.split(":")(1) toDouble
 
