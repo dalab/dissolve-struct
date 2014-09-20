@@ -298,6 +298,9 @@ class DBCFWSolver(
     val indexedPrimals: RDD[(Index, PrimalInfo)] =
       zippedModels.flatMap(x => x._2).map(x => (x._1, (x._2._1 * (beta / k), x._2._2 * (beta / k)))).join(oldPrimalInfo).map(x => (x._1, (x._2._1._1 + x._2._2._1,
         x._2._1._2 + x._2._2._2)))
+        
+    // indexedPrimals isn't materialized till an RDD action is called. Force this by calling one.
+    indexedPrimals.first()
 
     (newGlobalModel, indexedPrimals.sortByKey(true, 1))
   }

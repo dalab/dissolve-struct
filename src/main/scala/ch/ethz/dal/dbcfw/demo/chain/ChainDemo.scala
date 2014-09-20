@@ -308,7 +308,7 @@ object ChainDemo extends LogHelper {
    */
   def chainBCFW(): Unit = {
 
-    val PERC_TRAIN: Double = 0.1 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+    val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
     val train_data_unord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val test_data: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -319,9 +319,9 @@ object ChainDemo extends LogHelper {
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     // val train_data = train_data_unord(List.fromArray(perm))
-    // val train_data: DenseVector[LabeledObject] = train_data_unord(List.fromArray(perm).slice(0, (PERC_TRAIN * train_data_unord.size).toInt)).toDenseVector
-    val temp: DenseVector[LabeledObject] = train_data_unord(List.fromArray(perm).slice(0, 1)).toDenseVector
-    val train_data = DenseVector.fill(5){temp(0)}
+    val train_data: DenseVector[LabeledObject] = train_data_unord(List.fromArray(perm).slice(0, (PERC_TRAIN * train_data_unord.size).toInt)).toDenseVector
+    // val temp: DenseVector[LabeledObject] = train_data_unord(List.fromArray(perm).slice(0, 1)).toDenseVector
+    // val train_data = DenseVector.fill(5){temp(0)}
 
     if (debugOn) {
       println("Loaded %d training examples, pattern:%dx%d and labels:%dx1"
@@ -394,7 +394,7 @@ object ChainDemo extends LogHelper {
    */
   def chainDBCFWCoCoA(): Unit = {
 
-    val PERC_TRAIN: Double = 0.1 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+    val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -408,9 +408,9 @@ object ChainDemo extends LogHelper {
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     // val train_data = trainDataUnord(List.fromArray(perm))
-    // val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
-    val temp: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, 1)).toArray
-    val train_data = DenseVector.fill(5){temp(0)}.toArray
+    val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
+    // val temp: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, 1)).toArray
+    // val train_data = DenseVector.fill(5){temp(0)}.toArray
 
     val solverOptions: SolverOptions = new SolverOptions()
     solverOptions.numPasses = 1 // After these many passes, each slice of the RDD returns a trained model
@@ -521,9 +521,10 @@ object ChainDemo extends LogHelper {
   }
 
   def main(args: Array[String]): Unit = {
-    chainBCFW()
     PropertyConfigurator.configure("conf/log4j.properties")
-    // chainDBCFWCoCoA()
+    chainDBCFWCoCoA()
+    
+    chainBCFW()
   }
 
 }
