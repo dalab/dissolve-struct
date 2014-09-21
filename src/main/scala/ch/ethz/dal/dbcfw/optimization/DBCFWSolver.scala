@@ -36,7 +36,7 @@ class DBCFWSolver(
 
     // autoconfigure parameters
     val NUM_DECODING_SAMPLES = 5
-    val NUM_COMMN_SAMPLES = 5
+    val NUM_COMMN_SAMPLES = 5 // Time taken for a single round of communication
 
     val d: Int = featureFn(data(0).label, data(0).pattern).size
     // Let the initial model contain zeros for all weights
@@ -85,8 +85,6 @@ class DBCFWSolver(
     val startTime = System.currentTimeMillis()
 
     for (roundNum <- 1 to solverOptions.NUM_ROUNDS) {
-
-      println("First index: " + indexedPrimalsRDD.first()._1)
 
       val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => mapper(x, globalModel, featureFn, lossFn, oracleFn,
         predictFn, solverOptions, miniBatchEnabled), preservesPartitioning = true)
