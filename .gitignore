@@ -41,4 +41,5 @@ build.log
 build.log
 
 # Custom stuff
-.cache
+*.cache
+*.log

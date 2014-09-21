@@ -413,7 +413,7 @@ object ChainDemo extends LogHelper {
     // val train_data = DenseVector.fill(5){temp(0)}.toArray
 
     val solverOptions: SolverOptions = new SolverOptions()
-    solverOptions.numPasses = 1 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.numPasses = 2 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -422,9 +422,10 @@ object ChainDemo extends LogHelper {
     solverOptions.debugLoss = false
     solverOptions.testData = testDataUnord
     
-    solverOptions.H = train_data.size
+    solverOptions.sample = "frac"
+    solverOptions.sampleFrac = 1.0
+    solverOptions.sampleWithReplacement = false
     solverOptions.NUM_PART = 1
-    solverOptions.NUM_ROUNDS = 2
 
     val trainer: StructSVMWithDBCFW = new StructSVMWithDBCFW(sc,
       DenseVector(train_data),
@@ -481,7 +482,7 @@ object ChainDemo extends LogHelper {
     val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
 
     val solverOptions: SolverOptions = new SolverOptions()
-    solverOptions.numPasses = 1 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.numPasses = 5 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -492,7 +493,6 @@ object ChainDemo extends LogHelper {
     
     solverOptions.H = train_data.size
     solverOptions.NUM_PART = 1
-    solverOptions.NUM_ROUNDS = 5
 
     val trainer: StructSVMWithMiniBatch = new StructSVMWithMiniBatch(sc,
       DenseVector(train_data),

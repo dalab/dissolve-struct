@@ -56,10 +56,27 @@ class DBCFWSolver(
     val indexedTrainDataRDD: RDD[(Index, LabeledObject)] = sc.parallelize(indexedTrainData, solverOptions.NUM_PART)
     var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, solverOptions.NUM_PART)
 
-    println("Beginning training of %d data points in %d passes with lambda=%f".format(data.size, solverOptions.NUM_ROUNDS, solverOptions.lambda))
+    /**
+     * Fix parameters to perform sampling.
+     * Use can either specify:
+     * a) "count" - Eqv. to 'H' in paper. Number of points to sample in each round.
+     * or b) "perc" - Fraction of dataset to sample \in [0.0, 1.0]
+     */
+    val sampleFrac: Double = {
+      if (solverOptions.sample == "frac")
+        solverOptions.sampleFrac
+      else if (solverOptions.sample == "count")
+        math.min(solverOptions.H / data.size, 1.0)
+      else {
+        println("[WARNING] %s is not a valid option. Reverting to sampling 50% of the dataset")
+        0.5
+      }
+    }
+
+    println("Beginning training of %d data points in %d passes with lambda=%f".format(data.size, solverOptions.numPasses, solverOptions.lambda))
 
     /**
-     * In this mode, the optimal H and NUM_ROUNDS is calculated based on:
+     * In this mode, the optimal H and numPasses is calculated based on:
      * a. Time taken for decoding
      * b. Time taken for a single round of communication
      */
@@ -80,15 +97,24 @@ class DBCFWSolver(
           endDecodingTime - startDecodingTime
         }
       var avgDecodeTime = decodeTimings.reduce((t1, t2) => t1 + t2).toDouble / NUM_DECODING_SAMPLES
+
+      /**
+       * Obtain average time required to finish 1 round of communication
+       *
+       * Run a dummy map-reduce job to get the timings
+       * TODO
+       */
     }
 
     // logger.info("[DATA] round,time,train_error,test_error")
     val startTime = System.currentTimeMillis()
 
-    for (roundNum <- 1 to solverOptions.NUM_ROUNDS) {
+    for (roundNum <- 1 to solverOptions.numPasses) {
 
-      val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)] = indexedTrainDataRDD.join(indexedPrimalsRDD).mapPartitions(x => mapper(x, globalModel, featureFn, lossFn, oracleFn,
-        predictFn, solverOptions, miniBatchEnabled), preservesPartitioning = true)
+      val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)] = indexedTrainDataRDD.sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
+        .join(indexedPrimalsRDD)
+        .mapPartitions(x => mapper(x, globalModel, featureFn, lossFn, oracleFn,
+          predictFn, solverOptions, miniBatchEnabled), preservesPartitioning = true)
 
       val reducedData: (StructSVMModel, RDD[(Index, PrimalInfo)]) = reducer(temp, indexedPrimalsRDD, globalModel, d, beta = 1.0)
 
@@ -305,7 +331,7 @@ class DBCFWSolver(
      * Merge all the w_i's and l_i's
      *
      * First flatMap returns a [newDeltaPrimalInfo_k]. This is applied k times, returns a sequence of n deltaPrimalInfos
-     * 
+     *
      * By doing a right outer join, we ensure that all the indices are retained, even in case data points are sampled
      *
      * After join, we have a sequence of (Index, (PrimalInfo_A, PrimalInfo_B))
