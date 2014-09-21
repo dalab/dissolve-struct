@@ -9,6 +9,7 @@ import org.apache.spark.SparkContext
 import ch.ethz.dal.dbcfw.classification.Types._
 import org.apache.spark.SparkContext._
 import org.apache.log4j.Logger
+import scala.collection.mutable
 
 /**
  * LogHelper is a trait you can mix in to provide easy log4j logging
@@ -132,9 +133,21 @@ class DBCFWSolver(
      */
     val zippedData: Array[(Index, (LabeledObject, PrimalInfo))] = dataIterator.toArray.sortBy(_._1)
     val data: Array[LabeledObject] = zippedData.map(x => x._2._1)
-    val dataInd: Array[Index] = zippedData.map(x => x._1)
+    val globalDataIdx: Array[Index] = zippedData.map(x => x._1)
     // Mapping of indexMapping(localIndex) -> globalIndex
-    // val indexMapping: Array[Int] = zippedData.map(x => x._1).toArray // Creates a mapping where j = indexMapping(i) refers to i-th local (xi, yi) and j-th global (xj, yj)
+    val localToGlobal: Array[Index] = zippedData.map(x => x._1)
+
+    // Recursively convert an array to an immutable Map, mapping array elements("global index") with their indices("local index")
+    /*def convertArrayToMap(arr: Array[Index], pos: Index): Map[Index, Index] =
+      if (arr.length > 0)
+        convertArrayToMap(arr.drop(1), pos + 1) + (arr(0) -> pos)
+      else
+        Map.empty[Index, Index]*/
+
+    // Alternate implementation - Use mutable maps. Immutable causes stack overflow
+    val globalToLocal: mutable.Map[Index, Index] = mutable.Map.empty[Index, Index]
+    for (ele <- localToGlobal.zipWithIndex)
+      globalToLocal(ele._1) = ele._2
 
     val maxOracle = oracleFn
     val phi = featureFn
@@ -154,9 +167,8 @@ class DBCFWSolver(
 
     // Copy w_i's and l_i's into local wMat and ellMat
     for (i <- 0 until n) {
-      val ind: Index = zippedData(i)._1
-      wMat(::, ind) := zippedData(i)._2._2._1
-      ellMat(ind) = zippedData(i)._2._2._2
+      wMat(::, i) := zippedData(i)._2._2._1
+      ellMat(i) = zippedData(i)._2._2._2
     }
     val prevWMat: DenseMatrix[Double] = wMat.copy
     val prevEllMat: DenseVector[Double] = ellMat.copy
@@ -171,7 +183,11 @@ class DBCFWSolver(
       else null
     var lAvg: Double = 0.0
 
-    for ((datapoint, i) <- data.zip(dataInd)) {
+    for ((datapoint, globalIdx) <- data.zip(globalDataIdx)) {
+
+      // Convert globalIdx to localIdx a.k.a "i"
+      val i: Index = globalToLocal(globalIdx)
+
       // 1) Pick example
       val pattern: Matrix[Double] = datapoint.pattern
       val label: Vector[Double] = datapoint.label
@@ -242,7 +258,8 @@ class DBCFWSolver(
     // val localIndexedDeltaPrimals: Array[(Index, PrimalInfo)] = dataInd.zip(
     //  for (k <- dataInd.toList) yield (wMat(::, k) - prevWMat(::, k), ellMat(k) - prevEllMat(k)))
 
-    val localIndexedDeltaPrimals: Array[(Index, PrimalInfo)] = zippedData.map(_._1).map(k => (k, (wMat(::, k) - prevWMat(::, k), ellMat(k) - prevEllMat(k))))
+    val localIndexedDeltaPrimals: Array[(Index, PrimalInfo)] = zippedData.map(_._1).map(k => (k, (wMat(::, globalToLocal(k)) - prevWMat(::, globalToLocal(k)),
+      ellMat(globalToLocal(k)) - prevEllMat(globalToLocal(k)))))
 
     // If this flag is set, return only the change in w's
     localModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
@@ -288,15 +305,18 @@ class DBCFWSolver(
      * Merge all the w_i's and l_i's
      *
      * First flatMap returns a [newDeltaPrimalInfo_k]. This is applied k times, returns a sequence of n deltaPrimalInfos
+     * 
+     * By doing a right outer join, we ensure that all the indices are retained, even in case data points are sampled
      *
      * After join, we have a sequence of (Index, (PrimalInfo_A, PrimalInfo_B))
      * where PrimalInfo_A = PrimalInfo_i at t-1
      * and   PrimalInfo_B = \Delta PrimalInfo_i
      */
     val indexedPrimals: RDD[(Index, PrimalInfo)] =
-      zippedModels.flatMap(x => x._2).map(x => (x._1, (x._2._1 * (beta / k), x._2._2 * (beta / k)))).join(oldPrimalInfo).map(x => (x._1, (x._2._1._1 + x._2._2._1,
-        x._2._1._2 + x._2._2._2)))
-        
+      zippedModels.flatMap(x => x._2).map(x => (x._1, (x._2._1 * (beta / k), x._2._2 * (beta / k)))).rightOuterJoin(oldPrimalInfo)
+        .map(x => (x._1, (x._2._1.getOrElse((DenseVector.zeros[Double](d), 0.0))._1 + x._2._2._1,
+          x._2._1.getOrElse((DenseVector.zeros[Double](d), 0.0))._2 + x._2._2._2)))
+
     // indexedPrimals isn't materialized till an RDD action is called. Force this by calling one.
     indexedPrimals.first()
 

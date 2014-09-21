@@ -337,7 +337,7 @@ object ChainDemo extends LogHelper {
     }
 
     val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 5
+    solverOptions.numPasses = 2
     solverOptions.debug = true
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -424,7 +424,7 @@ object ChainDemo extends LogHelper {
     
     solverOptions.H = train_data.size
     solverOptions.NUM_PART = 1
-    solverOptions.NUM_ROUNDS = 5
+    solverOptions.NUM_ROUNDS = 2
 
     val trainer: StructSVMWithDBCFW = new StructSVMWithDBCFW(sc,
       DenseVector(train_data),
