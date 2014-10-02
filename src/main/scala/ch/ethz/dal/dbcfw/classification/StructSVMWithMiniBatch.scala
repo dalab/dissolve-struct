@@ -23,5 +23,5 @@ class StructSVMWithMiniBatch(
       oracleFn,
       predictFn,
       solverOptions,
-      miniBatchEnabled=true).optimize()
+      miniBatchEnabled=true).optimize()._1
 }

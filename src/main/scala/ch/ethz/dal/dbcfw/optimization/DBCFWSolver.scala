@@ -33,11 +33,13 @@ class DBCFWSolver(
   /**
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
    */
-  def optimize(): StructSVMModel = {
+  def optimize(): (StructSVMModel, String) = {
 
     // autoconfigure parameters
     val NUM_DECODING_SAMPLES = 5
     val NUM_COMMN_SAMPLES = 5 // Time taken for a single round of communication
+
+    val debugSb: StringBuilder = new StringBuilder()
 
     val d: Int = featureFn(data(0).label, data(0).pattern).size
     // Let the initial model contain zeros for all weights
@@ -55,6 +57,8 @@ class DBCFWSolver(
 
     val indexedTrainDataRDD: RDD[(Index, LabeledObject)] = sc.parallelize(indexedTrainData, solverOptions.NUM_PART)
     var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, solverOptions.NUM_PART)
+
+    indexedPrimalsRDD.checkpoint()
 
     /**
      * Fix parameters to perform sampling.
@@ -75,7 +79,10 @@ class DBCFWSolver(
 
     println("Beginning training of %d data points in %d passes with lambda=%f".format(data.size, solverOptions.numPasses, solverOptions.lambda))
 
+    var avgDecodeTime: Double = 0.0
+    var avgCommunicationTime: Double = 0.0
     /**
+     * Monitoring round
      * In this mode, the optimal H and numPasses is calculated based on:
      * a. Time taken for decoding
      * b. Time taken for a single round of communication
@@ -88,7 +95,7 @@ class DBCFWSolver(
       var decodeTimings =
         for (i <- 0 until NUM_DECODING_SAMPLES) yield {
           var randModel: StructSVMModel = new StructSVMModel(DenseVector.rand(d), Math.random(), DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
-          var sampled_i = util.Random.nextInt(data.size + 1)
+          var sampled_i = util.Random.nextInt(data.size)
 
           val startDecodingTime = System.currentTimeMillis()
           oracleFn(randModel, data(sampled_i).label, data(sampled_i).pattern)
@@ -96,18 +103,44 @@ class DBCFWSolver(
 
           endDecodingTime - startDecodingTime
         }
-      var avgDecodeTime = decodeTimings.reduce((t1, t2) => t1 + t2).toDouble / NUM_DECODING_SAMPLES
+      avgDecodeTime = decodeTimings.reduce((t1, t2) => t1 + t2).toDouble / NUM_DECODING_SAMPLES
 
       /**
        * Obtain average time required to finish 1 round of communication
        *
        * Run a dummy map-reduce job to get the timings
-       * TODO
        */
+      def dummyOracle(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] = DenseVector.ones[Double](yi.size)
+
+      val communicationTimings =
+        for (i <- 0 until NUM_COMMN_SAMPLES) yield {
+
+          // Run Mapper
+          val temp: RDD[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)] = indexedTrainDataRDD.sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
+            .join(indexedPrimalsRDD)
+            .mapPartitions(x => mapper(x, globalModel, featureFn, lossFn, dummyOracle,
+              predictFn, solverOptions, miniBatchEnabled), preservesPartitioning = true)
+
+          // Finish Reducer. Thus, finish one round of communication
+          val startCommunicationTime = System.currentTimeMillis()
+          val reducedData: (StructSVMModel, RDD[(Index, PrimalInfo)]) = reducer(temp, indexedPrimalsRDD, globalModel, d, beta = 1.0)
+          val endCommunicationTime = System.currentTimeMillis()
+
+          endCommunicationTime - startCommunicationTime
+        }
+      avgCommunicationTime = communicationTimings.reduce((t1, t2) => t1 + t2).toDouble / NUM_COMMN_SAMPLES
+
+      /**
+       * Given the average time to decode samples and communicate, figure out values of H and numPasses
+       */
+      /*println("Average decoding time: %f".format(avgDecodeTime))
+      println("Average communication time: %f".format(avgCommunicationTime))*/
+
     }
 
     // logger.info("[DATA] round,time,train_error,test_error")
     val startTime = System.currentTimeMillis()
+    debugSb ++= "round,time,primal,dual,gap,train_error,test_error\n"
 
     for (roundNum <- 1 to solverOptions.numPasses) {
 
@@ -127,12 +160,23 @@ class DBCFWSolver(
       val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, globalModel)
       val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, globalModel)
 
-      // logger.info("[DATA] %d,%f,%f,%f\n".format(roundNum, elapsedTime, trainError, testError))
-      println("[Round #%d] Train loss = %f, Test loss = %f\n".format(roundNum, trainError, testError))
+      // Obtain duality gap after each communication round
+      val debugModel: StructSVMModel = globalModel.clone()
+      val f = -SolverUtils.objectiveFunction(debugModel.getWeights, debugModel.getEll, solverOptions.lambda)
+      val gapTup = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda)
+      val gap = gapTup._1
+      val primal = f + gap
 
+      // logger.info("[DATA] %d,%f,%f,%f\n".format(roundNum, elapsedTime, trainError, testError))
+      println("[Round #%d] Train loss = %f, Test loss = %f, Primal = %f, Gap = %f\n".format(roundNum, trainError, testError, primal, gap))
+      val curTime = (System.currentTimeMillis() - startTime) / 1000
+      debugSb ++= "%d,%d,%f,%f,%f,%f,%f\n".format(roundNum, curTime, primal, f, gap, trainError, testError)
     }
 
-    globalModel
+    println("Average decoding time: %f".format(avgDecodeTime))
+    println("Average communication time: %f".format(avgCommunicationTime))
+
+    (globalModel, debugSb.toString())
   }
 
   /**
@@ -281,18 +325,12 @@ class DBCFWSolver(
       localModel.updateEll(ell)
     }
 
-    // val localIndexedDeltaPrimals: Array[(Index, PrimalInfo)] = dataInd.zip(
-    //  for (k <- dataInd.toList) yield (wMat(::, k) - prevWMat(::, k), ellMat(k) - prevEllMat(k)))
-
     val localIndexedDeltaPrimals: Array[(Index, PrimalInfo)] = zippedData.map(_._1).map(k => (k, (wMat(::, globalToLocal(k)) - prevWMat(::, globalToLocal(k)),
       ellMat(globalToLocal(k)) - prevEllMat(globalToLocal(k)))))
 
     // If this flag is set, return only the change in w's
     localModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
     localModel.updateEll(localModel.getEll() - prevModel.getEll())
-
-    // deltaLocalModel.updateWeights(deltaLocalModel.getWeights() - prevModel.getWeights())
-    // deltaLocalModel.updateEll(deltaLocalModel.getEll() - prevModel.getEll())
 
     // Finally return a single element iterator
     { List.empty[(StructSVMModel, Array[(Index, PrimalInfo)], StructSVMModel)] :+ (localModel, localIndexedDeltaPrimals, deltaLocalModel) }.iterator
@@ -344,6 +382,8 @@ class DBCFWSolver(
           x._2._1.getOrElse((DenseVector.zeros[Double](d), 0.0))._2 + x._2._2._2)))
 
     // indexedPrimals isn't materialized till an RDD action is called. Force this by calling one.
+    indexedPrimals.checkpoint()
+    println(indexedPrimals.isCheckpointed)
     indexedPrimals.first()
 
     (newGlobalModel, indexedPrimals.sortByKey(true, 1))

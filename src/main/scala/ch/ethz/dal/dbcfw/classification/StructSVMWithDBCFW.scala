@@ -5,6 +5,7 @@ import breeze.linalg._
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import org.apache.spark.SparkContext
 import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
+import java.io.FileWriter
 
 class StructSVMWithDBCFW(
   val sc: SparkContext,
@@ -15,13 +16,22 @@ class StructSVMWithDBCFW(
   val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
   val solverOptions: SolverOptions) {
 
-  def trainModel(): StructSVMModel =
-    new DBCFWSolver(sc,
+  def trainModel(): StructSVMModel = {
+    val (trainedModel, debugInfo) = new DBCFWSolver(sc,
       data,
       featureFn,
       lossFn,
       oracleFn,
       predictFn,
       solverOptions,
-      miniBatchEnabled=false).optimize()
+      miniBatchEnabled = false).optimize()
+
+    // Dump debug information into a file
+    val fw = new FileWriter("debugInfo.csv")
+    fw.write(debugInfo)
+    fw.close()
+
+    // Return the trained model
+    trainedModel
+  }
 }

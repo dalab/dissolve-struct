@@ -398,9 +398,10 @@ object ChainDemo extends LogHelper {
 
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
-
+    
     val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local").set("spark.cores.max", "1")
     val sc = new SparkContext(conf)
+    sc.setCheckpointDir("checkpoint-files")
 
     // Read order from the file and permute the Vector accordingly
     val trainOrder: String = "data/perm_train.csv"
@@ -411,7 +412,7 @@ object ChainDemo extends LogHelper {
     val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
     // val temp: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, 1)).toArray
     // val train_data = DenseVector.fill(5){temp(0)}.toArray
-
+    
     val solverOptions: SolverOptions = new SolverOptions()
     solverOptions.numPasses = 2 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
@@ -426,6 +427,7 @@ object ChainDemo extends LogHelper {
     solverOptions.sampleFrac = 1.0
     solverOptions.sampleWithReplacement = false
     solverOptions.NUM_PART = 1
+    solverOptions.autoconfigure = false
 
     val trainer: StructSVMWithDBCFW = new StructSVMWithDBCFW(sc,
       DenseVector(train_data),
