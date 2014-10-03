@@ -23,6 +23,14 @@ import ch.ethz.dal.dbcfw.regression.LabeledObject
 import ch.ethz.dal.dbcfw.classification.Types._
 import ch.ethz.dal.dbcfw.classification.StructSVMWithDBCFW
 import ch.ethz.dal.dbcfw.classification.StructSVMWithMiniBatch
+import cc.factorie._
+import cc.factorie.variable._
+import cc.factorie.model._
+import cc.factorie.infer.MaximizeByBP
+import cc.factorie.infer.MaximizeByBPChain
+import cc.factorie.infer.BP
+import cc.factorie.infer.MaximizeByBPLoopy
+import cc.factorie.infer.MaximizeByMPLP
 
 /**
  * LogHelper is a trait you can mix in to provide easy log4j logging
@@ -215,9 +223,55 @@ object ChainDemo extends LogHelper {
   }
 
   /**
+   * Alternate decoding function using Factor Graphs
+   */
+  def bpDecode(thetaUnary: Matrix[Double], thetaPairwise: Matrix[Double]): Vector[Double] = {
+    // thetaUnary is a (lengthOfChain x 26) dimensional matrix
+    val nNodes: Int = thetaUnary.rows
+    val nStates: Int = thetaUnary.cols
+
+    val label: DenseVector[Double] = DenseVector.zeros[Double](nNodes)
+
+    object LetterDomain extends DiscreteDomain(nStates)
+
+    class LetterVar(i: Int) extends DiscreteVariable(i) {
+      def domain = LetterDomain
+    }
+
+    def getUnaryFactor(yi: LetterVar, posInChain: Int): Factor = {
+      new Factor1(yi) {
+        def score(i: LetterVar#Value) = thetaUnary(posInChain, i.intValue)
+      }
+    }
+
+    def getPairwiseFactor(yi: LetterVar, yj: LetterVar): Factor = {
+      new Factor2(yi, yj) {
+        def score(i: LetterVar#Value, j: LetterVar#Value) = thetaPairwise(i.intValue, j.intValue)
+      }
+    }
+
+    val letterChain: IndexedSeq[LetterVar] = for (i <- 0 until nNodes) yield new LetterVar(0)
+
+    val unaries: IndexedSeq[Factor] = for (i <- 0 until nNodes) yield getUnaryFactor(letterChain(i), i)
+    val pairwise: IndexedSeq[Factor] = for (i <- 0 until nNodes - 1) yield getPairwiseFactor(letterChain(i), letterChain(i + 1))
+
+    val model = new ItemizedModel
+    model ++= unaries
+    model ++= pairwise
+
+    // val m = BP.inferChainMax(letterChain, model)
+    val assgn = MaximizeByMPLP.infer(letterChain, model).mapAssignment
+    for (i <- 0 until nNodes)
+      label(i) = assgn(letterChain(i)).intValue.toDouble
+
+    label
+  }
+
+  /**
    * The Maximization Oracle
    */
-  def oracleFn(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] = {
+  def oracleFnWithDecode(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double],
+    decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
@@ -229,7 +283,7 @@ object ChainDemo extends LogHelper {
     // weight.pairwise is a numStates x numStates Matrix
     val weight: Weight = weightVecToObj(model.getWeights(), numStates, numDims)
 
-    val thetaUnary: DenseMatrix[Double] = weight.unary.t * xi // Produces a 26 x n matrix
+    val thetaUnary: DenseMatrix[Double] = weight.unary.t * xi // Produces a 26 x (length-of-chain) matrix
 
     // First position has a bias
     thetaUnary(::, 0) := thetaUnary(::, 0) + weight.firstBias
@@ -247,10 +301,16 @@ object ChainDemo extends LogHelper {
     }
 
     // Solve inference problem
-    val label: Vector[Double] = logDecode(thetaUnary.t, thetaPairwise) // - 1.0
+    val label: Vector[Double] = decodeFn(thetaUnary.t, thetaPairwise) // - 1.0
 
     label
   }
+
+  def oracleFn(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
+    oracleFnWithDecode(model, yi, xi, logDecode)
+
+  def oracleFnBP(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
+    oracleFnWithDecode(model, yi, xi, bpDecode)
 
   /**
    * Loss function
@@ -258,7 +318,8 @@ object ChainDemo extends LogHelper {
    * TODO
    * * Use MaxOracle instead of this (Use yi: Option<Vector[Double]>)
    */
-  def predictFn(model: StructSVMModel, xi: Matrix[Double]): Vector[Double] = {
+  def predictFnWithDecode(model: StructSVMModel, xi: Matrix[Double],
+    decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
@@ -280,9 +341,17 @@ object ChainDemo extends LogHelper {
     val thetaPairwise: DenseMatrix[Double] = weight.pairwise
 
     // Solve inference problem
-    val label: Vector[Double] = logDecode(thetaUnary.t, thetaPairwise) // - 1.0
+    val label: Vector[Double] = decodeFn(thetaUnary.t, thetaPairwise) // - 1.0
 
     label
+  }
+
+  def predictFn(model: StructSVMModel, xi: Matrix[Double]): Vector[Double] = {
+    predictFnWithDecode(model, xi, logDecode)
+  }
+
+  def predictFnBP(model: StructSVMModel, xi: Matrix[Double]): Vector[Double] = {
+    predictFnWithDecode(model, xi, bpDecode)
   }
 
   /**
@@ -303,7 +372,6 @@ object ChainDemo extends LogHelper {
    *  / _  |/ /__ / _/  | |/ |/ /
    * /____/ \___//_/    |__/|__/
    *
-   * (Averaging of primal variables after each round)
    * ****************************************************************
    */
   def chainBCFW(): Unit = {
@@ -337,7 +405,7 @@ object ChainDemo extends LogHelper {
     }
 
     val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 2
+    solverOptions.numPasses = 10
     solverOptions.debug = true
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -356,8 +424,8 @@ object ChainDemo extends LogHelper {
     val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
       featureFn,
       lossFn,
-      oracleFn,
-      predictFn,
+      oracleFnBP,
+      predictFnBP,
       solverOptions)
 
     val model: StructSVMModel = trainer.trainModel()
@@ -398,7 +466,7 @@ object ChainDemo extends LogHelper {
 
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
-    
+
     val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local").set("spark.cores.max", "1")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
@@ -412,7 +480,7 @@ object ChainDemo extends LogHelper {
     val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
     // val temp: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, 1)).toArray
     // val train_data = DenseVector.fill(5){temp(0)}.toArray
-    
+
     val solverOptions: SolverOptions = new SolverOptions()
     solverOptions.numPasses = 2 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
@@ -422,7 +490,7 @@ object ChainDemo extends LogHelper {
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = false
     solverOptions.testData = testDataUnord
-    
+
     solverOptions.sample = "frac"
     solverOptions.sampleFrac = 1.0
     solverOptions.sampleWithReplacement = false
@@ -465,7 +533,7 @@ object ChainDemo extends LogHelper {
    * (Mini batch)
    * ****************************************************************
    */
- def chainDBCFWMiniBatch(): Unit = {
+  def chainDBCFWMiniBatch(): Unit = {
 
     val PERC_TRAIN: Double = 0.1 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
@@ -492,7 +560,7 @@ object ChainDemo extends LogHelper {
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = false
     solverOptions.testData = testDataUnord
-    
+
     solverOptions.H = train_data.size
     solverOptions.NUM_PART = 1
 
@@ -523,9 +591,9 @@ object ChainDemo extends LogHelper {
   }
 
   def main(args: Array[String]): Unit = {
-    PropertyConfigurator.configure("conf/log4j.properties")
-    chainDBCFWCoCoA()
-    
+    // PropertyConfigurator.configure("conf/log4j.properties")
+    // chainDBCFWCoCoA()
+
     chainBCFW()
   }
 
