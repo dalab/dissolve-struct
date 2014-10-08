@@ -380,19 +380,19 @@ class DBCFWSolver(
       zippedModels
         .flatMap { case (model, primals, debugModel) => primals }
         .rightOuterJoin(oldPrimalInfo)
-        .map {
-          case (idx, (Some((newW, newEll)), (prevW, prevEll))) =>
-            (idx, (prevW + (newW * (beta / k)),
-              prevEll + (newEll * (beta / k))))
-          case (idx, (None, (prevW, prevEll))) => (idx, (prevW, prevEll))
+        .mapValues {
+          case (Some((newW, newEll)), (prevW, prevEll)) =>
+            (prevW + (newW * (beta / k)),
+              prevEll + (newEll * (beta / k)))
+          case (None, (prevW, prevEll)) => (prevW, prevEll)
         }
 
     // indexedPrimals isn't materialized till an RDD action is called. Force this by calling one.
     indexedPrimals.checkpoint()
     println(indexedPrimals.isCheckpointed)
-    indexedPrimals.first()
+    indexedPrimals.count()
 
-    (newGlobalModel, indexedPrimals.sortByKey(true, 1))
+    (newGlobalModel, indexedPrimals)
   }
 
 }
