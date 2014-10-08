@@ -377,9 +377,15 @@ class DBCFWSolver(
      * and   PrimalInfo_B = \Delta PrimalInfo_i
      */
     val indexedPrimals: RDD[(Index, PrimalInfo)] =
-      zippedModels.flatMap(x => x._2).map(x => (x._1, (x._2._1 * (beta / k), x._2._2 * (beta / k)))).rightOuterJoin(oldPrimalInfo)
-        .map(x => (x._1, (x._2._1.getOrElse((DenseVector.zeros[Double](d), 0.0))._1 + x._2._2._1,
-          x._2._1.getOrElse((DenseVector.zeros[Double](d), 0.0))._2 + x._2._2._2)))
+      zippedModels
+        .flatMap { case (model, primals, debugModel) => primals }
+        .rightOuterJoin(oldPrimalInfo)
+        .map {
+          case (idx, (Some((newW, newEll)), (prevW, prevEll))) =>
+            (idx, (prevW + (newW * (beta / k)),
+              prevEll + (newEll * (beta / k))))
+          case (idx, (None, (prevW, prevEll))) => (idx, (prevW, prevEll))
+        }
 
     // indexedPrimals isn't materialized till an RDD action is called. Force this by calling one.
     indexedPrimals.checkpoint()
