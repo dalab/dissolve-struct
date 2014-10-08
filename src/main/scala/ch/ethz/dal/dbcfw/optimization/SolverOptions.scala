@@ -20,6 +20,10 @@ class SolverOptions extends Serializable {
   var testData: Vector[LabeledObject] = null
   var doLineSearch: Boolean = false
   
+  // Cache params
+  var enableOracleCache: Boolean = true
+  var oracleCacheSize: Int = 10
+  
   // DBCFW specific params
   var autoconfigure: Boolean = false
   var H: Int = 5 // Number of points to sample in each pass

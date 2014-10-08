@@ -12,6 +12,7 @@ import breeze.numerics._
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import java.io.File
 import java.io.PrintWriter
+import scala.collection.mutable.MutableList
 
 /**
  *
@@ -89,6 +90,9 @@ class BCFWSolver /*extends Optimizer*/ (
       println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
     }
 
+    // Initialize the cache: Index -> List of precomputed ystar_i's
+    var oracleCache = collection.mutable.Map[Int, MutableList[Vector[Double]]]()
+
     for (passNum <- 0 until numPasses) {
 
       if (debugOn)
@@ -101,7 +105,46 @@ class BCFWSolver /*extends Optimizer*/ (
         val label: Vector[Double] = data(i).label
 
         // 2) Solve loss-augmented inference for point i
-        val ystar_i: Vector[Double] = maxOracle(model, label, pattern)
+        // 2.a) If cache is enabled, check if any of the previous ystar_i's for this i can be used
+        val cachedYstar_i: Option[Vector[Double]] =
+          if (solverOptions.enableOracleCache && oracleCache.contains(i)) {
+            val contenders: Seq[(Double, Int)] =
+              oracleCache(i)
+                .map(y_i => (((phi(label, pattern) - phi(y_i, pattern)) :* (1 / (n * lambda))),
+                  (1.0 / n) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
+                .map {
+                  case (w_s, ell_s) => (model.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
+                    ((wMat(::, i) - w_s).t * (wMat(::, i) - w_s) + eps) // Map each (w_s, ell_s) to their respective step-size values	
+                }
+                .zipWithIndex // We'll need the index later to retrieve the respective approx. ystar_i
+                .filter { case (gamma, idx) => gamma > 0.0 }
+                .map { case (gamma, idx) => (min(1.0, gamma), idx) } // Clip to [0,1] interval
+                .sortBy { case (gamma, idx) => gamma }
+
+            // TODO Use this naive_gamma to further narrow down on cached contenders
+            // TODO Maintain fixed size of the list of cached vectors
+            val naive_gamma: Double = (2.0 * n) / (k + 2.0 * n)
+
+            // If there is a good contender among the cached datapoints, return it
+            if (contenders.size >= 1)
+              Some(oracleCache(i)(contenders.head._2))
+            else None
+          } else
+            None
+
+        // 2.b) In case cache is disabled or a good contender from cache hasn't been found, call max Oracle
+        val ystar_i: Vector[Double] =
+          if (cachedYstar_i.isEmpty) {
+            val ystar = maxOracle(model, label, pattern)
+
+            if (solverOptions.enableOracleCache)
+              // Add this newly computed ystar to the cache of this i
+              oracleCache.update(i, oracleCache.getOrElse(i, MutableList[Vector[Double]]()) :+ ystar)
+
+            ystar
+          } else {
+            cachedYstar_i.get
+          }
 
         // 3) Define the update quantities
         val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
