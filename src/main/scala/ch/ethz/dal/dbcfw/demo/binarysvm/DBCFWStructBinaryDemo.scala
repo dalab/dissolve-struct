@@ -112,7 +112,7 @@ object DBCFWStructBinaryDemo {
       // Convert one line in libSVM format to a string array
       val content: Array[String] = line.split(" ")
       // Read 1st column (Label)
-      data(row).label(0) = content(0) toInt
+      data(row).label(0) = if (content(0).contentEquals("+1")) 1 else -1
 
       // Read rest of the columns (Patterns)
       for (ele <- content.slice(1, content.size)) {
@@ -136,21 +136,28 @@ object DBCFWStructBinaryDemo {
     util.Random.setSeed(1)
 
     // Split data into training and test datasets
-    val trnPrc = 0.80
+    val trnPrc = 0.8
     val perm: List[Int] = util.Random.shuffle((0 until data.size) toList)
     val cutoffIndex: Int = (trnPrc * perm.size) toInt
-    val train_data = data(perm.slice(0, cutoffIndex)) toVector // Obtain in range [0, cutoffIndex)
+    val train_data = data(perm.slice(0, cutoffIndex)).toDenseVector // Obtain in range [0, cutoffIndex)
     val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
 
-    val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 5
-    solverOptions.debug = true
+    val solverOptions: SolverOptions = new SolverOptions()
+    
+    solverOptions.numPasses = 10 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.debug = false
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
     solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = false
     solverOptions.testData = test_data
+
+    solverOptions.sample = "frac"
+    solverOptions.sampleFrac = 1.0
+    solverOptions.sampleWithReplacement = false
+    solverOptions.NUM_PART = 2
+    solverOptions.autoconfigure = false
 
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
@@ -159,19 +166,20 @@ object DBCFWStructBinaryDemo {
       predictFn,
       solverOptions)*/
 
-    val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
+    /*val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
       featureFn,
       lossFn,
       oracleFn,
       predictFn,
-      solverOptions)
+      solverOptions)*/
 
-    /*solverOptions.H = train_data.size
-    solverOptions.NUM_PART = 1
-    solverOptions.NUM_ROUNDS = 5
+    solverOptions.NUM_PART = 2
+    solverOptions.sample = "frac"
+    solverOptions.sampleFrac = 1.0
 
-    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local").set("spark.cores.max", "1")
+    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local")
     val sc = new SparkContext(conf)
+    sc.setCheckpointDir("checkpoint-files")
 
     val trainer: StructSVMWithDBCFW = new StructSVMWithDBCFW(sc,
       train_data,
@@ -179,7 +187,7 @@ object DBCFWStructBinaryDemo {
       lossFn,
       oracleFn,
       predictFn,
-      solverOptions)*/
+      solverOptions)
 
     val model: StructSVMModel = trainer.trainModel()
 

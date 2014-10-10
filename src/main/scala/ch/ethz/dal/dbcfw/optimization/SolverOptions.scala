@@ -28,7 +28,7 @@ class SolverOptions extends Serializable {
   var autoconfigure: Boolean = false
   var H: Int = 5 // Number of points to sample in each pass
   var sampleFrac: Double = 0.5
-  var sampleWithReplacement: Boolean = true
+  var sampleWithReplacement: Boolean = false
   var NUM_PART: Int = 1 // Number of partitions of the RDD
   
   // For debugging/Testing purposes

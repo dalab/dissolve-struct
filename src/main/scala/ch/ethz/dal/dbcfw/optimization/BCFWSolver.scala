@@ -106,9 +106,9 @@ class BCFWSolver /*extends Optimizer*/ (
 
         // 2) Solve loss-augmented inference for point i
         // 2.a) If cache is enabled, check if any of the previous ystar_i's for this i can be used
-        val cachedYstar_i: Option[Vector[Double]] =
+        val bestCachedCandidateForI: Option[Vector[Double]] =
           if (solverOptions.enableOracleCache && oracleCache.contains(i)) {
-            val contenders: Seq[(Double, Int)] =
+            val candidates: Seq[(Double, Int)] =
               oracleCache(i)
                 .map(y_i => (((phi(label, pattern) - phi(y_i, pattern)) :* (1 / (n * lambda))),
                   (1.0 / n) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
@@ -126,24 +126,24 @@ class BCFWSolver /*extends Optimizer*/ (
             val naive_gamma: Double = (2.0 * n) / (k + 2.0 * n)
 
             // If there is a good contender among the cached datapoints, return it
-            if (contenders.size >= 1)
-              Some(oracleCache(i)(contenders.head._2))
+            if (candidates.size >= 1)
+              Some(oracleCache(i)(candidates.head._2))
             else None
           } else
             None
 
         // 2.b) In case cache is disabled or a good contender from cache hasn't been found, call max Oracle
         val ystar_i: Vector[Double] =
-          if (cachedYstar_i.isEmpty) {
+          if (bestCachedCandidateForI.isEmpty) {
             val ystar = maxOracle(model, label, pattern)
 
             if (solverOptions.enableOracleCache)
               // Add this newly computed ystar to the cache of this i
               oracleCache.update(i, oracleCache.getOrElse(i, MutableList[Vector[Double]]()) :+ ystar)
-
+              // kick out oldest if max size reached
             ystar
           } else {
-            cachedYstar_i.get
+            bestCachedCandidateForI.get
           }
 
         // 3) Define the update quantities
