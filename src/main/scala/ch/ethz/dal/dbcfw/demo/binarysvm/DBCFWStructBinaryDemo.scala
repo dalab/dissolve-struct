@@ -18,6 +18,9 @@ import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import ch.ethz.dal.dbcfw.classification.StructSVMWithDBCFW
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.mllib.classification.SVMWithSGD
+import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 
 /**
  *
@@ -128,8 +131,11 @@ object DBCFWStructBinaryDemo {
     data
   }
 
-  def main(args: Array[String]): Unit = {
-    val data: Vector[LabeledObject] = loadLibSVMFile("data/a1a.txt")
+  /**
+   * BSVM - DBCFW style
+   */
+  def dbcfwBSVM(libSvmFilePath: String): Unit = {
+    val data: Vector[LabeledObject] = loadLibSVMFile(libSvmFilePath)
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(data.size, data(0).pattern.rows, data(0).pattern.cols, data(0).label.size))
 
     // Fix seed for reproducibility
@@ -143,8 +149,8 @@ object DBCFWStructBinaryDemo {
     val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
 
     val solverOptions: SolverOptions = new SolverOptions()
-    
-    solverOptions.numPasses = 10 // After these many passes, each slice of the RDD returns a trained model
+
+    solverOptions.numPasses = 50 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -153,10 +159,8 @@ object DBCFWStructBinaryDemo {
     solverOptions.debugLoss = false
     solverOptions.testData = test_data
 
-    solverOptions.sample = "frac"
-    solverOptions.sampleFrac = 1.0
     solverOptions.sampleWithReplacement = false
-    solverOptions.NUM_PART = 2
+    solverOptions.NUM_PART = 1
     solverOptions.autoconfigure = false
 
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
@@ -175,9 +179,9 @@ object DBCFWStructBinaryDemo {
 
     solverOptions.NUM_PART = 2
     solverOptions.sample = "frac"
-    solverOptions.sampleFrac = 1.0
+    solverOptions.sampleFrac = 0.5
 
-    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local")
+    val conf = new SparkConf().setAppName("Binary-DBCFW").setMaster("local")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
@@ -203,6 +207,68 @@ object DBCFWStructBinaryDemo {
     println("Accuracy on Test set = %d/%d = %.4f".format(truePredictions,
       totalPredictions,
       (truePredictions.toDouble / totalPredictions.toDouble) * 100))
+  }
+
+  /**
+   * MLLib implementation of SVMSGD, on LibSVM format data
+   */
+  def mllibBSVM(libSvmFilePath: String): Unit = {
+
+    import org.apache.spark.SparkContext
+    import org.apache.spark.mllib.classification.SVMWithSGD
+    import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+    import org.apache.spark.mllib.regression.LabeledPoint
+    import org.apache.spark.mllib.linalg.Vectors
+    import org.apache.spark.mllib.util.MLUtils
+
+    val conf = new SparkConf().setAppName("Binary-MLLib").setMaster("local")
+    val sc = new SparkContext(conf)
+
+    val data = MLUtils.loadLibSVMFile(sc, libSvmFilePath)
+
+    // Split data into training (80%) and test (20%).
+    val splits = data.randomSplit(Array(0.8, 0.2), seed = 1)
+    val training = splits(0).cache()
+    val test = splits(1)
+
+    // Run training algorithm to build the model
+    val numIterations = 100
+    val model = SVMWithSGD.train(training, numIterations)
+
+    // Compute raw scores on the test set. 
+    val scoreAndLabels = test.map { point =>
+      val score = model.predict(point.features)
+      (score, point.label)
+    }
+
+    // Get evaluation metrics.
+    val metrics = new BinaryClassificationMetrics(scoreAndLabels)
+    val auROC = metrics.areaUnderROC()
+
+    println("Area under ROC = " + auROC)
+
+    val trainError = training.map { point =>
+      val score = model.predict(point.features)
+      score == point.label
+    }.collect().toList.count(_ == true).toDouble / training.count().toDouble
+
+    val testError = test.map { point =>
+      val score = model.predict(point.features)
+      score == point.label
+    }.collect().toList.count(_ == true).toDouble / test.count().toDouble
+
+    println("Training accuracy = " + trainError)
+    println("Test accuracy = " + testError)
+
+  }
+
+  def main(args: Array[String]): Unit = {
+
+    // Runs MLLib's SVMSGD on Adult dataset
+    mllibBSVM("data/a1a_mllib.txt")
+
+    // Runs DBCFW on Adult dataset
+    // dbcfwBSVM("data/a1a.txt")
   }
 
 }
