@@ -81,10 +81,11 @@ class BCFWSolver /*extends Optimizer*/ (
     val lossWriter = if (solverOptions.debugLoss) new PrintWriter(new File(lossWriterFileName)) else null
     if (solverOptions.debugLoss) {
       if (solverOptions.testData != null)
-        lossWriter.write("pass_num,iter,primal,dual,duality_gap,train_error,test_error\n")
+        lossWriter.write("round,time,iter,primal,dual,gap,train_error,test_error\n")
       else
-        lossWriter.write("pass_num,iter,primal,dual,duality_gap,train_error\n")
+        lossWriter.write("round,time,iter,primal,dual,gap,train_error\n")
     }
+    val startTime = System.currentTimeMillis()
 
     if (debugOn) {
       println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
@@ -139,8 +140,10 @@ class BCFWSolver /*extends Optimizer*/ (
 
             if (solverOptions.enableOracleCache)
               // Add this newly computed ystar to the cache of this i
-              oracleCache.update(i, oracleCache.getOrElse(i, MutableList[Vector[Double]]()) :+ ystar)
-              // kick out oldest if max size reached
+              oracleCache.update(i, if (solverOptions.oracleCacheSize > 0)
+                { oracleCache.getOrElse(i, MutableList[Vector[Double]]()) :+ ystar }.takeRight(solverOptions.oracleCacheSize)
+              else { oracleCache.getOrElse(i, MutableList[Vector[Double]]()) :+ ystar })
+            // kick out oldest if max size reached
             ystar
           } else {
             bestCachedCandidateForI.get
@@ -204,18 +207,19 @@ class BCFWSolver /*extends Optimizer*/ (
           val primal = f + gap
           val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
 
+          val curTime = (System.currentTimeMillis() - startTime) / 1000.0
+
           if (solverOptions.testData != null) {
             val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, debugModel)
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError, testError))
-
             if (solverOptions.debugLoss)
-              lossWriter.write("%d,%d,%f,%f,%f,%f,%f\n".format(passNum + 1, k, primal, f, gap, trainError, testError))
+              lossWriter.write("%d,%f,%d,%f,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError, testError))
           } else {
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError))
             if (solverOptions.debugLoss)
-              lossWriter.write("%d,%d,%f,%f,%f,%f\n".format(passNum + 1, k, primal, f, gap, trainError))
+              lossWriter.write("%d,%f,%d,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError))
           }
 
           debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
