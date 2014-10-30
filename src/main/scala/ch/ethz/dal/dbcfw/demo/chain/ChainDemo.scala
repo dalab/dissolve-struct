@@ -1,28 +1,33 @@
 package ch.ethz.dal.dbcfw.demo.chain
 
-import ch.ethz.dal.dbcfw.regression.LabeledObject
 import breeze.linalg._
 import breeze.numerics._
 import breeze.generic._
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
-import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
-import java.io.File
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
-import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
+
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
-import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
-import java.io.PrintWriter
-import ch.ethz.dal.dbcfw.optimization.SolverUtils
+
 import org.apache.log4j.Logger
-import collection.JavaConversions.enumerationAsScalaIterator
 import org.apache.log4j.PropertyConfigurator
+
+import java.io.File
+import java.io.PrintWriter
+
+import collection.JavaConversions.enumerationAsScalaIterator
+
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import ch.ethz.dal.dbcfw.classification.Types._
 import ch.ethz.dal.dbcfw.classification.StructSVMWithDBCFW
+import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
 import ch.ethz.dal.dbcfw.classification.StructSVMWithMiniBatch
+import ch.ethz.dal.dbcfw.optimization.SolverUtils
+import ch.ethz.dal.dbcfw.classification.StructSVMModel
+import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
+import ch.ethz.dal.dbcfw.optimization.SolverOptions
+import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
+
 import cc.factorie._
 import cc.factorie.variable._
 import cc.factorie.model._
@@ -308,10 +313,10 @@ object ChainDemo extends LogHelper {
 
   def oracleFn(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
     oracleFnWithDecode(model, yi, xi, logDecode)
-
+  
   def oracleFnBP(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
     oracleFnWithDecode(model, yi, xi, bpDecode)
-
+    
   /**
    * Loss function
    *
@@ -376,7 +381,7 @@ object ChainDemo extends LogHelper {
    */
   def chainBCFW(): Unit = {
 
-    val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+    val PERC_TRAIN: Double = 0.50 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
     val train_data_unord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val test_data: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -405,7 +410,7 @@ object ChainDemo extends LogHelper {
     }
 
     val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 10
+    solverOptions.numPasses = 20
     solverOptions.debug = true
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -413,6 +418,8 @@ object ChainDemo extends LogHelper {
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = true
     solverOptions.testData = test_data
+    solverOptions.enableOracleCache = false
+    solverOptions.oracleCacheSize = 10
 
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
@@ -424,8 +431,8 @@ object ChainDemo extends LogHelper {
     val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
       featureFn,
       lossFn,
-      oracleFnBP,
-      predictFnBP,
+      oracleFn,
+      predictFn,
       solverOptions)
 
     val model: StructSVMModel = trainer.trainModel()
@@ -460,42 +467,56 @@ object ChainDemo extends LogHelper {
    * (CoCoA)
    * ****************************************************************
    */
-  def chainDBCFWCoCoA(): Unit = {
+  def chainDBCFWCoCoA(options: Map[String, String]): Unit = {
 
-    val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+    /**
+     * Load all options
+     */
+    val PERC_TRAIN: Double = options.getOrElse("perctrain", "0.10").toDouble // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+    
+    val appName: String = options.getOrElse("appname", "Chain-DBCFW")
 
+    val solverOptions: SolverOptions = new SolverOptions()
+    solverOptions.numPasses = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
+    solverOptions.xldebug = options.getOrElse("xldebug", "false").toBoolean
+    solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
+    solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
+    solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
+    solverOptions.debugLoss = options.getOrElse("debugloss", "false").toBoolean
+
+    solverOptions.sample = options.getOrElse("sample", "frac")
+    solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.50").toDouble
+    solverOptions.sampleWithReplacement = options.getOrElse("samplewithreplacement", "false").toBoolean
+    
+    solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
+    solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
+    solverOptions.autoconfigure = options.getOrElse("autoconfigure", "false").toBoolean
+    
+    println("# PERC_TRAIN=%f".format(PERC_TRAIN))
+    println(solverOptions.toString())
+
+    /**
+     * Begin execution
+     */
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+    solverOptions.testData = testDataUnord
 
-    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local").set("spark.cores.max", "1")
+    println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
+
+    val conf = new SparkConf().setAppName(appName) //.setMaster("local")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
+    
+    println(SolverUtils.getSparkConfString(sc.getConf))
 
     // Read order from the file and permute the Vector accordingly
     val trainOrder: String = "data/perm_train.csv"
     val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
-    // val train_data = trainDataUnord(List.fromArray(perm))
     val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
-    // val temp: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, 1)).toArray
-    // val train_data = DenseVector.fill(5){temp(0)}.toArray
-
-    val solverOptions: SolverOptions = new SolverOptions()
-    solverOptions.numPasses = 2 // After these many passes, each slice of the RDD returns a trained model
-    solverOptions.debug = false
-    solverOptions.xldebug = false
-    solverOptions.lambda = 0.01
-    solverOptions.doWeightedAveraging = false
-    solverOptions.doLineSearch = true
-    solverOptions.debugLoss = false
-    solverOptions.testData = testDataUnord
-
-    solverOptions.sample = "frac"
-    solverOptions.sampleFrac = 1.0
-    solverOptions.sampleWithReplacement = false
-    solverOptions.NUM_PART = 1
-    solverOptions.autoconfigure = false
 
     val trainer: StructSVMWithDBCFW = new StructSVMWithDBCFW(sc,
       DenseVector(train_data),
@@ -540,7 +561,9 @@ object ChainDemo extends LogHelper {
     val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
 
-    val conf = new SparkConf().setAppName("Chain-DBCFW").setMaster("local").set("spark.cores.max", "1")
+    println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
+
+    val conf = new SparkConf().setAppName("Chain-DBCFW")
     val sc = new SparkContext(conf)
 
     // Read order from the file and permute the Vector accordingly
@@ -552,7 +575,7 @@ object ChainDemo extends LogHelper {
     val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
 
     val solverOptions: SolverOptions = new SolverOptions()
-    solverOptions.numPasses = 5 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.numPasses = 20 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -562,7 +585,7 @@ object ChainDemo extends LogHelper {
     solverOptions.testData = testDataUnord
 
     solverOptions.H = train_data.size
-    solverOptions.NUM_PART = 1
+    solverOptions.NUM_PART = 2
 
     val trainer: StructSVMWithMiniBatch = new StructSVMWithMiniBatch(sc,
       DenseVector(train_data),
@@ -591,10 +614,22 @@ object ChainDemo extends LogHelper {
   }
 
   def main(args: Array[String]): Unit = {
-    // PropertyConfigurator.configure("conf/log4j.properties")
-    // chainDBCFWCoCoA()
+    PropertyConfigurator.configure("conf/log4j.properties")
 
-    chainBCFW()
+    val options: Map[String, String] = args.map { arg =>
+      arg.dropWhile(_ == '-').split('=') match {
+        case Array(opt, v) => (opt -> v)
+        case Array(opt) => (opt -> "true")
+        case _ => throw new IllegalArgumentException("Invalid argument: " + arg)
+      }
+    }.toMap
+    
+    System.setProperty("spark.akka.frameSize","512");
+    println(options)
+
+    chainDBCFWCoCoA(options)
+
+    // chainBCFW()
   }
 
 }

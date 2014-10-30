@@ -3,6 +3,8 @@ package ch.ethz.dal.dbcfw.optimization
 import ch.ethz.dal.dbcfw.classification.StructSVMModel
 import breeze.linalg._
 import ch.ethz.dal.dbcfw.regression.LabeledObject
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkConf
 
 object SolverUtils {
 
@@ -99,6 +101,19 @@ object SolverUtils {
     // Compute the primal and return it
     0.5 * lambda * (model.getWeights.t * model.getWeights) + hingeLosses / data.size
 
+  }
+
+  /**
+   * Get Spark's properties
+   */
+  def getSparkConfString(sc: SparkConf): String = {
+    val keys = List("spark.app.name", "spark.executor.memory", "spark.task.cpus", "spark.local.dir", "spark.default.parallelism")
+    val sb: StringBuilder = new StringBuilder()
+
+    for (key <- keys)
+      sb ++= "# %s=%s\n".format(key, sc.get(key, "NA"))
+
+    sb.toString()
   }
 
 }

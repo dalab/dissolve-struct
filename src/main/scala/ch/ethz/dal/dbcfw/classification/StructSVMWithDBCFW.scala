@@ -6,6 +6,7 @@ import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import org.apache.spark.SparkContext
 import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
 import java.io.FileWriter
+import ch.ethz.dal.dbcfw.optimization.SolverUtils
 
 class StructSVMWithDBCFW(
   val sc: SparkContext,
@@ -27,7 +28,16 @@ class StructSVMWithDBCFW(
       miniBatchEnabled = false).optimize()
 
     // Dump debug information into a file
-    val fw = new FileWriter("debugInfo.csv")
+    val fw = new FileWriter(solverOptions.debugInfoPath)
+    // Write the current parameters being used
+    fw.write(solverOptions.toString())
+    fw.write("\n")
+    
+    // Write spark-specific parameters
+    fw.write(SolverUtils.getSparkConfString(sc.getConf))
+    fw.write("\n")
+    
+    // Write values noted from the run
     fw.write(debugInfo)
     fw.close()
 

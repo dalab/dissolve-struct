@@ -55,11 +55,23 @@ class DBCFWSolver(
       Array.fill(data.size)((DenseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
       )
 
-    val indexedTrainDataRDD: RDD[(Index, LabeledObject)] = sc.parallelize(indexedTrainData, solverOptions.NUM_PART)
-    var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, solverOptions.NUM_PART)
+    val indexedTrainDataRDD: RDD[(Index, LabeledObject)] =
+      if (solverOptions.enableManualPartitionSize)
+        sc.parallelize(indexedTrainData, solverOptions.NUM_PART)
+      else
+        sc.parallelize(indexedTrainData)
+        
+    var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = 
+      if (solverOptions.enableManualPartitionSize)
+        sc.parallelize(indexedPrimals, solverOptions.NUM_PART)
+      else
+        sc.parallelize(indexedPrimals)
 
     indexedPrimalsRDD.checkpoint()
-
+    
+    debugSb ++= "# indexedTrainDataRDD.partitions.size=%d\n".format(indexedTrainDataRDD.partitions.size)
+    debugSb ++= "# indexedPrimalsRDD.partitions.size=%d\n".format(indexedPrimalsRDD.partitions.size)
+    
     /**
      * Fix parameters to perform sampling.
      * Use can either specify:

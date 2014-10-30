@@ -24,6 +24,6 @@
 		</attributes>
 	</classpathentry>
 	<classpathentry exported="true" kind="lib" path="lib/jython.jar"/>
-	<classpathentry exported="true" kind="lib" path="lib/factorie-1.1-SNAPSHOT-nlp-jar-with-dependencies.jar"/>
+	<classpathentry exported="true" kind="lib" path="lib_managed/factorie-1.1-SNAPSHOT-jar-with-dependencies.jar"/>
 	<classpathentry kind="output" path="target/classes"/>
 </classpath>

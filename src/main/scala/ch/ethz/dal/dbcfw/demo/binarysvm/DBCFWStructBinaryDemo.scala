@@ -181,7 +181,7 @@ object DBCFWStructBinaryDemo {
     solverOptions.sample = "frac"
     solverOptions.sampleFrac = 0.5
 
-    val conf = new SparkConf().setAppName("Binary-DBCFW").setMaster("local")
+    val conf = new SparkConf().setAppName("Binary-DBCFW")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
@@ -221,7 +221,7 @@ object DBCFWStructBinaryDemo {
     import org.apache.spark.mllib.linalg.Vectors
     import org.apache.spark.mllib.util.MLUtils
 
-    val conf = new SparkConf().setAppName("Binary-MLLib").setMaster("local")
+    val conf = new SparkConf().setAppName("Binary-MLLib")
     val sc = new SparkContext(conf)
 
     val data = MLUtils.loadLibSVMFile(sc, libSvmFilePath)
