@@ -199,8 +199,6 @@ class DBCFWSolver(
       indexedPrimalsRDD = reducedData._2
       indexedCacheRDD = reducedData._3
 
-      debugSb ++= "# CacheRDD = %d\n".format(indexedCacheRDD.count())
-
       val elapsedTime = (System.currentTimeMillis() - startTime).toDouble / 1000.0
 
       val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, globalModel)
@@ -314,7 +312,7 @@ class DBCFWSolver(
       // 1) Pick example
       val pattern: Matrix[Double] = datapoint.pattern
       val label: Vector[Double] = datapoint.label
-
+      
       // 2.a) Search for candidates
       val bestCachedCandidateForI: Option[Vector[Double]] =
         if (solverOptions.enableOracleCache && oracleCache.contains(i)) {
@@ -334,7 +332,7 @@ class DBCFWSolver(
           // TODO Use this naive_gamma to further narrow down on cached contenders
           // TODO Maintain fixed size of the list of cached vectors
           val naive_gamma: Double = (2.0 * n) / (k + 2.0 * n)
-
+          
           // If there is a good contender among the cached datapoints, return it
           if (candidates.size >= 1)
             Some(oracleCache(i)(candidates.head._2))
@@ -355,10 +353,9 @@ class DBCFWSolver(
           // kick out oldest if max size reached
           ystar
         } else {
-          println("**Using cache**")
           bestCachedCandidateForI.get
         }
-
+      
       // 3) Define the update quantities
       val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
@@ -491,15 +488,14 @@ class DBCFWSolver(
           .rightOuterJoin(oldCache)
           .mapValues {
             // newCache includes entries in the previous cache too
-            case (Some(oldCache), newCache) => newCache
-            case (None, newCache) => newCache
+            case (Some(newCache), oldCache) => newCache.get
+            case (None, oldCache) => oldCache
           }
       else
         oldCache
 
     // indexedPrimals isn't materialized till an RDD action is called. Force this by calling one.
     indexedPrimals.checkpoint()
-    println(indexedPrimals.isCheckpointed)
     indexedPrimals.count()
     indexedCache.count()
 

@@ -40,6 +40,8 @@ class StructSVMWithDBCFW(
     // Write values noted from the run
     fw.write(debugInfo)
     fw.close()
+    
+    print(debugInfo)
 
     // Return the trained model
     trainedModel
