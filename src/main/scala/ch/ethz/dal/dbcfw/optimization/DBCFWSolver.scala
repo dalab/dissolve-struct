@@ -11,6 +11,7 @@ import org.apache.spark.SparkContext._
 import org.apache.log4j.Logger
 import scala.collection.mutable
 import scala.collection.mutable.MutableList
+import ch.ethz.dal.dbcfw.utils.LinAlgOps._
 
 /**
  * LogHelper is a trait you can mix in to provide easy log4j logging
@@ -44,7 +45,7 @@ class DBCFWSolver(
 
     val d: Int = featureFn(data(0).label, data(0).pattern).size
     // Let the initial model contain zeros for all weights
-    var globalModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+    var globalModel: StructSVMModel = new StructSVMModel(SparseVector.zeros(d), 0.0, SparseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
 
     /**
      *  Create two RDDs:
@@ -54,7 +55,7 @@ class DBCFWSolver(
      */
     val indexedTrainData: Array[(Index, LabeledObject)] = (0 until data.size).toArray.zip(data.toArray)
     val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until data.size).toArray.zip(
-      Array.fill(data.size)((DenseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
+      Array.fill(data.size)((SparseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
       )
 
     val indexedTrainDataRDD: RDD[(Index, LabeledObject)] =
@@ -140,7 +141,7 @@ class DBCFWSolver(
        *
        * Run a dummy map-reduce job to get the timings
        */
-      def dummyOracle(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] = DenseVector.ones[Double](yi.size)
+      def dummyOracle(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] = SparseVector.fill[Double](yi.size)(1.0)
 
       val communicationTimings =
         for (i <- 0 until NUM_COMMN_SAMPLES) yield {
@@ -219,7 +220,10 @@ class DBCFWSolver(
 
     println("Average decoding time: %f".format(avgDecodeTime))
     println("Average communication time: %f".format(avgCommunicationTime))
-
+    
+    println("globalModel.weights is sparse - " + globalModel.getWeights.isInstanceOf[SparseVector[Double]])
+    println("w_i is sparse - " + indexedPrimalsRDD.first._2._1.isInstanceOf[SparseVector[Double]])
+    
     (globalModel, debugSb.toString())
   }
 
@@ -251,13 +255,6 @@ class DBCFWSolver(
     // Mapping of indexMapping(localIndex) -> globalIndex
     val localToGlobal: Array[Index] = zippedData.map(x => x._1)
 
-    // Recursively convert an array to an immutable Map, mapping array elements("global index") with their indices("local index")
-    /*def convertArrayToMap(arr: Array[Index], pos: Index): Map[Index, Index] =
-      if (arr.length > 0)
-        convertArrayToMap(arr.drop(1), pos + 1) + (arr(0) -> pos)
-      else
-        Map.empty[Index, Index]*/
-
     // Alternate implementation - Use mutable maps. Immutable causes stack overflow
     val globalToLocal: mutable.Map[Index, Index] = mutable.Map.empty[Index, Index]
     for (ele <- localToGlobal.zipWithIndex)
@@ -276,31 +273,31 @@ class DBCFWSolver(
     val d: Int = localModel.getWeights().size
 
     // Only to keep track of the \Delta localModel
-    val deltaLocalModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+    val deltaLocalModel = new StructSVMModel(SparseVector.zeros(d), 0.0, SparseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
 
     val eps: Double = 2.2204E-16
 
     var k: Int = 0
     val n: Int = data.size
 
-    val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
-    val ellMat: DenseVector[Double] = DenseVector.zeros[Double](n)
+    val wMat: Matrix[Double] = CSCMatrix.zeros[Double](d, n)
+    val ellMat: Vector[Double] = SparseVector.zeros[Double](n)
 
     // Copy w_i's and l_i's into local wMat and ellMat
     for (i <- 0 until n) {
-      wMat(::, i) := zippedData(i)._2._2._1
+      updateColumn(wMat, zippedData(i)._2._2._1, i)
       ellMat(i) = zippedData(i)._2._2._2
     }
-    val prevWMat: DenseMatrix[Double] = wMat.copy
-    val prevEllMat: DenseVector[Double] = ellMat.copy
+    val prevWMat: Matrix[Double] = wMat.copy
+    val prevEllMat: Vector[Double] = ellMat.copy
 
     var ell: Double = localModel.getEll()
     localModel.updateEll(0.0)
 
     // Initialization in case of Weighted Averaging
-    var wAvg: DenseVector[Double] =
+    var wAvg: Vector[Double] =
       if (solverOptions.doWeightedAveraging)
-        DenseVector.zeros(d)
+        SparseVector.zeros(d)
       else null
     var lAvg: Double = 0.0
 
@@ -312,7 +309,7 @@ class DBCFWSolver(
       // 1) Pick example
       val pattern: Matrix[Double] = datapoint.pattern
       val label: Vector[Double] = datapoint.label
-      
+
       // 2.a) Search for candidates
       val bestCachedCandidateForI: Option[Vector[Double]] =
         if (solverOptions.enableOracleCache && oracleCache.contains(i)) {
@@ -321,8 +318,10 @@ class DBCFWSolver(
               .map(y_i => (((phi(label, pattern) - phi(y_i, pattern)) :* (1 / (n * lambda))),
                 (1.0 / n) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
               .map {
-                case (w_s, ell_s) => (localModel.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
-                  ((wMat(::, i) - w_s).t * (wMat(::, i) - w_s) + eps) // Map each (w_s, ell_s) to their respective step-size values	
+                case (w_s, ell_s) =>
+                  val wcoli = getMatrixColumn(wMat, i)
+                  (localModel.getWeights().t * (wcoli - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
+                    ((wcoli - w_s).t * (wcoli - w_s) + eps) // Map each (w_s, ell_s) to their respective step-size values	
               }
               .zipWithIndex // We'll need the index later to retrieve the respective approx. ystar_i
               .filter { case (gamma, idx) => gamma > 0.0 }
@@ -332,7 +331,7 @@ class DBCFWSolver(
           // TODO Use this naive_gamma to further narrow down on cached contenders
           // TODO Maintain fixed size of the list of cached vectors
           val naive_gamma: Double = (2.0 * n) / (k + 2.0 * n)
-          
+
           // If there is a good contender among the cached datapoints, return it
           if (candidates.size >= 1)
             Some(oracleCache(i)(candidates.head._2))
@@ -344,7 +343,7 @@ class DBCFWSolver(
       val ystar_i: Vector[Double] =
         if (bestCachedCandidateForI.isEmpty) {
           val ystar = maxOracle(localModel, label, pattern)
-          
+
           if (solverOptions.enableOracleCache)
             // Add this newly computed ystar to the cache of this i
             oracleCache.update(i, if (solverOptions.oracleCacheSize > 0)
@@ -355,7 +354,7 @@ class DBCFWSolver(
         } else {
           bestCachedCandidateForI.get
         }
-      
+
       // 3) Define the update quantities
       val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
@@ -363,11 +362,12 @@ class DBCFWSolver(
       val ell_s: Double = (1.0 / n) * loss_i
 
       // 4) Get step-size gamma
+      val wcoli = getMatrixColumn(wMat, i)
       val gamma: Double =
         if (solverOptions.doLineSearch) {
           val thisModel = if (miniBatchEnabled) prevModel else localModel
-          val gamma_opt = (thisModel.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1.0 / lambda))) /
-            ((wMat(::, i) - w_s).t * (wMat(::, i) - w_s) + eps)
+          val gamma_opt = (thisModel.getWeights().t * (wcoli - w_s) - ((ellMat(i) - ell_s) * (1.0 / lambda))) /
+            ((wcoli - w_s).t * (wcoli - w_s) + eps)
           max(0.0, min(1.0, gamma_opt))
         } else {
           (2.0 * n) / (k + 2.0 * n)
@@ -375,17 +375,20 @@ class DBCFWSolver(
 
       // 5, 6, 7, 8) Update the weights of the model
       if (miniBatchEnabled) {
-        wMat(::, i) := wMat(::, i) * (1.0 - gamma) + (w_s * gamma)
+        val wcoli = getMatrixColumn(wMat, i)
+        updateColumn(wMat, wcoli * (1.0 - gamma) + (w_s * gamma), i)
+        // wMat(::, i) := wMat(::, i) * (1.0 - gamma) + (w_s * gamma)
         ellMat(i) = (ellMat(i) * (1.0 - gamma)) + (ell_s * gamma)
-        deltaLocalModel.updateWeights(localModel.getWeights() + (wMat(::, i) - prevWMat(::, i)))
+        deltaLocalModel.updateWeights(localModel.getWeights() + (getMatrixColumn(wMat, i) - getMatrixColumn(prevWMat, i)))
         deltaLocalModel.updateEll(localModel.getEll() + (ellMat(i) - prevEllMat(i)))
       } else {
         // In case of CoCoA
-        val tempWeights1: Vector[Double] = localModel.getWeights() - wMat(::, i)
+        val tempWeights1: Vector[Double] = localModel.getWeights() - getMatrixColumn(wMat, i)
         localModel.updateWeights(tempWeights1)
         deltaLocalModel.updateWeights(tempWeights1)
-        wMat(::, i) := (wMat(::, i) * (1.0 - gamma)) + (w_s * gamma)
-        val tempWeights2: Vector[Double] = localModel.getWeights() + wMat(::, i)
+        val wcoli = getMatrixColumn(wMat, i)
+        updateColumn(wMat, wcoli * (1.0 - gamma) + (w_s * gamma), i)
+        val tempWeights2: Vector[Double] = localModel.getWeights() + getMatrixColumn(wMat, i)
         localModel.updateWeights(tempWeights2)
         deltaLocalModel.updateWeights(tempWeights2)
 
@@ -414,7 +417,7 @@ class DBCFWSolver(
 
     val localIndexedDeltaPrimals: Array[(Index, (PrimalInfo, Option[BoundedCacheList]))] = zippedData.map(_._1).map(k =>
       (k, // Index
-        ((wMat(::, globalToLocal(k)) - prevWMat(::, globalToLocal(k)), // PrimalInfo.w
+        (((getMatrixColumn(wMat, globalToLocal(k)) - getMatrixColumn(prevWMat, globalToLocal(k))), // PrimalInfo.w
           ellMat(globalToLocal(k)) - prevEllMat(globalToLocal(k))), // PrimalInfo.ell
           oracleCache.get(globalToLocal(k))))) // Cache
 
@@ -450,7 +453,7 @@ class DBCFWSolver(
      */
     val newGlobalModel = new StructSVMModel(oldGlobalModel.getWeights() + (sumDeltaWeights / k) * beta,
       oldGlobalModel.getEll() + (sumDeltaElls / k) * beta,
-      DenseVector.zeros(d),
+      SparseVector.zeros(d),
       oldGlobalModel.featureFn,
       oldGlobalModel.lossFn,
       oldGlobalModel.oracleFn,
