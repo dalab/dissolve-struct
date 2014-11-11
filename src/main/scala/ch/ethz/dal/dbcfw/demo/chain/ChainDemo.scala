@@ -381,7 +381,7 @@ object ChainDemo extends LogHelper {
    */
   def chainBCFW(): Unit = {
 
-    val PERC_TRAIN: Double = 0.50 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+    val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
     val train_data_unord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val test_data: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
@@ -410,7 +410,7 @@ object ChainDemo extends LogHelper {
     }
 
     val solverOptions: SolverOptions = new SolverOptions();
-    solverOptions.numPasses = 20
+    solverOptions.numPasses = 3
     solverOptions.debug = true
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -418,7 +418,8 @@ object ChainDemo extends LogHelper {
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = true
     solverOptions.testData = test_data
-    solverOptions.enableOracleCache = false
+    
+    solverOptions.enableOracleCache = true
     solverOptions.oracleCacheSize = 10
 
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
@@ -472,7 +473,7 @@ object ChainDemo extends LogHelper {
     /**
      * Load all options
      */
-    val PERC_TRAIN: Double = options.getOrElse("perctrain", "0.10").toDouble // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+    val PERC_TRAIN: Double = options.getOrElse("perctrain", "0.05").toDouble // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
     
     val appName: String = options.getOrElse("appname", "Chain-DBCFW")
 
@@ -486,12 +487,25 @@ object ChainDemo extends LogHelper {
     solverOptions.debugLoss = options.getOrElse("debugloss", "false").toBoolean
 
     solverOptions.sample = options.getOrElse("sample", "frac")
-    solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.50").toDouble
+    solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
     solverOptions.sampleWithReplacement = options.getOrElse("samplewithreplacement", "false").toBoolean
     
     solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
     solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
     solverOptions.autoconfigure = options.getOrElse("autoconfigure", "false").toBoolean
+    
+    solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
+    solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
+    
+    /**
+     * Some local overrides
+     */
+    solverOptions.sampleFrac = 1.0
+    solverOptions.enableOracleCache = true
+    solverOptions.oracleCacheSize = 10
+    solverOptions.numPasses = 3
+    solverOptions.enableManualPartitionSize = true
+    solverOptions.NUM_PART = 2
     
     println("# PERC_TRAIN=%f".format(PERC_TRAIN))
     println(solverOptions.toString())
@@ -505,7 +519,7 @@ object ChainDemo extends LogHelper {
 
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
-    val conf = new SparkConf().setAppName(appName) //.setMaster("local")
+    val conf = new SparkConf().setAppName(appName).setMaster("local")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
     

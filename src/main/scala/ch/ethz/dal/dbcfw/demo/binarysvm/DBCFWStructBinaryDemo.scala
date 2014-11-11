@@ -21,6 +21,7 @@ import ch.ethz.dal.dbcfw.classification.StructSVMWithDBCFW
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.classification.SVMWithSGD
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
+import ch.ethz.dal.dbcfw.utils.DissolveUtils
 
 /**
  *
@@ -135,7 +136,8 @@ object DBCFWStructBinaryDemo {
    * BSVM - DBCFW style
    */
   def dbcfwBSVM(libSvmFilePath: String): Unit = {
-    val data: Vector[LabeledObject] = loadLibSVMFile(libSvmFilePath)
+    // val data: Vector[LabeledObject] = loadLibSVMFile(libSvmFilePath)
+    val data: Vector[LabeledObject] = DissolveUtils.loadLibSVMBinaryFile(libSvmFilePath, sparse = true, labelMap = Map("+1" -> 1, "-1" -> -1))
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(data.size, data(0).pattern.rows, data(0).pattern.cols, data(0).label.size))
 
     // Fix seed for reproducibility
@@ -150,7 +152,7 @@ object DBCFWStructBinaryDemo {
 
     val solverOptions: SolverOptions = new SolverOptions()
 
-    solverOptions.numPasses = 50 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.numPasses = 3 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
     solverOptions.xldebug = false
     solverOptions.lambda = 0.01
@@ -181,7 +183,7 @@ object DBCFWStructBinaryDemo {
     solverOptions.sample = "frac"
     solverOptions.sampleFrac = 0.5
 
-    val conf = new SparkConf().setAppName("Binary-DBCFW")
+    val conf = new SparkConf().setAppName("Binary-DBCFW").setMaster("local")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
@@ -265,10 +267,10 @@ object DBCFWStructBinaryDemo {
   def main(args: Array[String]): Unit = {
 
     // Runs MLLib's SVMSGD on Adult dataset
-    mllibBSVM("data/a1a_mllib.txt")
+    // mllibBSVM("data/a1a_mllib.txt")
 
     // Runs DBCFW on Adult dataset
-    // dbcfwBSVM("data/a1a.txt")
+    dbcfwBSVM("/Users/tribhu/git/DBCFWstruct/data/a1a.txt")
   }
 
 }

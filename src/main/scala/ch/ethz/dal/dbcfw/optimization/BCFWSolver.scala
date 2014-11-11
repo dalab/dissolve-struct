@@ -96,9 +96,6 @@ class BCFWSolver /*extends Optimizer*/ (
 
     for (passNum <- 0 until numPasses) {
 
-      if (debugOn)
-        println("Starting pass #%d".format(passNum))
-
       for (dummy <- 0 until n) {
         // 1) Pick example
         val i: Int = dummy
@@ -226,8 +223,6 @@ class BCFWSolver /*extends Optimizer*/ (
         }
 
       }
-      if (debugOn)
-        println("Completed pass #%d".format(passNum))
 
     }
 
