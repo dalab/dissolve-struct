@@ -7,10 +7,11 @@ import breeze.linalg.DenseMatrix
 import breeze.linalg.VectorBuilder
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import breeze.linalg.CSCMatrix
+import breeze.linalg._
 
 object DissolveUtils {
 
-  def loadLibSVMBinaryFile(filename: String, sparse: Boolean = true, labelMap: Map[String, Int]): DenseVector[LabeledObject] = {
+  def loadLibSVMBinaryFile(filename: String, sparse: Boolean = true, labelMap: Map[String, Int]): DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = {
     var n: Int = 0
     var ndims: Int = 0
 
@@ -30,7 +31,7 @@ object DissolveUtils {
     }
 
     // Second pass. Create a Vector of LabeledObjects
-    val data: DenseVector[LabeledObject] = DenseVector.fill(n) { null }
+    val data: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = DenseVector.fill(n) { null }
     for (
       (line, idx) <- scala.io.Source.fromFile(filename).getLines()
         .map(_.trim)
@@ -45,7 +46,7 @@ object DissolveUtils {
       // Store label as a single-element dense vector
       val content: Array[String] = line.split(" ")
       val label = labelMap(content(0))
-      val labelVector = DenseVector.fill(1) { label.toDouble }
+      val labelVector: Vector[Double] = DenseVector.fill(1) { label.toDouble }
 
       if (!(label == +1 || label == -1))
         throw new IllegalArgumentException("labelAdapter need to evalute to +1 or -1. Found %d.".format(label))
@@ -58,7 +59,7 @@ object DissolveUtils {
             patternMatrixBuilder.add(0, idx, value)
         }
 
-      data(idx) = new LabeledObject(labelVector,
+      data(idx) = new LabeledObject[Matrix[Double], Vector[Double]](labelVector,
         if (sparse)
           patternMatrixBuilder.result()
         else

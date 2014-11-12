@@ -16,16 +16,15 @@ import java.io.PrintWriter
  * allPatterns is a vector of x_i Matrices
  * allLabels is a vector of y_i Vectors
  */
-class SSGSolver(
+class SSGSolver[X, Y](
   // val allPatterns: Vector[Matrix[Double]],
   // val allLabels: Vector[Vector[Double]],
-  val data: Vector[LabeledObject],
-  val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVector
-  val lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Label
-  val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-  // Parameters
-  val solverOptions: SolverOptions) {
+ val data: Vector[LabeledObject[X, Y]],
+  val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVector
+  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
+  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label
+  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val solverOptions: SolverOptions[X, Y]) {
 
   val numPasses = solverOptions.numPasses
   val lambda = solverOptions.lambda
@@ -43,13 +42,13 @@ class SSGSolver(
   /**
    * SSG optimizer
    */
-  def optimize(): StructSVMModel = {
+  def optimize(): StructSVMModel[X, Y] = {
 
     var k: Integer = 0
     val n: Int = data.length
     val d: Int = featureFn(data(0).label, data(0).pattern).size
     // Use first example to determine dimension of w
-    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(featureFn(data(0).label, data(0).pattern).size),
+    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(featureFn(data(0).label, data(0).pattern).size),
       0.0,
       DenseVector.zeros(ndims),
       featureFn,
@@ -69,7 +68,7 @@ class SSGSolver(
     } else {
       1
     }
-    val debugModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
+    val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
 
     val lossWriter = if (solverOptions.debugLoss) new PrintWriter(new File(lossWriterFileName)) else null
     if (solverOptions.debugLoss) {
@@ -91,11 +90,11 @@ class SSGSolver(
       for (dummy <- 0 until n) {
         // 1) Pick example
         val i: Int = dummy
-        val pattern: Matrix[Double] = data(i).pattern
-        val label: Vector[Double] = data(i).label
+        val pattern: X = data(i).pattern
+        val label: Y = data(i).label
 
         // 2) Solve loss-augmented inference for point i
-        val ystar_i: Vector[Double] = maxOracle(model, label, pattern)
+        val ystar_i: Y = maxOracle(model, label, pattern)
 
         // 3) Get the subgradient
         val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)

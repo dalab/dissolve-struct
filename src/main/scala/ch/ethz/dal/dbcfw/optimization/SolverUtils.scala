@@ -5,16 +5,17 @@ import breeze.linalg._
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
+import scala.reflect.ClassTag
 
 object SolverUtils {
 
   /**
    * Average loss
    */
-  def averageLoss(data: Vector[LabeledObject],
-    lossFn: (Vector[Double], Vector[Double]) => Double,
-    predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-    model: StructSVMModel): Double = {
+  def averageLoss[X, Y](data: Vector[LabeledObject[X, Y]],
+    lossFn: (Y, Y) => Double,
+    predictFn: (StructSVMModel[X, Y], X) => Y,
+    model: StructSVMModel[X, Y]): Double = {
 
     var lossTerm: Double = 0.0
     for (i <- 0 until data.size) {
@@ -39,12 +40,12 @@ object SolverUtils {
   /**
    * Compute Duality gap
    */
-  def dualityGap(data: Vector[LabeledObject],
-    featureFn: (Vector[Double], Matrix[Double]) => Vector[Double],
-    lossFn: (Vector[Double], Vector[Double]) => Double,
-    oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double],
-    model: StructSVMModel,
-    lambda: Double): (Double, DenseVector[Double], Double) = {
+  def dualityGap[X, Y](data: Vector[LabeledObject[X, Y]],
+    featureFn: (Y, X) => Vector[Double],
+    lossFn: (Y, Y) => Double,
+    oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+    model: StructSVMModel[X, Y],
+    lambda: Double)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
 
     val phi = featureFn
     val maxOracle = oracleFn
@@ -54,7 +55,7 @@ object SolverUtils {
 
     val n: Int = data.size
     val d: Int = model.getWeights().size
-    val yStars = new Array[Vector[Double]](n)
+    val yStars = new Array[Y](n)
 
     for (i <- 0 until n) {
       yStars(i) = maxOracle(model, data(i).label, data(i).pattern)
@@ -78,11 +79,11 @@ object SolverUtils {
   /**
    * Primal objective
    */
-  def primalObjective(data: Vector[LabeledObject],
-    featureFn: (Vector[Double], Matrix[Double]) => Vector[Double],
-    lossFn: (Vector[Double], Vector[Double]) => Double,
-    oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double],
-    model: StructSVMModel,
+  def primalObjective[X, Y](data: Vector[LabeledObject[X, Y]],
+    featureFn: (Y, X) => Vector[Double],
+    lossFn: (Y, Y) => Double,
+    oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+    model: StructSVMModel[X, Y],
     lambda: Double): Double = {
 
     var hingeLosses: Double = 0.0

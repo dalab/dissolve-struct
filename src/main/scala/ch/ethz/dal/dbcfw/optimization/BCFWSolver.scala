@@ -13,27 +13,28 @@ import ch.ethz.dal.dbcfw.regression.LabeledObject
 import java.io.File
 import java.io.PrintWriter
 import scala.collection.mutable.MutableList
+import scala.reflect.ClassTag
 
 /**
  *
  */
-class BCFWSolver /*extends Optimizer*/ (
-  val data: Vector[LabeledObject],
-  val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
-  val lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
-  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
-  val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-  val solverOptions: SolverOptions,
-  val testData: Vector[LabeledObject]) {
+class BCFWSolver[X, Y] /*extends Optimizer*/ (
+  val data: Vector[LabeledObject[X, Y]],
+  val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
+  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
+  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
+  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val solverOptions: SolverOptions[X, Y],
+  val testData: Vector[LabeledObject[X, Y]]) {
 
   // Constructor without test data
   def this(
-    data: Vector[LabeledObject],
-    featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVect, 
-    lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossVal, 
-    oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Lab, 
-    predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-    solverOptions: SolverOptions) = this(data, featureFn, lossFn, oracleFn, predictFn, solverOptions, null)
+    data: Vector[LabeledObject[X, Y]],
+    featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
+    lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
+    oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
+    predictFn: (StructSVMModel[X, Y], X) => Y,
+    solverOptions: SolverOptions[X, Y]) = this(data, featureFn, lossFn, oracleFn, predictFn, solverOptions, null)
 
   val numPasses = solverOptions.numPasses
   val lambda = solverOptions.lambda
@@ -51,14 +52,14 @@ class BCFWSolver /*extends Optimizer*/ (
   /**
    * BCFW optimizer
    */
-  def optimize(): StructSVMModel = {
+  def optimize()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
 
     /* Initialization */
     var k: Integer = 0
     val n: Int = data.length
     val d: Int = featureFn(data(0).label, data(0).pattern).size
     // Use first example to determine dimension of w
-    val model: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
     val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
     var ell: Double = 0.0
     val ellMat: DenseVector[Double] = DenseVector.zeros[Double](n)
@@ -76,7 +77,7 @@ class BCFWSolver /*extends Optimizer*/ (
     } else {
       1
     }
-    val debugModel: StructSVMModel = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
+    val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
 
     val lossWriter = if (solverOptions.debugLoss) new PrintWriter(new File(lossWriterFileName)) else null
     if (solverOptions.debugLoss) {
@@ -92,19 +93,19 @@ class BCFWSolver /*extends Optimizer*/ (
     }
 
     // Initialize the cache: Index -> List of precomputed ystar_i's
-    var oracleCache = collection.mutable.Map[Int, MutableList[Vector[Double]]]()
+    var oracleCache = collection.mutable.Map[Int, MutableList[Y]]()
 
     for (passNum <- 0 until numPasses) {
 
       for (dummy <- 0 until n) {
         // 1) Pick example
         val i: Int = dummy
-        val pattern: Matrix[Double] = data(i).pattern
-        val label: Vector[Double] = data(i).label
+        val pattern: X = data(i).pattern
+        val label: Y = data(i).label
 
         // 2) Solve loss-augmented inference for point i
         // 2.a) If cache is enabled, check if any of the previous ystar_i's for this i can be used
-        val bestCachedCandidateForI: Option[Vector[Double]] =
+        val bestCachedCandidateForI: Option[Y] =
           if (solverOptions.enableOracleCache && oracleCache.contains(i)) {
             val candidates: Seq[(Double, Int)] =
               oracleCache(i)
@@ -131,15 +132,15 @@ class BCFWSolver /*extends Optimizer*/ (
             None
 
         // 2.b) In case cache is disabled or a good contender from cache hasn't been found, call max Oracle
-        val ystar_i: Vector[Double] =
+        val ystar_i: Y =
           if (bestCachedCandidateForI.isEmpty) {
             val ystar = maxOracle(model, label, pattern)
 
             if (solverOptions.enableOracleCache)
               // Add this newly computed ystar to the cache of this i
               oracleCache.update(i, if (solverOptions.oracleCacheSize > 0)
-                { oracleCache.getOrElse(i, MutableList[Vector[Double]]()) :+ ystar }.takeRight(solverOptions.oracleCacheSize)
-              else { oracleCache.getOrElse(i, MutableList[Vector[Double]]()) :+ ystar })
+                { oracleCache.getOrElse(i, MutableList[Y]()) :+ ystar }.takeRight(solverOptions.oracleCacheSize)
+              else { oracleCache.getOrElse(i, MutableList[Y]()) :+ ystar })
             // kick out oldest if max size reached
             ystar
           } else {

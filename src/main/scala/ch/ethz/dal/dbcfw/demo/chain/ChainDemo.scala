@@ -56,7 +56,7 @@ object ChainDemo extends LogHelper {
    *  TODO
    *  * Take foldNumber as a parameter and return training and test set
    */
-  def loadData(patternsFilename: String, labelsFilename: String, foldFilename: String): DenseVector[LabeledObject] = {
+  def loadData(patternsFilename: String, labelsFilename: String, foldFilename: String): DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = {
     val patterns: Array[String] = scala.io.Source.fromFile(patternsFilename).getLines().toArray[String]
     val labels: Array[String] = scala.io.Source.fromFile(labelsFilename).getLines().toArray[String]
     val folds: Array[String] = scala.io.Source.fromFile(foldFilename).getLines().toArray[String]
@@ -66,7 +66,7 @@ object ChainDemo extends LogHelper {
     assert(patterns.size == labels.size, "#Patterns=%d, but #Labels=%d".format(patterns.size, labels.size))
     assert(patterns.size == folds.size, "#Patterns=%d, but #Folds=%d".format(patterns.size, folds.size))
 
-    val data: DenseVector[LabeledObject] = DenseVector.fill(n) { null }
+    val data: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = DenseVector.fill(n) { null }
 
     for (i <- 0 until n) {
       // Expected format: id, #rows, #cols, (pixels_i_j,)* pixels_n_m
@@ -275,7 +275,7 @@ object ChainDemo extends LogHelper {
   /**
    * The Maximization Oracle
    */
-  def oracleFnWithDecode(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double],
+  def oracleFnWithDecode(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double],
     decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
@@ -311,10 +311,10 @@ object ChainDemo extends LogHelper {
     label
   }
 
-  def oracleFn(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
+  def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
     oracleFnWithDecode(model, yi, xi, logDecode)
   
-  def oracleFnBP(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
+  def oracleFnBP(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
     oracleFnWithDecode(model, yi, xi, bpDecode)
     
   /**
@@ -323,7 +323,7 @@ object ChainDemo extends LogHelper {
    * TODO
    * * Use MaxOracle instead of this (Use yi: Option<Vector[Double]>)
    */
-  def predictFnWithDecode(model: StructSVMModel, xi: Matrix[Double],
+  def predictFnWithDecode(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double],
     decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
@@ -351,11 +351,11 @@ object ChainDemo extends LogHelper {
     label
   }
 
-  def predictFn(model: StructSVMModel, xi: Matrix[Double]): Vector[Double] = {
+  def predictFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double]): Vector[Double] = {
     predictFnWithDecode(model, xi, logDecode)
   }
 
-  def predictFnBP(model: StructSVMModel, xi: Matrix[Double]): Vector[Double] = {
+  def predictFnBP(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double]): Vector[Double] = {
     predictFnWithDecode(model, xi, bpDecode)
   }
 
@@ -383,8 +383,8 @@ object ChainDemo extends LogHelper {
 
     val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
-    val train_data_unord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
-    val test_data: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+    val train_data_unord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val test_data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
 
     // Read order from the file and permute the Vector accordingly
     val trainOrder: String = "data/perm_train.csv"
@@ -392,7 +392,7 @@ object ChainDemo extends LogHelper {
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     // val train_data = train_data_unord(List.fromArray(perm))
-    val train_data: DenseVector[LabeledObject] = train_data_unord(List.fromArray(perm).slice(0, (PERC_TRAIN * train_data_unord.size).toInt)).toDenseVector
+    val train_data: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = train_data_unord(List.fromArray(perm).slice(0, (PERC_TRAIN * train_data_unord.size).toInt)).toDenseVector
     // val temp: DenseVector[LabeledObject] = train_data_unord(List.fromArray(perm).slice(0, 1)).toDenseVector
     // val train_data = DenseVector.fill(5){temp(0)}
 
@@ -409,7 +409,7 @@ object ChainDemo extends LogHelper {
           test_data(0).label.size))
     }
 
-    val solverOptions: SolverOptions = new SolverOptions();
+    val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions();
     solverOptions.numPasses = 3
     solverOptions.debug = true
     solverOptions.xldebug = false
@@ -429,14 +429,14 @@ object ChainDemo extends LogHelper {
       predictFn,
       solverOptions)*/
 
-    val trainer: StructSVMWithBCFW = new StructSVMWithBCFW(train_data,
+    val trainer: StructSVMWithBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithBCFW[Matrix[Double], Vector[Double]](train_data,
       featureFn,
       lossFn,
       oracleFn,
       predictFn,
       solverOptions)
 
-    val model: StructSVMModel = trainer.trainModel()
+    val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
     var avgTrainLoss: Double = 0.0
     for (item <- train_data) {
@@ -477,7 +477,7 @@ object ChainDemo extends LogHelper {
     
     val appName: String = options.getOrElse("appname", "Chain-DBCFW")
 
-    val solverOptions: SolverOptions = new SolverOptions()
+    val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
     solverOptions.numPasses = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
     solverOptions.xldebug = options.getOrElse("xldebug", "false").toBoolean
@@ -513,8 +513,8 @@ object ChainDemo extends LogHelper {
     /**
      * Begin execution
      */
-    val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
-    val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+    val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
     solverOptions.testData = testDataUnord
 
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
@@ -530,9 +530,9 @@ object ChainDemo extends LogHelper {
     val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
-    val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
+    val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
 
-    val trainer: StructSVMWithDBCFW = new StructSVMWithDBCFW(sc,
+    val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](sc,
       DenseVector(train_data),
       featureFn,
       lossFn,
@@ -540,7 +540,7 @@ object ChainDemo extends LogHelper {
       predictFn,
       solverOptions)
 
-    val model: StructSVMModel = trainer.trainModel()
+    val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
     var avgTrainLoss: Double = 0.0
     for (item <- train_data) {
@@ -558,6 +558,7 @@ object ChainDemo extends LogHelper {
 
   }
 
+  /*
   /**
    * ****************************************************************
    *    ___        ___   _____ ____ _      __
@@ -572,8 +573,8 @@ object ChainDemo extends LogHelper {
 
     val PERC_TRAIN: Double = 0.1 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
-    val trainDataUnord: Vector[LabeledObject] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
-    val testDataUnord: Vector[LabeledObject] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+    val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
 
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
@@ -586,9 +587,9 @@ object ChainDemo extends LogHelper {
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     // val train_data = trainDataUnord(List.fromArray(perm))
-    val train_data: Array[LabeledObject] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
+    val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
 
-    val solverOptions: SolverOptions = new SolverOptions()
+    val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
     solverOptions.numPasses = 20 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
     solverOptions.xldebug = false
@@ -609,7 +610,7 @@ object ChainDemo extends LogHelper {
       predictFn,
       solverOptions)
 
-    val model: StructSVMModel = trainer.trainModel()
+    val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
     var avgTrainLoss: Double = 0.0
     for (item <- train_data) {
@@ -626,7 +627,9 @@ object ChainDemo extends LogHelper {
     println("Average loss on test set = %f".format(avgTestLoss / testDataUnord.size))
 
   }
+  */
 
+  
   def main(args: Array[String]): Unit = {
     PropertyConfigurator.configure("conf/log4j.properties")
 

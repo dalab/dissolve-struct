@@ -16,14 +16,14 @@ import breeze.linalg._
  * @param ellMat Corresponds to l_i in Algorithm 4
  * @param pred Prediction function
  */
-class StructSVMModel(
+class StructSVMModel[X, Y](
   var weights: Vector[Double],
   var ell: Double,
   val ellMat: Vector[Double],
-  val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double],
-  val lossFn: (Vector[Double], Vector[Double]) => Double,
-  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double],
-  val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double]) extends Serializable {
+  val featureFn: (Y, X) => Vector[Double],
+  val lossFn: (Y, Y) => Double,
+  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+  val predictFn: (StructSVMModel[X, Y], X) => Y) extends Serializable {
 
   def getWeights(): Vector[Double] = {
     weights
@@ -39,7 +39,7 @@ class StructSVMModel(
   def updateEll(newEll: Double) =
     ell = newEll
 
-  override def clone(): StructSVMModel = {
+  override def clone(): StructSVMModel[X, Y] = {
     new StructSVMModel(this.weights.copy,
       ell,
       this.ellMat.copy,

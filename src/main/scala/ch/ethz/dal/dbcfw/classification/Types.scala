@@ -7,6 +7,6 @@ object Types {
 
   type Index = Int
   type PrimalInfo = Tuple2[Vector[Double], Double]
-  type BoundedCacheList = MutableList[Vector[Double]]
+  type BoundedCacheList[Y] = MutableList[Y]
   
 }

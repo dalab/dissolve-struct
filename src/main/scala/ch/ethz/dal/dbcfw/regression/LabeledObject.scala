@@ -4,7 +4,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 
 import breeze.linalg._
 
-class LabeledObject(
-    val label:Vector[Double],
-    val pattern: Matrix[Double]) /*extends LabeledPoint*/ extends Serializable {
+class LabeledObject[X, Y](
+    val label: Y,
+    val pattern: X) /*extends LabeledPoint*/ extends Serializable {
 }

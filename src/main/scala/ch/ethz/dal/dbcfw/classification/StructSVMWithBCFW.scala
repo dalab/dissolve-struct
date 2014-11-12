@@ -9,6 +9,7 @@ import org.apache.spark.rdd.RDD
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import ch.ethz.dal.dbcfw.optimization.BCFWSolver
+import scala.reflect.ClassTag
 
 /**
  * Analogous to BCFWSolver
@@ -18,13 +19,13 @@ import ch.ethz.dal.dbcfw.optimization.BCFWSolver
  *
  *
  */
-class StructSVMWithBCFW(
-  val data: Vector[LabeledObject],
-  val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVector
-  val lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Label
-  val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-  val solverOptions: SolverOptions) {
+class StructSVMWithBCFW[X, Y](
+  val data: Vector[LabeledObject[X, Y]],
+  val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVector
+  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
+  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label
+  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val solverOptions: SolverOptions[X, Y]) {
 
   /*val optimizer: SSGSolver = new SSGSolver(data,
       featureFn,
@@ -34,7 +35,7 @@ class StructSVMWithBCFW(
       lambda,
       numPasses)*/
 
-  def trainModel(): StructSVMModel =
+  def trainModel()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] =
     new BCFWSolver(data,
       featureFn,
       lossFn,

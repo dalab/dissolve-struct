@@ -68,7 +68,7 @@ object DBCFWStructBinaryDemo {
   def oracleFnBin(weights: Vector[Double], yi: Double, xi: Vector[Double]): Double =
     lossFnBin(yi, weights dot xi) - (weights dot featureFnBin(yi, xi))
 
-  def oracleFn(model: StructSVMModel, yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
+  def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
     DenseVector.fill(1) { lossFn(yi, DenseVector.fill(1) { model.getWeights().toDenseVector dot xi.toDenseMatrix.toDenseVector }) - (model.getWeights() dot featureFn(yi, xi)) }
 
   /**
@@ -80,13 +80,13 @@ object DBCFWStructBinaryDemo {
     else
       -1.0
 
-  def predictFn(model: StructSVMModel, xi: Matrix[Double]): Vector[Double] =
+  def predictFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double]): Vector[Double] =
     if ((model.getWeights() dot featureFn(DenseVector.ones[Double](1), xi)) > (model.getWeights() dot featureFn(DenseVector.fill[Double](1) { -1.0 }, xi)))
       DenseVector.ones[Double](1)
     else
       DenseVector.fill[Double](1) { -1.0 }
 
-  def loadLibSVMFile(filename: String): Vector[LabeledObject] = {
+  def loadLibSVMFile(filename: String): Vector[LabeledObject[Matrix[Double], Vector[Double]]] = {
     var n: Int = 0
     var ndims: Int = 0
 
@@ -108,7 +108,7 @@ object DBCFWStructBinaryDemo {
       println("Obtained data with %d datapoints, and ndims %d".format(n, ndims))
 
     // Second pass - Fill in data
-    val data: Vector[LabeledObject] = DenseVector.fill(n) { new LabeledObject(DenseVector.zeros(1), DenseMatrix.zeros(1, ndims)) }
+    val data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = DenseVector.fill(n) { new LabeledObject(DenseVector.zeros(1), DenseMatrix.zeros(1, ndims)) }
     if (debugOn)
       println("Creating LabeledObject Vector with size %d, pattern=%dx%d, label=%dx1".format(data.size, data(0).pattern.rows, data(0).pattern.cols, data(0).label.size))
     var row: Int = 0
@@ -137,7 +137,7 @@ object DBCFWStructBinaryDemo {
    */
   def dbcfwBSVM(libSvmFilePath: String): Unit = {
     // val data: Vector[LabeledObject] = loadLibSVMFile(libSvmFilePath)
-    val data: Vector[LabeledObject] = DissolveUtils.loadLibSVMBinaryFile(libSvmFilePath, sparse = true, labelMap = Map("+1" -> 1, "-1" -> -1))
+    val data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = DissolveUtils.loadLibSVMBinaryFile(libSvmFilePath, sparse = true, labelMap = Map("+1" -> 1, "-1" -> -1))
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(data.size, data(0).pattern.rows, data(0).pattern.cols, data(0).label.size))
 
     // Fix seed for reproducibility
@@ -150,7 +150,7 @@ object DBCFWStructBinaryDemo {
     val train_data = data(perm.slice(0, cutoffIndex)).toDenseVector // Obtain in range [0, cutoffIndex)
     val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
 
-    val solverOptions: SolverOptions = new SolverOptions()
+    val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
 
     solverOptions.numPasses = 3 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
@@ -187,7 +187,7 @@ object DBCFWStructBinaryDemo {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val trainer: StructSVMWithDBCFW = new StructSVMWithDBCFW(sc,
+    val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](sc,
       train_data,
       featureFn,
       lossFn,
@@ -195,7 +195,7 @@ object DBCFWStructBinaryDemo {
       predictFn,
       solverOptions)
 
-    val model: StructSVMModel = trainer.trainModel()
+    val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
     var truePredictions = 0
     val totalPredictions = test_data.size

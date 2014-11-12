@@ -7,18 +7,19 @@ import org.apache.spark.SparkContext
 import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
 import java.io.FileWriter
 import ch.ethz.dal.dbcfw.optimization.SolverUtils
+import scala.reflect.ClassTag
 
-class StructSVMWithDBCFW(
+class StructSVMWithDBCFW[X, Y](
   val sc: SparkContext,
-  val data: Vector[LabeledObject],
-  val featureFn: (Vector[Double], Matrix[Double]) => Vector[Double], // (y, x) => FeatureVector
-  val lossFn: (Vector[Double], Vector[Double]) => Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel, Vector[Double], Matrix[Double]) => Vector[Double], // (model, y_i, x_i) => Label
-  val predictFn: (StructSVMModel, Matrix[Double]) => Vector[Double],
-  val solverOptions: SolverOptions) {
+  val data: Vector[LabeledObject[X, Y]],
+  val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVector
+  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
+  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label
+  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val solverOptions: SolverOptions[X, Y]) {
 
-  def trainModel(): StructSVMModel = {
-    val (trainedModel, debugInfo) = new DBCFWSolver(sc,
+  def trainModel()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
+    val (trainedModel, debugInfo) = new DBCFWSolver[X, Y](sc,
       data,
       featureFn,
       lossFn,
