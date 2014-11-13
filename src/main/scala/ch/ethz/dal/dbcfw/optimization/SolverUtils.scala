@@ -5,6 +5,7 @@ import breeze.linalg._
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
+import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
 
 object SolverUtils {
@@ -12,10 +13,10 @@ object SolverUtils {
   /**
    * Average loss
    */
-  def averageLoss[X, Y](data: Vector[LabeledObject[X, Y]],
-    lossFn: (Y, Y) => Double,
-    predictFn: (StructSVMModel[X, Y], X) => Y,
-    model: StructSVMModel[X, Y]): Double = {
+  def averageLoss[X, Y](data: Seq[LabeledObject[X, Y]],
+                        lossFn: (Y, Y) => Double,
+                        predictFn: (StructSVMModel[X, Y], X) => Y,
+                        model: StructSVMModel[X, Y]): Double = {
 
     var lossTerm: Double = 0.0
     for (i <- 0 until data.size) {
@@ -27,12 +28,27 @@ object SolverUtils {
     lossTerm / (data.size.toDouble)
   }
 
+  def averageLoss[X, Y](data: RDD[LabeledObject[X, Y]],
+                        lossFn: (Y, Y) => Double,
+                        predictFn: (StructSVMModel[X, Y], X) => Y,
+                        model: StructSVMModel[X, Y]): Double = {
+
+    val loss =
+      data.map {
+        case datapoint =>
+          val ystar_i = predictFn(model, datapoint.pattern)
+          lossFn(datapoint.label, ystar_i)
+      }.fold(0.0)((acc, ele) => acc + ele)
+
+    loss
+  }
+
   /**
    * Objective function
    */
   def objectiveFunction(w: Vector[Double],
-    b_alpha: Double,
-    lambda: Double): Double = {
+                        b_alpha: Double,
+                        lambda: Double): Double = {
     // Return the value of f(alpha)
     0.5 * lambda * (w.t * w) - b_alpha
   }
@@ -40,12 +56,12 @@ object SolverUtils {
   /**
    * Compute Duality gap
    */
-  def dualityGap[X, Y](data: Vector[LabeledObject[X, Y]],
-    featureFn: (Y, X) => Vector[Double],
-    lossFn: (Y, Y) => Double,
-    oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
-    model: StructSVMModel[X, Y],
-    lambda: Double)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
+  def dualityGap[X, Y](data: Seq[LabeledObject[X, Y]],
+                       featureFn: (Y, X) => Vector[Double],
+                       lossFn: (Y, Y) => Double,
+                       oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+                       model: StructSVMModel[X, Y],
+                       lambda: Double)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
 
     val phi = featureFn
     val maxOracle = oracleFn
@@ -76,15 +92,55 @@ object SolverUtils {
     (gap, w_s, ell_s)
   }
 
+  def dualityGap[X, Y](data: RDD[LabeledObject[X, Y]],
+                       featureFn: (Y, X) => Vector[Double],
+                       lossFn: (Y, Y) => Double,
+                       oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+                       model: StructSVMModel[X, Y],
+                       lambda: Double)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
+
+    val phi = featureFn
+    val maxOracle = oracleFn
+
+    val w: Vector[Double] = model.getWeights()
+    val ell: Double = model.getEll()
+
+    val n: Int = data.count().toInt
+    val d: Int = model.getWeights().size
+    val yStars = data.map {
+      case datapoint =>
+        maxOracle(model, datapoint.label, datapoint.pattern)
+    }
+
+    var (w_s, ell_s) = data.map {
+      case datapoint =>
+        val yStar = maxOracle(model, datapoint.label, datapoint.pattern)
+        val w_s = phi(datapoint.label, datapoint.pattern) - phi(yStar, datapoint.pattern)
+        val ell_s = lossFn(datapoint.label, yStar)
+
+        (w_s, ell_s)
+    }.fold((Vector.zeros[Double](d), 0.0)) {
+      case ((w_acc, ell_acc), (w_i, ell_i)) =>
+        (w_acc + w_i, ell_acc + ell_i)
+    }
+
+    w_s = w_s / (lambda * n)
+    ell_s = ell_s / n
+
+    val gap: Double = w.t * (w - w_s) * lambda - ell + ell_s
+
+    (gap, w_s, ell_s)
+  }
+
   /**
    * Primal objective
    */
   def primalObjective[X, Y](data: Vector[LabeledObject[X, Y]],
-    featureFn: (Y, X) => Vector[Double],
-    lossFn: (Y, Y) => Double,
-    oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
-    model: StructSVMModel[X, Y],
-    lambda: Double): Double = {
+                            featureFn: (Y, X) => Vector[Double],
+                            lossFn: (Y, Y) => Double,
+                            oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+                            model: StructSVMModel[X, Y],
+                            lambda: Double): Double = {
 
     var hingeLosses: Double = 0.0
     for (i <- 0 until data.size) {
