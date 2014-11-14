@@ -1,3 +1,4 @@
+
 /**
  *
  */
@@ -106,9 +107,15 @@ object BinarySVMWithDBCFW {
         case x: LabeledPoint =>
           new LabeledObject[Vector[Double], Double](x.label, SparseVector(x.features.toArray)) // Is the asInstanceOf required?
       }
+    
+    val repartData =
+      if (solverOptions.enableManualPartitionSize)
+        objectifiedData.repartition(solverOptions.NUM_PART)
+      else
+        objectifiedData
 
     val (trainedModel, debugInfo) = new DBCFWSolver[Vector[Double], Double](
-      objectifiedData,
+      repartData,
       this.featureFn,
       this.lossFn,
       this.oracleFn,
@@ -117,6 +124,20 @@ object BinarySVMWithDBCFW {
       miniBatchEnabled = false).optimize()
 
     println(debugInfo)
+    
+    // Dump debug information into a file
+    val fw = new FileWriter(solverOptions.debugInfoPath)
+    // Write the current parameters being used
+    fw.write(solverOptions.toString())
+    fw.write("\n")
+
+    // Write spark-specific parameters
+    fw.write(SolverUtils.getSparkConfString(data.context.getConf))
+    fw.write("\n")
+
+    // Write values noted from the run
+    fw.write(debugInfo)
+    fw.close()
 
     trainedModel
 
@@ -140,8 +161,14 @@ object BinarySVMWithDBCFW {
           new LabeledObject[Vector[Double], Double](x.label, SparseVector(x.features.toArray))
       }
 
+    val repartData =
+      if (solverOptions.enableManualPartitionSize)
+        objectifiedData.repartition(solverOptions.NUM_PART)
+      else
+        objectifiedData
+
     val (trainedModel, debugInfo) = new DBCFWSolver[Vector[Double], Double](
-      objectifiedData,
+      repartData,
       featureFn,
       lossFn,
       oracleFn,
