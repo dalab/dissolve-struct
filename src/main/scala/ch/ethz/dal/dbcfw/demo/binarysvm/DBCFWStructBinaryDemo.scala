@@ -162,7 +162,6 @@ object DBCFWStructBinaryDemo {
     solverOptions.testData = Some(test_data)
 
     solverOptions.sampleWithReplacement = false
-    solverOptions.NUM_PART = 1
     solverOptions.autoconfigure = false
 
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
@@ -179,6 +178,7 @@ object DBCFWStructBinaryDemo {
       predictFn,
       solverOptions)*/
 
+    solverOptions.enableManualPartitionSize = true
     solverOptions.NUM_PART = 2
     solverOptions.sample = "frac"
     solverOptions.sampleFrac = 0.5
@@ -187,7 +187,7 @@ object DBCFWStructBinaryDemo {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val training = sc.parallelize(train_data)
+    val training = sc.parallelize(train_data, solverOptions.NUM_PART)
 
     val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
       training,

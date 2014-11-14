@@ -5,9 +5,12 @@ package ch.ethz.dal.dbcfw.classification
 
 import scala.reflect.ClassTag
 
+import java.io.FileWriter
+
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
+import ch.ethz.dal.dbcfw.optimization.SolverUtils
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -145,6 +148,20 @@ object BinarySVMWithDBCFW {
       predictFn,
       solverOptions,
       miniBatchEnabled = false).optimize()
+
+    // Dump debug information into a file
+    val fw = new FileWriter(solverOptions.debugInfoPath)
+    // Write the current parameters being used
+    fw.write(solverOptions.toString())
+    fw.write("\n")
+
+    // Write spark-specific parameters
+    fw.write(SolverUtils.getSparkConfString(data.context.getConf))
+    fw.write("\n")
+
+    // Write values noted from the run
+    fw.write(debugInfo)
+    fw.close()
 
     println(debugInfo)
 
