@@ -2,6 +2,7 @@ package ch.ethz.dal.dbcfw.optimization
 
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import breeze.linalg.Vector
+import org.apache.spark.rdd.RDD
 import java.io.File
 
 class SolverOptions[X, Y] extends Serializable {
@@ -17,7 +18,10 @@ class SolverOptions[X, Y] extends Serializable {
   var sample: String = "perm"
   var debugMultiplier: Int = 0
   var lambda: Double = 0.01 // FIXME This is 1/n in Matlab code
-  var testData: Vector[LabeledObject[X, Y]] = null
+  
+  var testData: Option[Seq[LabeledObject[X, Y]]] = Option.empty[Seq[LabeledObject[X, Y]]]
+  var testDataRDD: Option[RDD[LabeledObject[X, Y]]] = Option.empty[RDD[LabeledObject[X, Y]]]
+  
   var doLineSearch: Boolean = false
 
   // Cache params

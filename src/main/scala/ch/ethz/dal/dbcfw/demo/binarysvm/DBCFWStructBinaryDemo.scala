@@ -37,7 +37,7 @@ object DBCFWStructBinaryDemo {
    * Returns y_i * x_i
    */
   def featureFnBin(y: Double, x: Vector[Double]): Vector[Double] =
-    x :* y;
+    x :* y
 
   /**
    * Represent feature vector as 1xn Matrix
@@ -137,7 +137,7 @@ object DBCFWStructBinaryDemo {
    */
   def dbcfwBSVM(libSvmFilePath: String): Unit = {
     // val data: Vector[LabeledObject] = loadLibSVMFile(libSvmFilePath)
-    val data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = DissolveUtils.loadLibSVMBinaryFile(libSvmFilePath, sparse = true, labelMap = Map("+1" -> 1, "-1" -> -1))
+    val data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = DissolveUtils.loadLibSVMBinaryFileHD(libSvmFilePath, sparse = true, labelMap = Map("+1" -> 1, "-1" -> -1))
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(data.size, data(0).pattern.rows, data(0).pattern.cols, data(0).label.size))
 
     // Fix seed for reproducibility
@@ -147,8 +147,8 @@ object DBCFWStructBinaryDemo {
     val trnPrc = 0.8
     val perm: List[Int] = util.Random.shuffle((0 until data.size) toList)
     val cutoffIndex: Int = (trnPrc * perm.size) toInt
-    val train_data = data(perm.slice(0, cutoffIndex)).toDenseVector // Obtain in range [0, cutoffIndex)
-    val test_data = data(perm.slice(cutoffIndex, perm.size)) toVector // Obtain in range [cutoffIndex, data.size)
+    val train_data = data(perm.slice(0, cutoffIndex)).toArray // Obtain in range [0, cutoffIndex)
+    val test_data = data(perm.slice(cutoffIndex, perm.size)).toArray // Obtain in range [cutoffIndex, data.size)
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
 
@@ -159,7 +159,7 @@ object DBCFWStructBinaryDemo {
     solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = false
-    solverOptions.testData = test_data
+    solverOptions.testData = Some(test_data)
 
     solverOptions.sampleWithReplacement = false
     solverOptions.NUM_PART = 1
@@ -187,8 +187,10 @@ object DBCFWStructBinaryDemo {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](sc,
-      train_data,
+    val training = sc.parallelize(train_data)
+
+    val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
+      training,
       featureFn,
       lossFn,
       oracleFn,

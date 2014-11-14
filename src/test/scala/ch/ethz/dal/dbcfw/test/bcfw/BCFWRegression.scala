@@ -21,7 +21,7 @@ class BCFWRegression extends FunSpec {
     val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
-    val train_data = train_data_unord(List.fromArray(perm))
+    val train_data = train_data_unord(List.fromArray(perm)).toArray
 
     /**
      * Data files for cross-checking

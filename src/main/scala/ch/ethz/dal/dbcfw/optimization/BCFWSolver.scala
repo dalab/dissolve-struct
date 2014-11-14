@@ -19,17 +19,17 @@ import scala.reflect.ClassTag
  *
  */
 class BCFWSolver[X, Y] /*extends Optimizer*/ (
-  val data: Vector[LabeledObject[X, Y]],
+  val data: Seq[LabeledObject[X, Y]],
   val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
   val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
   val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val solverOptions: SolverOptions[X, Y],
-  val testData: Vector[LabeledObject[X, Y]]) {
+  val testData: Seq[LabeledObject[X, Y]]) {
 
   // Constructor without test data
   def this(
-    data: Vector[LabeledObject[X, Y]],
+    data: Seq[LabeledObject[X, Y]],
     featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
     lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
     oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
@@ -208,7 +208,11 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
           val curTime = (System.currentTimeMillis() - startTime) / 1000.0
 
           if (solverOptions.testData != null) {
-            val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, debugModel)
+            val testError = 
+              if(solverOptions.testData.isDefined)
+                SolverUtils.averageLoss(solverOptions.testData.get, lossFn, predictFn, debugModel)
+              else
+                0.00
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError, testError))
             if (solverOptions.debugLoss)

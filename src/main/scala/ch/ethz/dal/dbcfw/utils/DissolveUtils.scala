@@ -11,14 +11,14 @@ import breeze.linalg._
 
 object DissolveUtils {
 
-  def loadLibSVMBinaryFile(filename: String, sparse: Boolean = true, labelMap: Map[String, Int]): DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = {
+  def loadLibSVMBinaryFile(filename: String, sparse: Boolean = true, labelMap: Map[String, Int]): Vector[LabeledObject[Vector[Double], Double]] = {
     var n: Int = 0
     var ndims: Int = 0
 
     // Do some initial checks on labelMap
     require(labelMap.values.toList.contains(1), "labelMap (%s) contains no mapping to 1".format(labelMap))
     require(labelMap.values.toList.contains(-1), "labelMap (%s) contains no mapping to -1".format(labelMap))
-    require(labelMap.values.toList.filter(x => (x != 1) && (x != -1)).size == 0, "labelMap (%s) contains a mapping to something other than a +1/-1".format(labelMap))
+    require(labelMap.values.toList.count(x => (x != 1) && (x != -1)) == 0, "labelMap (%s) contains a mapping to something other than a +1/-1".format(labelMap))
 
     // First pass, get number of data points and number of features
     for (
@@ -31,7 +31,62 @@ object DissolveUtils {
     }
 
     // Second pass. Create a Vector of LabeledObjects
-    val data: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = DenseVector.fill(n) { null }
+    val data: Vector[LabeledObject[Vector[Double], Double]] = Vector.fill(n) { null }
+    for (
+      (line, idx) <- scala.io.Source.fromFile(filename).getLines()
+        .map(_.trim)
+        .filter(line => !(line.isEmpty || line.startsWith("#")))
+        .zipWithIndex
+    ) {
+
+      // Create a Sparse Matrix by default. Later call the toDense method, in case we need a Dense Matrix instead
+      val vb = VectorBuilder[Double]()
+
+      // Store label as a single-element dense vector
+      val content: Array[String] = line.split(" ")
+      val label = labelMap(content(0))
+
+      if (!(label == +1 || label == -1))
+        throw new IllegalArgumentException("labelAdapter need to evalute to +1 or -1. Found %d.".format(label))
+
+      content.slice(1, content.size)
+        .map(pairStr => pairStr.split(":")) // Split "x:y"
+        .map(pair => (pair(0).toInt, pair(1).toDouble)) // x is the index and y is the corresponding value
+        .map {
+          case (idx, value) =>
+            vb(idx) = value
+        }
+
+      data(idx) = new LabeledObject[Vector[Double], Double](label, vb.toVector)
+    }
+
+    println("Dataset size = %d".format(data.length))
+
+    data
+  }
+
+  
+  def loadLibSVMBinaryFileHD(filename: String, sparse: Boolean = true, labelMap: Map[String, Int]): Vector[LabeledObject[Matrix[Double], Vector[Double]]] = {
+    var n: Int = 0
+    var ndims: Int = 0
+
+    // Do some initial checks on labelMap
+    require(labelMap.values.toList.contains(1), "labelMap (%s) contains no mapping to 1".format(labelMap))
+    require(labelMap.values.toList.contains(-1), "labelMap (%s) contains no mapping to -1".format(labelMap))
+    require(labelMap.values.toList.count(x => (x != 1) && (x != -1)) == 0, "labelMap (%s) contains a mapping to something other than a +1/-1".format(labelMap))
+
+    // First pass, get number of data points and number of features
+    for (
+      line <- scala.io.Source.fromFile(filename).getLines()
+        .map(_.trim)
+        .filter(line => !(line.isEmpty || line.startsWith("#")))
+    ) {
+      n += 1
+      ndims = max(ndims, max(line.split(" ").slice(1, line.split(" ").size).map(s => s.split(":")(0) toInt)))
+    }
+
+    // Second pass. Create a Vector of LabeledObjects
+    val data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = Vector.fill(n) { null }
     for (
       (line, idx) <- scala.io.Source.fromFile(filename).getLines()
         .map(_.trim)

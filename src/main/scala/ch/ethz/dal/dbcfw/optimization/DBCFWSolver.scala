@@ -14,18 +14,8 @@ import scala.collection.mutable.MutableList
 import ch.ethz.dal.dbcfw.utils.LinAlgOps._
 import scala.reflect.ClassTag
 
-/**
- * LogHelper is a trait you can mix in to provide easy log4j logging
- * for your scala classes.
- */
-/*trait LogHelper {
-  val loggerName = this.getClass.getName
-  lazy val logger = Logger.getLogger(loggerName)
-}*/
-
 class DBCFWSolver[X, Y](
-  @transient val sc: SparkContext,
-  val data: Vector[LabeledObject[X, Y]],
+  val data: RDD[LabeledObject[X, Y]],
   val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
   val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
   val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
@@ -38,15 +28,26 @@ class DBCFWSolver[X, Y](
    */
   def optimize()(implicit m: ClassTag[Y]): (StructSVMModel[X, Y], String) = {
 
+    val sc = data.context
+
     // autoconfigure parameters
     val NUM_DECODING_SAMPLES = 5
     val NUM_COMMN_SAMPLES = 5 // Time taken for a single round of communication
 
     val debugSb: StringBuilder = new StringBuilder()
 
-    val d: Int = featureFn(data(0).label, data(0).pattern).size
+    val samplePoint = data.first()
+    val dataSize = data.count().toInt
+
+    val d: Int = featureFn(samplePoint.label, samplePoint.pattern).size
     // Let the initial model contain zeros for all weights
     var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](SparseVector.zeros(d), 0.0, SparseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+
+    val numPartitions: Int =
+      if (solverOptions.enableManualPartitionSize)
+        solverOptions.NUM_PART
+      else
+        data.partitions.size
 
     /**
      *  Create two RDDs:
@@ -54,38 +55,29 @@ class DBCFWSolver[X, Y](
      *  2. indexedPrimals (Index, Primal) where Primal = (w_i, l_i) <- This changes in each round
      *  3. indexedCacheRDD (Index, BoundedCacheList)
      */
-    val indexedTrainData: Array[(Index, LabeledObject[X, Y])] = (0 until data.size).toArray.zip(data.toArray)
-    val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until data.size).toArray.zip(
-      Array.fill(data.size)((SparseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
+    val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until dataSize).toArray.zip(
+      Array.fill(dataSize)((SparseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
       )
 
     val indexedTrainDataRDD: RDD[(Index, LabeledObject[X, Y])] =
-      if (solverOptions.enableManualPartitionSize)
-        sc.parallelize(indexedTrainData, solverOptions.NUM_PART)
-      else
-        sc.parallelize(indexedTrainData)
+      data.zipWithIndex().map {
+        case (labeledObject, idx) =>
+          (idx.toInt, labeledObject)
+      }
 
-    var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] =
-      if (solverOptions.enableManualPartitionSize)
-        sc.parallelize(indexedPrimals, solverOptions.NUM_PART)
-      else
-        sc.parallelize(indexedPrimals)
+    var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, numPartitions)
 
     // For each Primal (i.e, Index), cache a list of Decodings (i.e, Vector[Double])
     // If cache is disabled, add an empty array. This immediately drops the joins later on and saves time in communicating an unnecessary RDD.
     val indexedCache: Array[(Index, BoundedCacheList[Y])] =
       if (solverOptions.enableOracleCache)
-        (0 until data.size).toArray.zip(
-          Array.fill(data.size)(MutableList[Y]()) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
+        (0 until dataSize).toArray.zip(
+          Array.fill(dataSize)(MutableList[Y]()) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
           )
       else
         Array[(Index, BoundedCacheList[Y])]()
 
-    var indexedCacheRDD: RDD[(Index, BoundedCacheList[Y])] =
-      if (solverOptions.enableManualPartitionSize)
-        sc.parallelize(indexedCache, solverOptions.NUM_PART)
-      else
-        sc.parallelize(indexedCache)
+    var indexedCacheRDD: RDD[(Index, BoundedCacheList[Y])] = sc.parallelize(indexedCache, numPartitions)
 
     indexedPrimalsRDD.checkpoint()
 
@@ -102,14 +94,14 @@ class DBCFWSolver[X, Y](
       if (solverOptions.sample == "frac")
         solverOptions.sampleFrac
       else if (solverOptions.sample == "count")
-        math.min(solverOptions.H / data.size, 1.0)
+        math.min(solverOptions.H / dataSize, 1.0)
       else {
         println("[WARNING] %s is not a valid option. Reverting to sampling 50% of the dataset")
         0.5
       }
     }
 
-    println("Beginning training of %d data points in %d passes with lambda=%f".format(data.size, solverOptions.numPasses, solverOptions.lambda))
+    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.numPasses, solverOptions.lambda))
 
     var avgDecodeTime: Double = 0.0
     var avgCommunicationTime: Double = 0.0
@@ -124,13 +116,13 @@ class DBCFWSolver[X, Y](
       /**
        * Obtain average time required to decode
        */
-      var decodeTimings =
+      val decodeTimings =
         for (i <- 0 until NUM_DECODING_SAMPLES) yield {
           var randModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.rand(d), Math.random(), DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
-          var sampled_i = util.Random.nextInt(data.size)
+          var sampled_i = util.Random.nextInt(dataSize)
 
           val startDecodingTime = System.currentTimeMillis()
-          oracleFn(randModel, data(sampled_i).label, data(sampled_i).pattern)
+          oracleFn(randModel, samplePoint.label, samplePoint.pattern)
           val endDecodingTime = System.currentTimeMillis()
 
           endDecodingTime - startDecodingTime
@@ -204,7 +196,11 @@ class DBCFWSolver[X, Y](
       val elapsedTime = (System.currentTimeMillis() - startTime).toDouble / 1000.0
 
       val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, globalModel)
-      val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, globalModel)
+      val testError =
+        if (solverOptions.testDataRDD.isDefined)
+          SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, globalModel)
+        else
+          0.00
 
       // Obtain duality gap after each communication round
       val debugModel: StructSVMModel[X, Y] = globalModel.clone()
@@ -224,7 +220,7 @@ class DBCFWSolver[X, Y](
 
     println("globalModel.weights is sparse - " + globalModel.getWeights.isInstanceOf[SparseVector[Double]])
     println("w_i is sparse - " + indexedPrimalsRDD.first._2._1.isInstanceOf[SparseVector[Double]])
-
+    
     (globalModel, debugSb.toString())
   }
 
@@ -232,13 +228,13 @@ class DBCFWSolver[X, Y](
    * Takes as input a set of data and builds a SSVM model trained using BCFW
    */
   def mapper(dataIterator: Iterator[(Index, (LabeledObject[X, Y], PrimalInfo, Option[BoundedCacheList[Y]]))],
-    localModel: StructSVMModel[X, Y],
-    featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
-    lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
-    oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
-    predictFn: (StructSVMModel[X, Y], X) => Y,
-    solverOptions: SolverOptions[X, Y],
-    miniBatchEnabled: Boolean): Iterator[(StructSVMModel[X, Y], Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))], StructSVMModel[X, Y])] = {
+             localModel: StructSVMModel[X, Y],
+             featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
+             lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
+             oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
+             predictFn: (StructSVMModel[X, Y], X) => Y,
+             solverOptions: SolverOptions[X, Y],
+             miniBatchEnabled: Boolean): Iterator[(StructSVMModel[X, Y], Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))], StructSVMModel[X, Y])] = {
 
     val prevModel: StructSVMModel[X, Y] = localModel.clone()
 
@@ -281,15 +277,17 @@ class DBCFWSolver[X, Y](
     var k: Int = 0
     val n: Int = data.size
 
-    val wMat: Matrix[Double] = CSCMatrix.zeros[Double](d, n)
-    val ellMat: Vector[Double] = SparseVector.zeros[Double](n)
+    val wMat: Array[Vector[Double]] = Array.fill(n)(null)
+    val prevWMat: Array[Vector[Double]] = Array.fill(n)(null)
+    val ellMat: Vector[Double] = Vector.zeros[Double](n)
 
     // Copy w_i's and l_i's into local wMat and ellMat
     for (i <- 0 until n) {
-      updateColumn(wMat, zippedData(i)._2._2._1, i)
+      wMat(i) = zippedData(i)._2._2._1
+      prevWMat(i) = zippedData(i)._2._2._1.copy
       ellMat(i) = zippedData(i)._2._2._2
     }
-    val prevWMat: Matrix[Double] = wMat.copy
+
     val prevEllMat: Vector[Double] = ellMat.copy
 
     var ell: Double = localModel.getEll()
@@ -320,9 +318,8 @@ class DBCFWSolver[X, Y](
                 (1.0 / n) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
               .map {
                 case (w_s, ell_s) =>
-                  val wcoli = getMatrixColumn(wMat, i)
-                  (localModel.getWeights().t * (wcoli - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
-                    ((wcoli - w_s).t * (wcoli - w_s) + eps) // Map each (w_s, ell_s) to their respective step-size values	
+                  (localModel.getWeights().t * (wMat(i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
+                    ((wMat(i) - w_s).t * (wMat(i) - w_s) + eps) // Map each (w_s, ell_s) to their respective step-size values	
               }
               .zipWithIndex // We'll need the index later to retrieve the respective approx. ystar_i
               .filter { case (gamma, idx) => gamma > 0.0 }
@@ -363,12 +360,11 @@ class DBCFWSolver[X, Y](
       val ell_s: Double = (1.0 / n) * loss_i
 
       // 4) Get step-size gamma
-      val wcoli = getMatrixColumn(wMat, i)
       val gamma: Double =
         if (solverOptions.doLineSearch) {
           val thisModel = if (miniBatchEnabled) prevModel else localModel
-          val gamma_opt = (thisModel.getWeights().t * (wcoli - w_s) - ((ellMat(i) - ell_s) * (1.0 / lambda))) /
-            ((wcoli - w_s).t * (wcoli - w_s) + eps)
+          val gamma_opt = (thisModel.getWeights().t * (wMat(i) - w_s) - ((ellMat(i) - ell_s) * (1.0 / lambda))) /
+            ((wMat(i) - w_s).t * (wMat(i) - w_s) + eps)
           max(0.0, min(1.0, gamma_opt))
         } else {
           (2.0 * n) / (k + 2.0 * n)
@@ -376,20 +372,18 @@ class DBCFWSolver[X, Y](
 
       // 5, 6, 7, 8) Update the weights of the model
       if (miniBatchEnabled) {
-        val wcoli = getMatrixColumn(wMat, i)
-        updateColumn(wMat, wcoli * (1.0 - gamma) + (w_s * gamma), i)
+        wMat(i) = wMat(i) * (1.0 - gamma) + (w_s * gamma)
         // wMat(::, i) := wMat(::, i) * (1.0 - gamma) + (w_s * gamma)
         ellMat(i) = (ellMat(i) * (1.0 - gamma)) + (ell_s * gamma)
-        deltaLocalModel.updateWeights(localModel.getWeights() + (getMatrixColumn(wMat, i) - getMatrixColumn(prevWMat, i)))
+        deltaLocalModel.updateWeights(localModel.getWeights() + (wMat(i) - prevWMat(i)))
         deltaLocalModel.updateEll(localModel.getEll() + (ellMat(i) - prevEllMat(i)))
       } else {
         // In case of CoCoA
-        val tempWeights1: Vector[Double] = localModel.getWeights() - getMatrixColumn(wMat, i)
+        val tempWeights1: Vector[Double] = localModel.getWeights() - wMat(i)
         localModel.updateWeights(tempWeights1)
         deltaLocalModel.updateWeights(tempWeights1)
-        val wcoli = getMatrixColumn(wMat, i)
-        updateColumn(wMat, wcoli * (1.0 - gamma) + (w_s * gamma), i)
-        val tempWeights2: Vector[Double] = localModel.getWeights() + getMatrixColumn(wMat, i)
+        wMat(i) = wMat(i) * (1.0 - gamma) + (w_s * gamma)
+        val tempWeights2: Vector[Double] = localModel.getWeights() + wMat(i)
         localModel.updateWeights(tempWeights2)
         deltaLocalModel.updateWeights(tempWeights2)
 
@@ -418,7 +412,7 @@ class DBCFWSolver[X, Y](
 
     val localIndexedDeltaPrimals: Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))] = zippedData.map(_._1).map(k =>
       (k, // Index
-        (((getMatrixColumn(wMat, globalToLocal(k)) - getMatrixColumn(prevWMat, globalToLocal(k))), // PrimalInfo.w
+        (((wMat(globalToLocal(k)) - prevWMat(globalToLocal(k))), // PrimalInfo.w
           ellMat(globalToLocal(k)) - prevEllMat(globalToLocal(k))), // PrimalInfo.ell
           oracleCache.get(globalToLocal(k))))) // Cache
 
@@ -493,7 +487,7 @@ class DBCFWSolver[X, Y](
           .mapValues {
             // newCache includes entries in the previous cache too
             case (Some(newCache), oldCache) => newCache.get
-            case (None, oldCache) => oldCache
+            case (None, oldCache)           => oldCache
           }
       else
         oldCache

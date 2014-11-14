@@ -20,7 +20,7 @@ import scala.reflect.ClassTag
  *
  */
 class StructSVMWithBCFW[X, Y](
-  val data: Vector[LabeledObject[X, Y]],
+  val data: Seq[LabeledObject[X, Y]],
   val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVector
   val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
   val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label

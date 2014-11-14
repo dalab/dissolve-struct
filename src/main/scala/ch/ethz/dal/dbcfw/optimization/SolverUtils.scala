@@ -40,7 +40,7 @@ object SolverUtils {
           lossFn(datapoint.label, ystar_i)
       }.fold(0.0)((acc, ele) => acc + ele)
 
-    loss
+    loss / data.count()
   }
 
   /**

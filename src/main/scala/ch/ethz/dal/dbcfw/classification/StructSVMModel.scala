@@ -39,6 +39,10 @@ class StructSVMModel[X, Y](
   def updateEll(newEll: Double) =
     ell = newEll
 
+  def predict(pattern: X): Y = {
+    predictFn(this, pattern)
+  }
+
   override def clone(): StructSVMModel[X, Y] = {
     new StructSVMModel(this.weights.copy,
       ell,

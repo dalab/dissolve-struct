@@ -392,7 +392,7 @@ object ChainDemo extends LogHelper {
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     // val train_data = train_data_unord(List.fromArray(perm))
-    val train_data: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = train_data_unord(List.fromArray(perm).slice(0, (PERC_TRAIN * train_data_unord.size).toInt)).toDenseVector
+    val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = train_data_unord(List.fromArray(perm).slice(0, (PERC_TRAIN * train_data_unord.size).toInt)).toArray
     // val temp: DenseVector[LabeledObject] = train_data_unord(List.fromArray(perm).slice(0, 1)).toDenseVector
     // val train_data = DenseVector.fill(5){temp(0)}
 
@@ -417,7 +417,7 @@ object ChainDemo extends LogHelper {
     solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = true
-    solverOptions.testData = test_data
+    solverOptions.testData = Some(test_data.toArray)
     
     solverOptions.enableOracleCache = true
     solverOptions.oracleCacheSize = 10
@@ -515,7 +515,7 @@ object ChainDemo extends LogHelper {
      */
     val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
-    solverOptions.testData = testDataUnord
+    solverOptions.testData = Some(testDataUnord.toArray)
 
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
@@ -532,8 +532,8 @@ object ChainDemo extends LogHelper {
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
 
-    val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](sc,
-      DenseVector(train_data),
+    val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
+      sc.parallelize(train_data, solverOptions.NUM_PART),
       featureFn,
       lossFn,
       oracleFn,
