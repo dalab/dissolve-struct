@@ -25,7 +25,7 @@ class SolverOptions[X, Y] extends Serializable {
   var doLineSearch: Boolean = false
 
   // Cache params
-  var enableOracleCache: Boolean = true
+  var enableOracleCache: Boolean = false
   var oracleCacheSize: Int = 10
 
   // DBCFW specific params
