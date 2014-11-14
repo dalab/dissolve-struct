@@ -18,28 +18,6 @@ import org.apache.spark.mllib.regression.LabeledPoint
 
 import breeze.linalg.{ Vector, SparseVector }
 
-class BinarySVMWithDBCFW[X, Y] private (val data: RDD[LabeledObject[X, Y]],
-                                        val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVector
-                                        val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
-                                        val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label
-                                        val predictFn: (StructSVMModel[X, Y], X) => Y,
-                                        val solverOptions: SolverOptions[X, Y]) {
-
-  def run()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
-    val (trainedModel, debugInfo) = new DBCFWSolver[X, Y](
-      data,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
-      solverOptions,
-      miniBatchEnabled = false).optimize()
-
-    trainedModel
-  }
-
-}
-
 /**
  * @author tribhu
  *
@@ -54,7 +32,7 @@ object BinarySVMWithDBCFW {
    *
    */
   def featureFn(y: Double, x: Vector[Double]): Vector[Double] = {
-    x * y
+    x :* y
   }
 
   /**
@@ -78,7 +56,7 @@ object BinarySVMWithDBCFW {
   def oracleFn(model: StructSVMModel[Vector[Double], Double], yi: Double, xi: Vector[Double]): Double = {
 
     val yPredict = xi dot model.getWeights()
-    lossFn(yi, yPredict)
+    lossFn(yi, yPredict) - (model.getWeights() dot featureFn(yi, xi))
   }
 
   /**
@@ -105,9 +83,9 @@ object BinarySVMWithDBCFW {
     val objectifiedData: RDD[LabeledObject[Vector[Double], Double]] =
       data.map {
         case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], Double](x.label, SparseVector(x.features.toArray)) // Is the asInstanceOf required?
+          new LabeledObject[Vector[Double], Double](x.label, SparseVector(x.features.toArray))
       }
-    
+
     val repartData =
       if (solverOptions.enableManualPartitionSize)
         objectifiedData.repartition(solverOptions.NUM_PART)
@@ -124,7 +102,7 @@ object BinarySVMWithDBCFW {
       miniBatchEnabled = false).optimize()
 
     println(debugInfo)
-    
+
     // Dump debug information into a file
     val fw = new FileWriter(solverOptions.debugInfoPath)
     // Write the current parameters being used
