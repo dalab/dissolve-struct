@@ -30,10 +30,6 @@ class DBCFWSolver[X, Y](
 
     val sc = data.context
 
-    // autoconfigure parameters
-    val NUM_DECODING_SAMPLES = 5
-    val NUM_COMMN_SAMPLES = 5 // Time taken for a single round of communication
-
     val debugSb: StringBuilder = new StringBuilder()
 
     val samplePoint = data.first()
@@ -41,31 +37,34 @@ class DBCFWSolver[X, Y](
 
     val d: Int = featureFn(samplePoint.label, samplePoint.pattern).size
     // Let the initial model contain zeros for all weights
-    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](SparseVector.zeros(d), 0.0, SparseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+    // Global model uses Dense Vectors by default
+    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
 
     val numPartitions: Int =
-      if (solverOptions.enableManualPartitionSize)
-        solverOptions.NUM_PART
-      else
-        data.partitions.size
+      data.partitions.size
 
     /**
-     *  Create two RDDs:
+     *  Create three RDDs:
      *  1. indexedTrainData = (Index, LabeledObject) and
      *  2. indexedPrimals (Index, Primal) where Primal = (w_i, l_i) <- This changes in each round
      *  3. indexedCacheRDD (Index, BoundedCacheList)
      */
-    val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until dataSize).toArray.zip(
-      Array.fill(dataSize)((SparseVector.zeros[Double](d), 0.0)) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
-      )
-
     val indexedTrainDataRDD: RDD[(Index, LabeledObject[X, Y])] =
       data.zipWithIndex().map {
         case (labeledObject, idx) =>
           (idx.toInt, labeledObject)
       }
 
+    val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until dataSize).toArray.zip(
+      // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
+      Array.fill(dataSize)((
+        if (solverOptions.sparse) // w_i can be either Sparse or Dense 
+          SparseVector.zeros[Double](d)
+        else
+          DenseVector.zeros[Double](d),
+        0.0)))
     var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, numPartitions)
+    indexedPrimalsRDD.checkpoint()
 
     // For each Primal (i.e, Index), cache a list of Decodings (i.e, Vector[Double])
     // If cache is disabled, add an empty array. This immediately drops the joins later on and saves time in communicating an unnecessary RDD.
@@ -76,11 +75,9 @@ class DBCFWSolver[X, Y](
           )
       else
         Array[(Index, BoundedCacheList[Y])]()
-
     var indexedCacheRDD: RDD[(Index, BoundedCacheList[Y])] = sc.parallelize(indexedCache, numPartitions)
 
-    indexedPrimalsRDD.checkpoint()
-
+    
     debugSb ++= "# indexedTrainDataRDD.partitions.size=%d\n".format(indexedTrainDataRDD.partitions.size)
     debugSb ++= "# indexedPrimalsRDD.partitions.size=%d\n".format(indexedPrimalsRDD.partitions.size)
 
@@ -103,73 +100,12 @@ class DBCFWSolver[X, Y](
 
     println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.numPasses, solverOptions.lambda))
 
-    var avgDecodeTime: Double = 0.0
-    var avgCommunicationTime: Double = 0.0
-    /**
-     * Monitoring round
-     * In this mode, the optimal H and numPasses is calculated based on:
-     * a. Time taken for decoding
-     * b. Time taken for a single round of communication
-     */
-    if (solverOptions.autoconfigure) {
-
-      /**
-       * Obtain average time required to decode
-       */
-      val decodeTimings =
-        for (i <- 0 until NUM_DECODING_SAMPLES) yield {
-          var randModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.rand(d), Math.random(), DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
-          var sampled_i = util.Random.nextInt(dataSize)
-
-          val startDecodingTime = System.currentTimeMillis()
-          oracleFn(randModel, samplePoint.label, samplePoint.pattern)
-          val endDecodingTime = System.currentTimeMillis()
-
-          endDecodingTime - startDecodingTime
-        }
-      avgDecodeTime = decodeTimings.reduce((t1, t2) => t1 + t2).toDouble / NUM_DECODING_SAMPLES
-
-      /**
-       * Obtain average time required to finish 1 round of communication
-       *
-       * Run a dummy map-reduce job to get the timings
-       */
-      def dummyOracle(model: StructSVMModel[X, Y], yi: Y, xi: X): Y = yi
-
-      val communicationTimings =
-        for (i <- 0 until NUM_COMMN_SAMPLES) yield {
-
-          // Run Mapper
-          val temp: RDD[(StructSVMModel[X, Y], Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))], StructSVMModel[X, Y])] = indexedTrainDataRDD.sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
-            .join(indexedPrimalsRDD)
-            .leftOuterJoin(indexedCacheRDD)
-            .mapValues {
-              case ((labeledObject, primalInfo), boundedCacheList) => (labeledObject, primalInfo, boundedCacheList) // Flatten values for readability
-            }
-            .mapPartitions(x => mapper(x, globalModel, featureFn, lossFn, dummyOracle,
-              predictFn, solverOptions, miniBatchEnabled), preservesPartitioning = true)
-
-          // Finish Reducer. Thus, finish one round of communication
-          val startCommunicationTime = System.currentTimeMillis()
-          val reducedData: (StructSVMModel[X, Y], RDD[(Index, PrimalInfo)], RDD[(Index, BoundedCacheList[Y])]) = reducer(temp, indexedPrimalsRDD, indexedCacheRDD, globalModel, d, beta = 1.0)
-          val endCommunicationTime = System.currentTimeMillis()
-
-          endCommunicationTime - startCommunicationTime
-        }
-      avgCommunicationTime = communicationTimings.reduce((t1, t2) => t1 + t2).toDouble / NUM_COMMN_SAMPLES
-
-      /**
-       * Given the average time to decode samples and communicate, figure out values of H and numPasses
-       */
-      /*println("Average decoding time: %f".format(avgDecodeTime))
-      println("Average communication time: %f".format(avgCommunicationTime))*/
-
-    }
-
-    // logger.info("[DATA] round,time,train_error,test_error")
     val startTime = System.currentTimeMillis()
     debugSb ++= "round,time,primal,dual,gap,train_error,test_error\n"
 
+    /**
+     * ==== Begin Training rounds ====
+     */
     for (roundNum <- 1 to solverOptions.numPasses) {
       /**
        * Mapper
@@ -215,12 +151,9 @@ class DBCFWSolver[X, Y](
       debugSb ++= "%d,%d,%f,%f,%f,%f,%f\n".format(roundNum, curTime, primal, f, gap, trainError, testError)
     }
 
-    println("Average decoding time: %f".format(avgDecodeTime))
-    println("Average communication time: %f".format(avgCommunicationTime))
-
     println("globalModel.weights is sparse - " + globalModel.getWeights.isInstanceOf[SparseVector[Double]])
     println("w_i is sparse - " + indexedPrimalsRDD.first._2._1.isInstanceOf[SparseVector[Double]])
-    
+
     (globalModel, debugSb.toString())
   }
 

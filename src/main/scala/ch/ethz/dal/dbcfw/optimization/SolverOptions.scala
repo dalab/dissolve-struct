@@ -18,10 +18,10 @@ class SolverOptions[X, Y] extends Serializable {
   var sample: String = "perm"
   var debugMultiplier: Int = 0
   var lambda: Double = 0.01 // FIXME This is 1/n in Matlab code
-  
+
   var testData: Option[Seq[LabeledObject[X, Y]]] = Option.empty[Seq[LabeledObject[X, Y]]]
   var testDataRDD: Option[RDD[LabeledObject[X, Y]]] = Option.empty[RDD[LabeledObject[X, Y]]]
-  
+
   var doLineSearch: Boolean = false
 
   // Cache params
@@ -46,6 +46,9 @@ class SolverOptions[X, Y] extends Serializable {
   var debugWeights: Boolean = false
   // Dump loss through iterations
   var debugLoss: Boolean = true
+
+  // Sparse representation of w_i's
+  var sparse: Boolean = false
 
   // Path to write the CSVs
   var debugInfoPath: String = new File(".").getCanonicalPath() + "/debugInfo-%d.csv".format(System.currentTimeMillis())
