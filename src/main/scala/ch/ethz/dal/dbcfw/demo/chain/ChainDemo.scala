@@ -189,6 +189,7 @@ object ChainDemo extends LogHelper {
 
   /**
    * Log decode, with forward and backward passes
+   * (works for both loss-augmented or not, just takes the given potentials)
    * Was ist das?
    */
   def logDecode(logNodePotMat: Matrix[Double], logEdgePotMat: Matrix[Double]): Vector[Double] = {
@@ -274,6 +275,7 @@ object ChainDemo extends LogHelper {
 
   /**
    * The Maximization Oracle
+   * y_i (true label) is used for Loss Augmentation
    */
   def oracleFnWithDecode(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double],
     decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
@@ -301,7 +303,7 @@ object ChainDemo extends LogHelper {
     val l: Int = yi.size
     for (i <- 0 until numVars) {
       thetaUnary(::, i) := thetaUnary(::, i) + 1.0 / l
-      val idx = yi(i).toInt
+      val idx = yi(i).toInt // Loss augmentation
       thetaUnary(idx, i) = thetaUnary(idx, i) - 1.0 / l
     }
 
@@ -318,7 +320,7 @@ object ChainDemo extends LogHelper {
     oracleFnWithDecode(model, yi, xi, bpDecode)
     
   /**
-   * Loss function
+   * Predict (this could use (non-loss-augmented) decoding
    *
    * TODO
    * * Use MaxOracle instead of this (Use yi: Option<Vector[Double]>)
