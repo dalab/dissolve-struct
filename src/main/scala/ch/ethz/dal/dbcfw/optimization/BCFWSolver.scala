@@ -206,6 +206,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
             debugModel.updateWeights(model.getWeights)
             debugModel.updateEll(ell)
           }
+          
           val f = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), lambda)
           val gapTup = SolverUtils.dualityGap(data, phi, lossFn, maxOracle, debugModel, lambda)
           val gap = gapTup._1
@@ -216,7 +217,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
             println("wMat after pass: " + model.getWeights()(0 to 10).toDenseVector)
             println("ellmat after pass: " + ellMat(0 to 10))
             println("Ell after pass = " + ell)
-            
+
             debugSb ++= "# sum(w): %f, ell: %f\n".format(debugModel.getWeights().sum, debugModel.getEll())
           }
 
