@@ -29,7 +29,6 @@ class SSGSolver[X, Y](
   val numPasses = solverOptions.numPasses
   val lambda = solverOptions.lambda
   val debugOn: Boolean = solverOptions.debug
-  val xldebug: Boolean = solverOptions.xldebug
 
   val maxOracle = oracleFn
   val phi = featureFn
@@ -100,9 +99,8 @@ class SSGSolver[X, Y](
         val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
         val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
 
-        if (xldebug && dummy == (n - 1))
+        if (debugOn && dummy == (n - 1))
           csvwrite(new File("data/debug/scala-w-%d.csv".format(passNum + 1)), w_s.toDenseVector.toDenseMatrix)
-        // csvwrite(new File("data/debug/scala-w.csv"), w_s.toDenseVector.toDenseMatrix)
 
         // 4) Step size gamma
         val gamma: Double = 1.0 / (k + 1.0)

@@ -40,8 +40,6 @@ class SolverOptions[X, Y] extends Serializable {
   // For debugging/Testing purposes
   // Basic debugging flag
   var debug: Boolean = false
-  // More verbose debugging flag
-  var xldebug: Boolean = false
   // Write weights to CSV after each pass
   var debugWeights: Boolean = false
   // Dump loss through iterations

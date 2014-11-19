@@ -43,7 +43,6 @@ class BCFWRegression extends FunSpec {
       solverOptions.doLineSearch = true
 
       solverOptions.debug = true
-      solverOptions.xldebug = false
       solverOptions.debugWeights = true
 
       val trainer: StructSVMWithBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithBCFW(train_data,

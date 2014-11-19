@@ -154,7 +154,6 @@ object DBCFWStructBinaryDemo {
 
     solverOptions.numPasses = 3 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = false
-    solverOptions.xldebug = false
     solverOptions.lambda = 0.01
     solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true

@@ -40,7 +40,7 @@ object DissolveUtils {
     ) {
 
       // Create a Sparse Matrix by default. Later call the toDense method, in case we need a Dense Matrix instead
-      val vb = VectorBuilder[Double]()
+      val vb = new VectorBuilder[Double](ndims)
 
       // Store label as a single-element dense vector
       val content: Array[String] = line.split(" ")
@@ -54,7 +54,7 @@ object DissolveUtils {
         .map(pair => (pair(0).toInt, pair(1).toDouble)) // x is the index and y is the corresponding value
         .map {
           case (idx, value) =>
-            vb(idx) = value
+            vb.add(idx - 1, value) // Convert 1-based indexing to 0-based indexing
         }
 
       data(idx) = new LabeledObject[Vector[Double], Double](label, vb.toVector)
@@ -65,7 +65,6 @@ object DissolveUtils {
     data
   }
 
-  
   def loadLibSVMBinaryFileHD(filename: String, sparse: Boolean = true, labelMap: Map[String, Int]): Vector[LabeledObject[Matrix[Double], Vector[Double]]] = {
     var n: Int = 0
     var ndims: Int = 0

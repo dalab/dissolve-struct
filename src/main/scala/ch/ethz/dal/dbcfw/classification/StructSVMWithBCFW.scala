@@ -10,6 +10,7 @@ import ch.ethz.dal.dbcfw.regression.LabeledObject
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import ch.ethz.dal.dbcfw.optimization.BCFWSolver
 import scala.reflect.ClassTag
+import java.io.FileWriter
 
 /**
  * Analogous to BCFWSolver
@@ -27,20 +28,26 @@ class StructSVMWithBCFW[X, Y](
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val solverOptions: SolverOptions[X, Y]) {
 
-  /*val optimizer: SSGSolver = new SSGSolver(data,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
-      lambda,
-      numPasses)*/
-
-  def trainModel()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] =
-    new BCFWSolver(data,
+  def trainModel()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
+    val (trainedModel, debugInfo) = new BCFWSolver(data,
       featureFn,
       lossFn,
       oracleFn,
       predictFn,
       solverOptions).optimize()
+
+    // Dump debug information into a file
+    val fw = new FileWriter(solverOptions.debugInfoPath)
+    // Write the current parameters being used
+    fw.write("# BCFW\n")
+    fw.write(solverOptions.toString())
+    fw.write("\n")
+
+    // Write values noted from the run
+    fw.write(debugInfo)
+    fw.close()
+
+    trainedModel
+  }
 
 }

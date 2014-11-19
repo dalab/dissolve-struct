@@ -34,6 +34,8 @@ class DBCFWSolver[X, Y](
 
     val samplePoint = data.first()
     val dataSize = data.count().toInt
+    
+    val verboseDebug: Boolean = false
 
     val d: Int = featureFn(samplePoint.label, samplePoint.pattern).size
     // Let the initial model contain zeros for all weights
@@ -77,7 +79,6 @@ class DBCFWSolver[X, Y](
         Array[(Index, BoundedCacheList[Y])]()
     var indexedCacheRDD: RDD[(Index, BoundedCacheList[Y])] = sc.parallelize(indexedCache, numPartitions)
 
-    
     debugSb ++= "# indexedTrainDataRDD.partitions.size=%d\n".format(indexedTrainDataRDD.partitions.size)
     debugSb ++= "# indexedPrimalsRDD.partitions.size=%d\n".format(indexedPrimalsRDD.partitions.size)
 
@@ -145,15 +146,19 @@ class DBCFWSolver[X, Y](
       val gap = gapTup._1
       val primal = f + gap
 
+      if(verboseDebug)
+        debugSb ++= "# sum(w): %f, ell: %f\n".format(debugModel.getWeights().sum, debugModel.getEll())
+
       // logger.info("[DATA] %d,%f,%f,%f\n".format(roundNum, elapsedTime, trainError, testError))
       println("[Round #%d] Train loss = %f, Test loss = %f, Primal = %f, Gap = %f\n".format(roundNum, trainError, testError, primal, gap))
       val curTime = (System.currentTimeMillis() - startTime) / 1000
       debugSb ++= "%d,%d,%f,%f,%f,%f,%f\n".format(roundNum, curTime, primal, f, gap, trainError, testError)
     }
 
-    println("globalModel.weights is sparse - " + globalModel.getWeights.isInstanceOf[SparseVector[Double]])
-    println("w_i is sparse - " + indexedPrimalsRDD.first._2._1.isInstanceOf[SparseVector[Double]])
-
+    if (verboseDebug) {
+      println("globalModel.weights is sparse - " + globalModel.getWeights.isInstanceOf[SparseVector[Double]])
+      println("w_i is sparse - " + indexedPrimalsRDD.first._2._1.isInstanceOf[SparseVector[Double]])
+    }
     (globalModel, debugSb.toString())
   }
 
@@ -174,7 +179,8 @@ class DBCFWSolver[X, Y](
     val numPasses = solverOptions.numPasses
     val lambda = solverOptions.lambda
     val debugOn: Boolean = solverOptions.debug
-    val xldebug: Boolean = solverOptions.xldebug
+
+    val verboseDebug: Boolean = false
 
     /**
      * Reorganize data for training
@@ -224,7 +230,12 @@ class DBCFWSolver[X, Y](
     val prevEllMat: Vector[Double] = ellMat.copy
 
     var ell: Double = localModel.getEll()
-    localModel.updateEll(0.0)
+
+    if (verboseDebug) {
+      println("wMat before pass: " + localModel.getWeights()(0 to 10).toDenseVector)
+      println("ellmat before pass: " + ellMat(0 to 10).toDenseVector)
+      println("Ell before pass = " + ell)
+    }
 
     // Initialization in case of Weighted Averaging
     var wAvg: Vector[Double] =
@@ -334,6 +345,12 @@ class DBCFWSolver[X, Y](
 
       k = k + 1
 
+    }
+
+    if (verboseDebug) {
+      println("wMat after pass: " + localModel.getWeights()(0 to 10).toDenseVector)
+      println("ellmat after pass: " + ellMat(0 to 10).toDenseVector)
+      println("Ell after pass = " + ell)
     }
 
     if (solverOptions.doWeightedAveraging) {

@@ -414,16 +414,17 @@ object ChainDemo extends LogHelper {
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions();
     solverOptions.numPasses = 3
     solverOptions.debug = true
-    solverOptions.xldebug = false
     solverOptions.lambda = 0.01
-    solverOptions.doWeightedAveraging = false
+    solverOptions.doWeightedAveraging = true
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = true
     solverOptions.testData = Some(test_data.toArray)
     
-    solverOptions.enableOracleCache = true
+    solverOptions.enableOracleCache = false
     solverOptions.oracleCacheSize = 10
-
+    
+    solverOptions.debugInfoPath = "/Users/tribhu/git/DBCFWstruct/debug/debug-bcfw-%d.csv".format(System.currentTimeMillis())
+    
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
       lossFn,
@@ -482,7 +483,6 @@ object ChainDemo extends LogHelper {
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
     solverOptions.numPasses = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
-    solverOptions.xldebug = options.getOrElse("xldebug", "false").toBoolean
     solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
     solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
     solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
@@ -503,11 +503,14 @@ object ChainDemo extends LogHelper {
      * Some local overrides
      */
     solverOptions.sampleFrac = 1.0
-    solverOptions.enableOracleCache = true
+    solverOptions.enableOracleCache = false
     solverOptions.oracleCacheSize = 10
     solverOptions.numPasses = 3
     solverOptions.enableManualPartitionSize = true
-    solverOptions.NUM_PART = 2
+    solverOptions.NUM_PART = 1
+    solverOptions.doWeightedAveraging = true
+    
+    solverOptions.debugInfoPath = "/Users/tribhu/git/DBCFWstruct/debug/debug-dissolve-%d.csv".format(System.currentTimeMillis())
     
     println("# PERC_TRAIN=%f".format(PERC_TRAIN))
     println(solverOptions.toString())
@@ -517,7 +520,6 @@ object ChainDemo extends LogHelper {
      */
     val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
     val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
-    solverOptions.testData = Some(testDataUnord.toArray)
 
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
@@ -533,6 +535,8 @@ object ChainDemo extends LogHelper {
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
+    
+    solverOptions.testDataRDD = Some(sc.parallelize(testDataUnord.toArray, solverOptions.NUM_PART))
 
     val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
       sc.parallelize(train_data, solverOptions.NUM_PART),
@@ -648,7 +652,7 @@ object ChainDemo extends LogHelper {
 
     chainDBCFWCoCoA(options)
 
-    // chainBCFW()
+    chainBCFW()
   }
 
 }

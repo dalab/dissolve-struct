@@ -39,7 +39,8 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
   val numPasses = solverOptions.numPasses
   val lambda = solverOptions.lambda
   val debugOn: Boolean = solverOptions.debug
-  val xldebug: Boolean = solverOptions.xldebug
+
+  val debugSb: StringBuilder = new StringBuilder()
 
   val maxOracle = oracleFn
   val phi = featureFn
@@ -47,12 +48,13 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
   val ndims: Int = phi(data(0).label, data(0).pattern).size
 
   val eps: Double = 2.2204E-16
-  val lossWriterFileName = "data/debug/bcfw-loss.csv"
 
   /**
    * BCFW optimizer
    */
-  def optimize()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
+  def optimize()(implicit m: ClassTag[Y]): (StructSVMModel[X, Y], String) = {
+
+    val verboseDebug: Boolean = false
 
     /* Initialization */
     var k: Integer = 0
@@ -79,12 +81,11 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     }
     val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
 
-    val lossWriter = if (solverOptions.debugLoss) new PrintWriter(new File(lossWriterFileName)) else null
     if (solverOptions.debugLoss) {
       if (solverOptions.testData != null)
-        lossWriter.write("round,time,iter,primal,dual,gap,train_error,test_error\n")
+        debugSb ++= "round,time,iter,primal,dual,gap,train_error,test_error\n"
       else
-        lossWriter.write("round,time,iter,primal,dual,gap,train_error\n")
+        debugSb ++= "round,time,iter,primal,dual,gap,train_error\n"
     }
     val startTime = System.currentTimeMillis()
 
@@ -96,6 +97,12 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     var oracleCache = collection.mutable.Map[Int, MutableList[Y]]()
 
     for (passNum <- 0 until numPasses) {
+
+      if (verboseDebug) {
+        println("wMat before pass: " + model.getWeights()(0 to 10).toDenseVector)
+        println("ellmat before pass: " + ellMat(0 to 10))
+        println("Ell before pass = " + ell)
+      }
 
       for (dummy <- 0 until n) {
         // 1) Pick example
@@ -197,31 +204,39 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
             debugModel.updateEll(lAvg)
           } else {
             debugModel.updateWeights(model.getWeights)
-            debugModel.updateEll(model.getEll)
+            debugModel.updateEll(ell)
           }
-          val f = -SolverUtils.objectiveFunction(debugModel.getWeights, debugModel.getEll, lambda)
+          val f = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), lambda)
           val gapTup = SolverUtils.dualityGap(data, phi, lossFn, maxOracle, debugModel, lambda)
           val gap = gapTup._1
           val primal = f + gap
           val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
 
+          if (verboseDebug) {
+            println("wMat after pass: " + model.getWeights()(0 to 10).toDenseVector)
+            println("ellmat after pass: " + ellMat(0 to 10))
+            println("Ell after pass = " + ell)
+          }
+
+          debugSb ++= "# sum(w): %f, ell: %f\n".format(debugModel.getWeights().sum, debugModel.getEll())
+
           val curTime = (System.currentTimeMillis() - startTime) / 1000.0
 
           if (solverOptions.testData != null) {
-            val testError = 
-              if(solverOptions.testData.isDefined)
+            val testError =
+              if (solverOptions.testData.isDefined)
                 SolverUtils.averageLoss(solverOptions.testData.get, lossFn, predictFn, debugModel)
               else
                 0.00
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError, testError))
             if (solverOptions.debugLoss)
-              lossWriter.write("%d,%f,%d,%f,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError, testError))
+              debugSb ++= "%d,%f,%d,%f,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError, testError)
           } else {
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError))
             if (solverOptions.debugLoss)
-              lossWriter.write("%d,%f,%d,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError))
+              debugSb ++= "%d,%f,%d,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError)
           }
 
           debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
@@ -238,10 +253,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
       model.updateEll(ell)
     }
 
-    if (lossWriter != null)
-      lossWriter.close()
-
-    return model
+    return (model, debugSb.toString())
   }
 
 }
