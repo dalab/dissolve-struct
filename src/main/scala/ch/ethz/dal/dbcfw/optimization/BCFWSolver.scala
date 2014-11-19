@@ -216,9 +216,9 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
             println("wMat after pass: " + model.getWeights()(0 to 10).toDenseVector)
             println("ellmat after pass: " + ellMat(0 to 10))
             println("Ell after pass = " + ell)
+            
+            debugSb ++= "# sum(w): %f, ell: %f\n".format(debugModel.getWeights().sum, debugModel.getEll())
           }
-
-          debugSb ++= "# sum(w): %f, ell: %f\n".format(debugModel.getWeights().sum, debugModel.getEll())
 
           val curTime = (System.currentTimeMillis() - startTime) / 1000.0
 
