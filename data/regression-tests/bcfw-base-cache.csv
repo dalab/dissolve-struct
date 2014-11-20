@@ -1,0 +1,22 @@
+# BCFW
+# numPasses=5
+# doWeightedAveraging=false
+# randSeed=42
+# sample=perm
+# lambda=0.010000
+# doLineSearch=true
+# enableManualPartitionSize=false
+# NUM_PART=1
+# enableOracleCache=true
+# oracleCacheSize=10
+# H=5
+# sampleFrac=0.500000
+# sampleWithReplacement=false
+# debugInfoPath=/Users/tribhu/git/DBCFWstruct/debug/debug-bcfw-1416414185362.csv
+
+round,time,iter,primal,dual,gap,train_error,test_error
+1,0.761000,312,0.740438,0.004261,0.736177,0.289614,0.382340
+2,1.756000,624,0.619814,0.005358,0.614455,0.220483,0.339086
+3,2.816000,936,0.547373,0.006040,0.541333,0.186888,0.315781
+4,3.741000,1248,0.502321,0.006678,0.495643,0.167291,0.294808
+5,4.692000,1560,0.461032,0.007274,0.453758,0.158045,0.284424

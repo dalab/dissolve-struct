@@ -1,0 +1,29 @@
+# numPasses=5
+# doWeightedAveraging=true
+# randSeed=42
+# sample=frac
+# lambda=0.010000
+# doLineSearch=true
+# enableManualPartitionSize=true
+# NUM_PART=4
+# enableOracleCache=true
+# oracleCacheSize=10
+# H=5
+# sampleFrac=0.500000
+# sampleWithReplacement=false
+# debugInfoPath=/Users/tribhu/git/DBCFWstruct/debug/debug-dissolve-1416475800888.csv
+
+# spark.app.name=Chain-DBCFW
+# spark.executor.memory=NA
+# spark.task.cpus=NA
+# spark.local.dir=NA
+# spark.default.parallelism=NA
+
+# indexedTrainDataRDD.partitions.size=4
+# indexedPrimalsRDD.partitions.size=4
+round,time,primal,dual,gap,train_error,test_error
+1,6,0.949089,0.000614,0.948474,0.423528,0.483519
+2,9,0.904272,0.000989,0.903284,0.380705,0.450028
+3,12,0.879400,0.001221,0.878179,0.360667,0.436719
+4,15,0.852875,0.001393,0.851483,0.342916,0.422211
+5,19,0.826390,0.001539,0.824851,0.329641,0.407550
