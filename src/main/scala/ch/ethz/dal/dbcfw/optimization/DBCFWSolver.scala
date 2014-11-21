@@ -68,7 +68,7 @@ class DBCFWSolver[X, Y](
     var indexedPrimalsRDD: RDD[(Index, PrimalInfo)] = sc.parallelize(indexedPrimals, numPartitions)
     indexedPrimalsRDD.checkpoint()
 
-    // For each Primal (i.e, Index), cache a list of Decodings (i.e, Vector[Double])
+    // For each Primal (i.e, Index), cache a list of Decodings (i.e, Y's)
     // If cache is disabled, add an empty array. This immediately drops the joins later on and saves time in communicating an unnecessary RDD.
     val indexedCache: Array[(Index, BoundedCacheList[Y])] =
       if (solverOptions.enableOracleCache)
@@ -234,6 +234,10 @@ class DBCFWSolver[X, Y](
         case (index, (labeledObject, primalInfo, boundedCacheList)) => oracleCache(globalToLocal(index)) = boundedCacheList.get
       }
 
+    // Keep track of how many decodings were weak
+    var numWeakDecodings = 0
+    var totalDecodings = 0
+
     val maxOracle = oracleFn
     val phi = featureFn
     // Number of dimensions of \phi(x, y)
@@ -330,6 +334,7 @@ class DBCFWSolver[X, Y](
         } else {
           bestCachedCandidateForI.get
         }
+      totalDecodings += 1
 
       // 3) Define the update quantities
       val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
@@ -347,6 +352,12 @@ class DBCFWSolver[X, Y](
         } else {
           (2.0 * n) / (k + 2.0 * n)
         }
+
+      if (gamma < 0.5) {
+        numWeakDecodings += 1
+        println("[WARN] Weak decoding resulted in gamma = %f, expected gamma >= 0.5.".format(gamma))
+        println("[WARN] %d/%d decodings have been weak so far in this round.".format(numWeakDecodings, totalDecodings))
+      }
 
       // 5, 6, 7, 8) Update the weights of the model
       if (miniBatchEnabled) {
