@@ -16,7 +16,7 @@ import ch.ethz.dal.dbcfw.optimization.SolverUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 
-import breeze.linalg.{ Vector, SparseVector }
+import breeze.linalg.{ Vector, SparseVector, DenseVector }
 
 /**
  * @author tribhu
@@ -55,8 +55,13 @@ object BinarySVMWithDBCFW {
    */
   def oracleFn(model: StructSVMModel[Vector[Double], Double], yi: Double, xi: Vector[Double]): Double = {
 
-    val yPredict = xi dot model.getWeights()
-    lossFn(yi, yPredict) - (model.getWeights() dot featureFn(yi, xi))
+    val yPredict = predictFn(model, xi)
+
+    if (yPredict == yi)
+      -yi
+    else
+      yi
+
   }
 
   /**
@@ -91,6 +96,8 @@ object BinarySVMWithDBCFW {
         objectifiedData.repartition(solverOptions.NUM_PART)
       else
         objectifiedData
+
+    println(solverOptions)
 
     val (trainedModel, debugInfo) = new DBCFWSolver[Vector[Double], Double](
       repartData,
@@ -136,7 +143,11 @@ object BinarySVMWithDBCFW {
     val objectifiedData: RDD[LabeledObject[Vector[Double], Double]] =
       data.map {
         case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], Double](x.label, SparseVector(x.features.toArray))
+          new LabeledObject[Vector[Double], Double](x.label,
+            if (solverOptions.sparse)
+              SparseVector(x.features.toArray)
+            else
+              DenseVector(x.features.toArray))
       }
 
     val repartData =
@@ -144,6 +155,8 @@ object BinarySVMWithDBCFW {
         objectifiedData.repartition(solverOptions.NUM_PART)
       else
         objectifiedData
+
+    println(solverOptions)
 
     val (trainedModel, debugInfo) = new DBCFWSolver[Vector[Double], Double](
       repartData,
