@@ -107,10 +107,6 @@ object SolverUtils {
 
     val n: Int = data.count().toInt
     val d: Int = model.getWeights().size
-    val yStars = data.map {
-      case datapoint =>
-        maxOracle(model, datapoint.label, datapoint.pattern)
-    }
 
     var (w_s, ell_s) = data.map {
       case datapoint =>
