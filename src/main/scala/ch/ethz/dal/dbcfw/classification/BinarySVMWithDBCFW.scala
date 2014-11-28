@@ -32,7 +32,7 @@ object BinarySVMWithDBCFW {
    *
    */
   def featureFn(y: Double, x: Vector[Double]): Vector[Double] = {
-    x :* y
+    x * y
   }
 
   /**
@@ -51,17 +51,30 @@ object BinarySVMWithDBCFW {
    * Maximization Oracle
    *
    * Want: max L(y_i, y) - <w, psi_i(y)>
-   * This returns a negative value in case of a correct prediction and positive in case of a false prediction
+   * This returns the most violating (Loss-augmented) label.
    */
   def oracleFn(model: StructSVMModel[Vector[Double], Double], yi: Double, xi: Vector[Double]): Double = {
 
-    val yPredict = predictFn(model, xi)
+    val weights = model.getWeights()
 
-    if (yPredict == yi)
-      -yi
+    var score_neg1 = weights dot featureFn(-1.0, xi)
+    var score_pos1 = weights dot featureFn(1.0, xi)
+
+    // Loss augment the scores
+    score_neg1 += 1.0
+    score_pos1 += 1.0
+
+    if (yi == -1.0)
+      score_neg1 -= 1.0
+    else if (yi == 1.0)
+      score_pos1 -= 1.0
     else
-      yi
+      throw new IllegalArgumentException("yi not in [-1, 1], yi = " + yi)
 
+    if (score_neg1 > score_pos1)
+      -1.0
+    else
+      1.0
   }
 
   /**
@@ -71,10 +84,14 @@ object BinarySVMWithDBCFW {
 
     val weights = model.getWeights()
 
-    if ((weights dot featureFn(1.0, xi)) > (weights dot featureFn(-1.0, xi)))
-      1.0
-    else
+    val score_neg1 = weights dot featureFn(-1.0, xi)
+    val score_pos1 = weights dot featureFn(1.0, xi)
+
+    if (score_neg1 > score_pos1)
       -1.0
+    else
+      +1.0
+
   }
 
   /**
