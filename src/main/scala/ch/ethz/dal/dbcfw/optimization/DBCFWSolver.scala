@@ -24,6 +24,17 @@ class DBCFWSolver[X, Y](
   val miniBatchEnabled: Boolean) extends Serializable {
 
   /**
+   * Some case classes to make code more readable
+   */
+  case class DataShard[X, Y](data: LabeledObject[X, Y], primalInfo: PrimalInfo, cache: Option[BoundedCacheList[Y]])
+  case class LocalIndexedPrimalsCache[Y](primalInfo: PrimalInfo, cache: Option[BoundedCacheList[Y]])
+  case class LocalProcessedShard[X, Y](localModel: StructSVMModel[X, Y],
+                                       localIndexedDeltaPrimals: Array[(Index, LocalIndexedPrimalsCache[Y])],
+                                       deltaLocalModel: StructSVMModel[X, Y],
+                                       localWeightedAAvgOfPrimals: PrimalInfo,
+                                       k: Int)
+
+  /**
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
    */
   def optimize()(implicit m: ClassTag[Y]): (StructSVMModel[X, Y], String) = {
@@ -40,7 +51,7 @@ class DBCFWSolver[X, Y](
     val d: Int = featureFn(samplePoint.label, samplePoint.pattern).size
     // Let the initial model contain zeros for all weights
     // Global model uses Dense Vectors by default
-    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn, solverOptions.numClasses)
 
     val numPartitions: Int =
       data.partitions.size
@@ -127,11 +138,11 @@ class DBCFWSolver[X, Y](
       /**
        * Mapper
        */
-      val temp: RDD[(StructSVMModel[X, Y], Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))], StructSVMModel[X, Y], PrimalInfo, Int)] = indexedTrainDataRDD.sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
+      val temp: RDD[LocalProcessedShard[X, Y]] = indexedTrainDataRDD.sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
         .join(indexedPrimalsRDD)
         .leftOuterJoin(indexedCacheRDD)
         .mapValues {
-          case ((labeledObject, primalInfo), boundedCacheList) => (labeledObject, primalInfo, boundedCacheList) // Flatten values for readability
+          case ((labeledObject, primalInfo), boundedCacheList) => DataShard(labeledObject, primalInfo, boundedCacheList) // Flatten values for readability
         }
         .mapPartitions(x => mapper(x, globalModel, featureFn, lossFn, oracleFn,
           predictFn, solverOptions, weightedAveragesOfPrimals, iterCount, miniBatchEnabled), preservesPartitioning = true)
@@ -157,6 +168,11 @@ class DBCFWSolver[X, Y](
         debugModel.updateEll(weightedAveragesOfPrimals._2)
       }
 
+      if (verboseDebug) {
+        println("Model weights: " + debugModel.getWeights()(0 to 5).toDenseVector)
+        debugSb ++= "Model weights: " + debugModel.getWeights()(0 to 5).toDenseVector + "\n"
+      }
+
       val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
       val testError =
         if (solverOptions.testDataRDD.isDefined)
@@ -168,6 +184,8 @@ class DBCFWSolver[X, Y](
       val gapTup = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda)
       val gap = gapTup._1
       val primal = f + gap
+
+      // assert(gap >= 0.0, "Gap is negative")
 
       if (verboseDebug)
         debugSb ++= "# sum(w): %f, ell: %f\n".format(debugModel.getWeights().sum, debugModel.getEll())
@@ -193,7 +211,7 @@ class DBCFWSolver[X, Y](
   /**
    * Takes as input a set of data and builds a SSVM model trained using BCFW
    */
-  def mapper(dataIterator: Iterator[(Index, (LabeledObject[X, Y], PrimalInfo, Option[BoundedCacheList[Y]]))],
+  def mapper(dataIterator: Iterator[(Index, DataShard[X, Y])],
              localModel: StructSVMModel[X, Y],
              featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
              lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
@@ -202,8 +220,7 @@ class DBCFWSolver[X, Y](
              solverOptions: SolverOptions[X, Y],
              averagedPrimalInfo: PrimalInfo,
              iterCount: Int,
-             miniBatchEnabled: Boolean): Iterator[(StructSVMModel[X, Y], Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))], StructSVMModel[X, Y], PrimalInfo, Int // weighted average model
-             )] = {
+             miniBatchEnabled: Boolean): Iterator[LocalProcessedShard[X, Y]] = {
 
     val prevModel: StructSVMModel[X, Y] = localModel.clone()
 
@@ -216,8 +233,8 @@ class DBCFWSolver[X, Y](
     /**
      * Reorganize data for training
      */
-    val zippedData: Array[(Index, (LabeledObject[X, Y], PrimalInfo, Option[BoundedCacheList[Y]]))] = dataIterator.toArray.sortBy(_._1)
-    val data: Array[LabeledObject[X, Y]] = zippedData.map(x => x._2._1)
+    val zippedData: Array[(Index, DataShard[X, Y])] = dataIterator.toArray.sortBy(_._1)
+    val data: Array[LabeledObject[X, Y]] = zippedData.map(x => x._2.data)
     val globalDataIdx: Array[Index] = zippedData.map(x => x._1)
     // Mapping of indexMapping(localIndex) -> globalIndex
     val localToGlobal: Array[Index] = zippedData.map(x => x._1)
@@ -231,7 +248,7 @@ class DBCFWSolver[X, Y](
     val oracleCache = collection.mutable.Map[Int, BoundedCacheList[Y]]()
     if (solverOptions.enableOracleCache)
       zippedData.map {
-        case (index, (labeledObject, primalInfo, boundedCacheList)) => oracleCache(globalToLocal(index)) = boundedCacheList.get
+        case (index, dataShard) => oracleCache(globalToLocal(index)) = dataShard.cache.get
       }
 
     // Keep track of how many decodings were weak
@@ -257,9 +274,9 @@ class DBCFWSolver[X, Y](
 
     // Copy w_i's and l_i's into local wMat and ellMat
     for (i <- 0 until n) {
-      wMat(i) = zippedData(i)._2._2._1
-      prevWMat(i) = zippedData(i)._2._2._1.copy
-      ellMat(i) = zippedData(i)._2._2._2
+      wMat(i) = zippedData(i)._2.primalInfo._1
+      prevWMat(i) = zippedData(i)._2.primalInfo._1.copy
+      ellMat(i) = zippedData(i)._2.primalInfo._2
     }
 
     val prevEllMat: Vector[Double] = ellMat.copy
@@ -267,8 +284,8 @@ class DBCFWSolver[X, Y](
     var ell: Double = localModel.getEll()
 
     if (verboseDebug) {
-      println("wMat before pass: " + localModel.getWeights()(0 to 10).toDenseVector)
-      println("ellmat before pass: " + ellMat(0 to 10).toDenseVector)
+      println("wMat before pass: " + localModel.getWeights()(0 to 5).toDenseVector)
+      println("ellmat before pass: " + ellMat(0 to min(ellMat.size, 5)).toDenseVector)
       println("Ell before pass = " + ell)
     }
 
@@ -355,8 +372,8 @@ class DBCFWSolver[X, Y](
 
       if (gamma < 0.5) {
         numWeakDecodings += 1
-        println("[WARN] Weak decoding resulted in gamma = %f, expected gamma >= 0.5.".format(gamma))
-        println("[WARN] %d/%d decodings have been weak so far in this round.".format(numWeakDecodings, totalDecodings))
+        // println("[WARN] Weak decoding resulted in gamma = %f, expected gamma >= 0.5.".format(gamma))
+        // println("[WARN] %d/%d decodings have been weak so far in this round.".format(numWeakDecodings, totalDecodings))
       }
 
       // 5, 6, 7, 8) Update the weights of the model
@@ -393,16 +410,16 @@ class DBCFWSolver[X, Y](
     }
 
     if (verboseDebug) {
-      println("wMat after pass: " + localModel.getWeights()(0 to 10).toDenseVector)
-      println("ellmat after pass: " + ellMat(0 to 10).toDenseVector)
+      println("wMat after pass: " + localModel.getWeights()(0 to 5).toDenseVector)
+      println("ellmat after pass: " + ellMat(0 to min(ellMat.size, 5)).toDenseVector)
       println("Ell after pass = " + ell)
     }
 
     localModel.updateEll(ell)
 
-    val localIndexedDeltaPrimals: Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))] = zippedData.map(_._1).map(k =>
+    val localIndexedDeltaPrimals: Array[(Index, (LocalIndexedPrimalsCache[Y]))] = zippedData.map(_._1).map(k =>
       (k, // Index
-        (((wMat(globalToLocal(k)) - prevWMat(globalToLocal(k))), // PrimalInfo.w
+        LocalIndexedPrimalsCache(((wMat(globalToLocal(k)) - prevWMat(globalToLocal(k))), // PrimalInfo.w
           ellMat(globalToLocal(k)) - prevEllMat(globalToLocal(k))), // PrimalInfo.ell
           oracleCache.get(globalToLocal(k))))) // Cache
 
@@ -412,15 +429,17 @@ class DBCFWSolver[X, Y](
     localModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
     localModel.updateEll(localModel.getEll() - prevModel.getEll())
 
+    val localProcessedData = LocalProcessedShard(localModel, localIndexedDeltaPrimals, deltaLocalModel, localWeightedAverageOfPrimals, k)
+
     // Finally return a single element iterator
-    { List.empty[(StructSVMModel[X, Y], Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))], StructSVMModel[X, Y], PrimalInfo, Int)] :+ (localModel, localIndexedDeltaPrimals, deltaLocalModel, localWeightedAverageOfPrimals, k) }.iterator
+    { List.empty[(LocalProcessedShard[X, Y])] :+ localProcessedData }.iterator
   }
 
   /**
    * Takes as input a number of SVM Models, along with Primal information for each data point, and combines them into a single Model and Primal block
    */
   def reducer( // sc: SparkContext,
-    zippedModels: RDD[(StructSVMModel[X, Y], Array[(Index, (PrimalInfo, Option[BoundedCacheList[Y]]))], StructSVMModel[X, Y], PrimalInfo, Int)], // The optimize step returns k blocks. Each block contains (\Delta LocalModel, [\Delta PrimalInfo_i]).
+    zippedModels: RDD[LocalProcessedShard[X, Y]], // The optimize step returns k blocks. Each block contains (\Delta LocalModel, [\Delta PrimalInfo_i]).
     oldPrimalInfo: RDD[(Index, PrimalInfo)],
     oldCache: RDD[(Index, BoundedCacheList[Y])],
     oldGlobalModel: StructSVMModel[X, Y],
@@ -432,9 +451,9 @@ class DBCFWSolver[X, Y](
 
     // Here, map is applied k(=#workers) times
     val sumDeltaWeights =
-      zippedModels.map(model => model._1.getWeights()).reduce((deltaWeightA, deltaWeightB) => deltaWeightA + deltaWeightB)
+      zippedModels.map(model => model.localModel.getWeights()).reduce((deltaWeightA, deltaWeightB) => deltaWeightA + deltaWeightB)
     val sumDeltaElls =
-      zippedModels.map(model => model._1.getEll).reduce((ellA, ellB) => ellA + ellB)
+      zippedModels.map(model => model.localModel.getEll).reduce((ellA, ellB) => ellA + ellB)
 
     /**
      * Create the new global model
@@ -454,8 +473,8 @@ class DBCFWSolver[X, Y](
          */
         val sumNewWeightedAveragePrimals =
           zippedModels.map {
-            case (model, primalsAndCache, debugModel, averagedPrimalInfo, iterCount) =>
-              averagedPrimalInfo
+            case localProcessedShard =>
+              localProcessedShard.localWeightedAAvgOfPrimals
           }.reduce {
             case ((w1, ell1), (w2, ell2)) =>
               (w1 + w2, ell1 + ell2)
@@ -475,8 +494,8 @@ class DBCFWSolver[X, Y](
      * Average all the iterCounts and use this as the starting point for 'k' in the next mapper step
      */
     val newIterCount = (zippedModels.map {
-      case (model, primalsAndCache, debugModel, averagedPrimalInfo, iterCount) =>
-        iterCount
+      case localProcessedShard =>
+        localProcessedShard.k
     }
       .reduce((x, y) => x + y) / k).round.toInt
 
@@ -492,12 +511,12 @@ class DBCFWSolver[X, Y](
      * and   PrimalInfo_B = \Delta PrimalInfo_i
      */
     val primalsAndCache = zippedModels.flatMap {
-      case (model, primalsAndCache, debugModel, averagedPrimalInfo, iterCount) =>
-        primalsAndCache
+      case localProcessedShard =>
+        localProcessedShard.localIndexedDeltaPrimals
     }
 
     val indexedPrimals: RDD[(Index, PrimalInfo)] =
-      primalsAndCache.mapValues { case (primals, cache) => primals }
+      primalsAndCache.mapValues { case localIndexedPrimalsCache => localIndexedPrimalsCache.primalInfo }
         .rightOuterJoin(oldPrimalInfo)
         .mapValues {
           case (Some((newW, newEll)), (prevW, prevEll)) =>
@@ -508,7 +527,7 @@ class DBCFWSolver[X, Y](
 
     val indexedCache =
       if (solverOptions.enableOracleCache)
-        primalsAndCache.mapValues { case (primals, cache) => cache }
+        primalsAndCache.mapValues { case localIndexedPrimalsCache => localIndexedPrimalsCache.cache }
           .rightOuterJoin(oldCache)
           .mapValues {
             // newCache includes entries in the previous cache too
