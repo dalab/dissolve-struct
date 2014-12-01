@@ -23,8 +23,7 @@ object MultiClassSVMWithDBCFW {
   def featureFn(y: MultiClassLabel, x: Vector[Double]): Vector[Double] = {
     val featureVector = DenseVector.zeros[Double](x.size * y.numClasses)
 
-    // Populate the featureVector in blocks [<class-0 features> <class-1 features>].
-    // If y = -1, fill first block, else second
+    // Populate the featureVector in blocks [<class-0 features> <class-1 features> ...].
     val (startIdx, endIdx) =
       (x.size * y.label.toInt, x.size * (y.label.toInt + 1))
 

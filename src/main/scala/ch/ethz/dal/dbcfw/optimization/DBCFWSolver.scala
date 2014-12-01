@@ -353,6 +353,10 @@ class DBCFWSolver[X, Y](
         }
       totalDecodings += 1
 
+      if (i < 5 && verboseDebug) {
+        println("y_star(%d) = %s".format(i, ystar_i))
+      }
+
       // 3) Define the update quantities
       val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))

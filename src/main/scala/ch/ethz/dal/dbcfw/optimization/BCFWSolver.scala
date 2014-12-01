@@ -154,6 +154,10 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
             bestCachedCandidateForI.get
           }
 
+        if (i < 5 && verboseDebug) {
+          println("y_star(%d) = %s".format(i, ystar_i))
+        }
+
         // 3) Define the update quantities
         val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
         val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
@@ -206,7 +210,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
             debugModel.updateWeights(model.getWeights)
             debugModel.updateEll(ell)
           }
-          
+
           val f = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), lambda)
           val gapTup = SolverUtils.dualityGap(data, phi, lossFn, maxOracle, debugModel, lambda)
           val gap = gapTup._1

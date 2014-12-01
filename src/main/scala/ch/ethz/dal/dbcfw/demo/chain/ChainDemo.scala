@@ -28,6 +28,7 @@ import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
 
+/*
 import cc.factorie._
 import cc.factorie.variable._
 import cc.factorie.model._
@@ -36,6 +37,7 @@ import cc.factorie.infer.MaximizeByBPChain
 import cc.factorie.infer.BP
 import cc.factorie.infer.MaximizeByBPLoopy
 import cc.factorie.infer.MaximizeByMPLP
+* */
 
 /**
  * LogHelper is a trait you can mix in to provide easy log4j logging
@@ -231,6 +233,7 @@ object ChainDemo extends LogHelper {
   /**
    * Alternate decoding function using Factor Graphs
    */
+  /*
   def bpDecode(thetaUnary: Matrix[Double], thetaPairwise: Matrix[Double]): Vector[Double] = {
     // thetaUnary is a (lengthOfChain x 26) dimensional matrix
     val nNodes: Int = thetaUnary.rows
@@ -272,6 +275,8 @@ object ChainDemo extends LogHelper {
 
     label
   }
+  * 
+  */
 
   /**
    * The Maximization Oracle
@@ -316,8 +321,10 @@ object ChainDemo extends LogHelper {
   def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
     oracleFnWithDecode(model, yi, xi, logDecode)
   
+    /*
   def oracleFnBP(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
     oracleFnWithDecode(model, yi, xi, bpDecode)
+    */
     
   /**
    * Predict (this could use (non-loss-augmented) decoding
@@ -357,9 +364,11 @@ object ChainDemo extends LogHelper {
     predictFnWithDecode(model, xi, logDecode)
   }
 
+  /*
   def predictFnBP(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double]): Vector[Double] = {
     predictFnWithDecode(model, xi, bpDecode)
   }
+  */
 
   /**
    * Convert Vector[Double] to respective String representation
@@ -412,10 +421,10 @@ object ChainDemo extends LogHelper {
     }
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions();
-    solverOptions.numPasses = 3
+    solverOptions.numPasses = 5
     solverOptions.debug = true
     solverOptions.lambda = 0.01
-    solverOptions.doWeightedAveraging = true
+    solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true
     solverOptions.debugLoss = true
     solverOptions.testData = Some(test_data.toArray)
@@ -478,7 +487,11 @@ object ChainDemo extends LogHelper {
      */
     val PERC_TRAIN: Double = options.getOrElse("perctrain", "0.05").toDouble // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
     
-    val appName: String = options.getOrElse("appname", "Chain-DBCFW")
+    val appName: String = options.getOrElse("appname", "Chain-Dissolve")
+    
+    val dataDir: String = options.getOrElse("datadir", "data")
+    
+    val runLocally: Boolean = options.getOrElse("local", "false").toBoolean
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
     solverOptions.numPasses = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
@@ -499,47 +512,64 @@ object ChainDemo extends LogHelper {
     solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
     solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
     
+    solverOptions.debugInfoPath = options.getOrElse("debugpath", dataDir + "/debug-dissolve-%d.csv".format(System.currentTimeMillis()))
+    
     /**
      * Some local overrides
      */
-    solverOptions.sampleFrac = 1.0
-    solverOptions.enableOracleCache = false
-    solverOptions.oracleCacheSize = 10
-    solverOptions.numPasses = 3
-    solverOptions.enableManualPartitionSize = true
-    solverOptions.NUM_PART = 1
-    solverOptions.doWeightedAveraging = true
+    if(runLocally) {
+      solverOptions.sampleFrac = 1.0
+      solverOptions.enableOracleCache = false
+      solverOptions.oracleCacheSize = 10
+      solverOptions.numPasses = 5
+      solverOptions.enableManualPartitionSize = true
+      solverOptions.NUM_PART = 1
+      solverOptions.doWeightedAveraging = false
+    }
     
     solverOptions.debugInfoPath = "/Users/tribhu/git/DBCFWstruct/debug/debug-dissolve-%d.csv".format(System.currentTimeMillis())
-    
-    println("# PERC_TRAIN=%f".format(PERC_TRAIN))
     println(solverOptions.toString())
 
     /**
      * Begin execution
      */
-    val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
-    val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+    val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
+    val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
 
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
-    val conf = new SparkConf().setAppName(appName).setMaster("local")
+    val conf = 
+      if(runLocally)
+        new SparkConf().setAppName(appName).setMaster("local")
+      else
+        new SparkConf().setAppName(appName)
+        
     val sc = new SparkContext(conf)
-    sc.setCheckpointDir("checkpoint-files")
+    sc.setCheckpointDir(dataDir + "/checkpoint-files")
     
     println(SolverUtils.getSparkConfString(sc.getConf))
 
     // Read order from the file and permute the Vector accordingly
-    val trainOrder: String = "data/perm_train.csv"
+    val trainOrder: String = dataDir + "/perm_train.csv"
     val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
     
-    solverOptions.testDataRDD = Some(sc.parallelize(testDataUnord.toArray, solverOptions.NUM_PART))
+    solverOptions.testDataRDD = 
+      if(solverOptions.enableManualPartitionSize)
+        Some(sc.parallelize(testDataUnord.toArray, solverOptions.NUM_PART))
+      else
+        Some(sc.parallelize(testDataUnord.toArray))
+        
+    val trainDataRDD = 
+      if(solverOptions.enableManualPartitionSize)
+        sc.parallelize(train_data, solverOptions.NUM_PART)
+      else
+        sc.parallelize(train_data)
 
     val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
-      sc.parallelize(train_data, solverOptions.NUM_PART),
+      trainDataRDD,
       featureFn,
       lossFn,
       oracleFn,
@@ -651,7 +681,7 @@ object ChainDemo extends LogHelper {
     println(options)
 
     chainDBCFWCoCoA(options)
-
+    
     chainBCFW()
   }
 
