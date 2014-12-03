@@ -145,8 +145,8 @@ class DBCFWSolver[X, Y](
           case ((labeledObject, primalInfo), boundedCacheList) => DataShard(labeledObject, primalInfo, boundedCacheList) // Flatten values for readability
         }
         .mapPartitions(x => mapper(x, globalModel, featureFn, lossFn, oracleFn,
-          predictFn, solverOptions, weightedAveragesOfPrimals, iterCount, miniBatchEnabled), preservesPartitioning = true)
-
+          predictFn, solverOptions, dataSize, weightedAveragesOfPrimals, iterCount, miniBatchEnabled), preservesPartitioning = true)
+          
       /**
        * Reducer
        */
@@ -218,6 +218,7 @@ class DBCFWSolver[X, Y](
              oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
              predictFn: (StructSVMModel[X, Y], X) => Y,
              solverOptions: SolverOptions[X, Y],
+             dataSize: Int,
              averagedPrimalInfo: PrimalInfo,
              iterCount: Int,
              miniBatchEnabled: Boolean): Iterator[LocalProcessedShard[X, Y]] = {
@@ -267,6 +268,7 @@ class DBCFWSolver[X, Y](
 
     var k: Int = iterCount
     val n: Int = data.size
+    val globalN: Int = dataSize
 
     val wMat: Array[Vector[Double]] = Array.fill(n)(null)
     val prevWMat: Array[Vector[Double]] = Array.fill(n)(null)
@@ -313,8 +315,8 @@ class DBCFWSolver[X, Y](
         if (solverOptions.enableOracleCache && oracleCache.contains(i)) {
           val candidates: Seq[(Double, Int)] =
             oracleCache(i)
-              .map(y_i => (((phi(label, pattern) - phi(y_i, pattern)) :* (1 / (n * lambda))),
-                (1.0 / n) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
+              .map(y_i => (((phi(label, pattern) - phi(y_i, pattern)) :* (1 / (globalN * lambda))),
+                (1.0 / globalN) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
               .map {
                 case (w_s, ell_s) =>
                   (localModel.getWeights().t * (wMat(i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
@@ -359,9 +361,9 @@ class DBCFWSolver[X, Y](
 
       // 3) Define the update quantities
       val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
-      val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
+      val w_s: Vector[Double] = psi_i :* (1.0 / (globalN * lambda))
       val loss_i: Double = lossFn(label, ystar_i)
-      val ell_s: Double = (1.0 / n) * loss_i
+      val ell_s: Double = (1.0 / globalN) * loss_i
 
       // 4) Get step-size gamma
       val gamma: Double =
@@ -371,7 +373,7 @@ class DBCFWSolver[X, Y](
             ((wMat(i) - w_s).t * (wMat(i) - w_s) + eps)
           max(0.0, min(1.0, gamma_opt))
         } else {
-          (2.0 * n) / (k + 2.0 * n)
+          (2.0 * globalN) / (k + 2.0 * globalN)
         }
 
       if (gamma < 0.5) {
