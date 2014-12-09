@@ -1,4 +1,4 @@
-DBCFWstruct
+dissolve^struct
 ===========
 
 Distributed solver library for structured output prediction, based on Spark.
