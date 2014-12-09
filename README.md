@@ -1,10 +1,10 @@
-dissolve^struct
+dissolve<sup>struct</sup>
 ===========
 
 Distributed solver library for structured output prediction, based on Spark.
 
 The library is based on the primal-dual BCFW solver, allowing approximate inference oracles, and distributes this algorithm using the recent communication efficient CoCoA scheme.
-The interface to the user is the same as in the widely used SVM^struct in the single machine case.
+The interface to the user is the same as in the widely used SVM<sup>struct</sup> in the single machine case.
 
 # Usage
 
