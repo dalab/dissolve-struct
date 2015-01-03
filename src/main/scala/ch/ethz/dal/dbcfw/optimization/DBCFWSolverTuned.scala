@@ -70,18 +70,43 @@ class DBCFWSolverTuned[X, Y](
     val helperFunctions: HelperFunctions[X, Y] = HelperFunctions(featureFn, lossFn, oracleFn, predictFn)
 
     /**
-     *  Create three RDDs:
+     *  Create four RDDs:
      *  1. indexedTrainData = (Index, LabeledObject) and
      *  2. indexedPrimals (Index, Primal) where Primal = (w_i, l_i) <- This changes in each round
      *  3. indexedCacheRDD (Index, BoundedCacheList)
      *  4. indexedLocalProcessedData (Index, LocallyProcessedData)
+     *  all of which are partitioned similarly
      */
+
+    /*
+     * zipWithIndex calls getPartitions. But, partitioning happens in the future.
+     * This causes a race condition.
+     * See bug: https://issues.apache.org/jira/browse/SPARK-4433
+     * 
+     * Making do with work-around
+     * 
     val indexedTrainDataRDD: RDD[(Index, LabeledObject[X, Y])] =
       data.zipWithIndex()
         .map {
           case (labeledObject, idx) =>
             (idx.toInt, labeledObject)
         }
+        .partitionBy(new HashPartitioner(numPartitions))
+        .cache()
+    * 
+    */
+
+    // The work-around for bug SPARK-4433
+    val zippedIndexedTrainDataRDD: RDD[(Index, LabeledObject[X, Y])] =
+      data.zipWithIndex()
+        .map {
+          case (labeledObject, idx) =>
+            (idx.toInt, labeledObject)
+        }
+    zippedIndexedTrainDataRDD.count()
+
+    val indexedTrainDataRDD: RDD[(Index, LabeledObject[X, Y])] =
+      zippedIndexedTrainDataRDD
         .partitionBy(new HashPartitioner(numPartitions))
         .cache()
 
@@ -223,6 +248,9 @@ class DBCFWSolverTuned[X, Y](
       newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
       globalModel = newGlobalModel
 
+      println("globalModel.w = %s".format(globalModel.getWeights()(0 to 5).toDenseVector))
+      println("globalModel.ell = %f".format(globalModel.getEll()))
+
       /**
        * Step 3b - Obtain the new set of primals
        */
@@ -346,7 +374,12 @@ class DBCFWSolverTuned[X, Y](
     var k = 0
     var ell = localModel.getEll()
 
+    val prevModel = localModel.clone()
+
     for ((index, shard) <- dataIterator) yield {
+
+      /*if (index < 10)
+        println("Index = " + index)*/
 
       val pattern: X = shard.labeledObject.pattern
       val label: Y = shard.labeledObject.label
@@ -392,8 +425,13 @@ class DBCFWSolverTuned[X, Y](
         println("w = " + localModel.getWeights()(0 until 5).toDenseVector)
         println("ell = " + ell)
         println()*/
+
         localModel.updateEll(ell)
-        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), shard.cache, Some(localModel)))
+
+        val deltaLocalModel = localModel.clone()
+        deltaLocalModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
+        deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
+        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), shard.cache, Some(deltaLocalModel)))
       } else
         (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), shard.cache, None))
     }
