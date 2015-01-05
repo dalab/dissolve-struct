@@ -192,6 +192,7 @@ class DBCFWSolverTuned[X, Y](
       // TODO Any performance benefits of using Int instead of Index, and 3-Tuple instead of DataShard?
       val indexedJointData: RDD[(Index, InputDataShard[X, Y])] =
         indexedTrainDataRDD
+          .sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
           .join(indexedPrimalsRDD)
           .leftOuterJoin(indexedCacheRDD)
           .mapValues { // Because mapValues preserves partitioning
@@ -379,8 +380,9 @@ class DBCFWSolverTuned[X, Y](
     for ((index, shard) <- dataIterator) yield {
 
       /*if (index < 10)
-        println("Index = " + index)*/
+        println("Partition = %d, Index = %d".format(partitionNum, index))*/
 
+      // 1) Pick example
       val pattern: X = shard.labeledObject.pattern
       val label: Y = shard.labeledObject.label
 
@@ -388,7 +390,60 @@ class DBCFWSolverTuned[X, Y](
       val w_i = shard.primalInfo._1
       val ell_i = shard.primalInfo._2
 
-      val ystar_i: Y = maxOracle(localModel, label, pattern)
+      // 2.a) Search for candidates
+      val optionalCache_i: Option[BoundedCacheList[Y]] = shard.cache
+      val bestCachedCandidateForI: Option[Y] =
+        if (solverOptions.enableOracleCache && optionalCache_i.isDefined) {
+          val candidates: Seq[(Double, Int)] =
+            optionalCache_i.get
+              .map(y_i => (((phi(label, pattern) - phi(y_i, pattern)) :* (1 / (n * lambda))),
+                (1.0 / n) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
+              .map {
+                case (w_s, ell_s) =>
+                  (localModel.getWeights().t * (w_i - w_s) - ((ell_i - ell_s) * (1 / lambda))) /
+                    ((w_i - w_s).t * (w_i - w_s) + eps) // Map each (w_s, ell_s) to their respective step-size values 
+              }
+              .zipWithIndex // We'll need the index later to retrieve the respective approx. ystar_i
+              .filter { case (gamma, idx) => gamma > 0.0 }
+              .map { case (gamma, idx) => (min(1.0, gamma), idx) } // Clip to [0,1] interval
+              .sortBy { case (gamma, idx) => gamma }
+
+          // TODO Use this naive_gamma to further narrow down on cached contenders
+          // TODO Maintain fixed size of the list of cached vectors
+          val naive_gamma: Double = (2.0 * n) / (k + 2.0 * n)
+
+          // If there is a good contender among the cached datapoints, return it
+          if (candidates.size >= 1)
+            Some(optionalCache_i.get(candidates.head._2))
+          else None
+        } else None
+
+        
+      // 2.b) Solve loss-augmented inference for point i
+      val yAndCache =
+        if (bestCachedCandidateForI.isEmpty) {
+          val ystar = maxOracle(localModel, label, pattern)
+
+          val updatedCache: Option[BoundedCacheList[Y]] =
+            if (solverOptions.enableOracleCache) {
+
+              val nonTruncatedCache =
+                if (optionalCache_i.isDefined)
+                  optionalCache_i.get :+ ystar
+                else
+                  MutableList[Y]() :+ ystar
+
+              // Truncate cache to given size and pack it as an Option
+              Some(nonTruncatedCache.takeRight(solverOptions.oracleCacheSize))
+            } else None
+
+          (ystar, updatedCache)
+        } else {
+          (bestCachedCandidateForI.get, optionalCache_i)
+        }
+
+      val ystar_i = yAndCache._1
+      val updatedCache = yAndCache._2
 
       // 3) Define the update quantities
       val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
@@ -431,9 +486,9 @@ class DBCFWSolverTuned[X, Y](
         val deltaLocalModel = localModel.clone()
         deltaLocalModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
         deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
-        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), shard.cache, Some(deltaLocalModel)))
+        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), updatedCache, Some(deltaLocalModel)))
       } else
-        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), shard.cache, None))
+        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), updatedCache, None))
     }
   }
 
