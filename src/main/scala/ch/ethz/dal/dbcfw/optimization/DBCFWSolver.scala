@@ -158,6 +158,9 @@ class DBCFWSolver[X, Y](
       indexedCacheRDD = reducedData._3
       weightedAveragesOfPrimals = reducedData._4
       iterCount = reducedData._5
+      
+      // println("globalModel.w = %s".format(globalModel.getWeights()(0 to 5).toDenseVector))
+      // println("globalModel.ell = %f".format(globalModel.getEll()))
 
       val elapsedTime = (System.currentTimeMillis() - startTime).toDouble / 1000.0
 
@@ -173,15 +176,15 @@ class DBCFWSolver[X, Y](
         debugSb ++= "Model weights: " + debugModel.getWeights()(0 to 5).toDenseVector + "\n"
       }
 
-      val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
+      val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel, dataSize)
       val testError =
         if (solverOptions.testDataRDD.isDefined)
-          SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, debugModel)
+          SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, debugModel, dataSize)
         else
           0.00
 
       val f = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
-      val gapTup = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda)
+      val gapTup = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda, dataSize)
       val gap = gapTup._1
       val primal = f + gap
 
@@ -222,6 +225,8 @@ class DBCFWSolver[X, Y](
              averagedPrimalInfo: PrimalInfo,
              iterCount: Int,
              miniBatchEnabled: Boolean): Iterator[LocalProcessedShard[X, Y]] = {
+    
+    // println("*mapper begin*")
 
     val prevModel: StructSVMModel[X, Y] = localModel.clone()
 
@@ -234,7 +239,7 @@ class DBCFWSolver[X, Y](
     /**
      * Reorganize data for training
      */
-    val zippedData: Array[(Index, DataShard[X, Y])] = dataIterator.toArray.sortBy(_._1)
+    val zippedData: Array[(Index, DataShard[X, Y])] = dataIterator.toArray//.sortBy(_._1)
     val data: Array[LabeledObject[X, Y]] = zippedData.map(x => x._2.data)
     val globalDataIdx: Array[Index] = zippedData.map(x => x._1)
     // Mapping of indexMapping(localIndex) -> globalIndex
@@ -275,7 +280,8 @@ class DBCFWSolver[X, Y](
     val ellMat: Vector[Double] = Vector.zeros[Double](n)
 
     // Copy w_i's and l_i's into local wMat and ellMat
-    for (i <- 0 until n) {
+    for (globIdx <- globalDataIdx) {
+      val i = globalToLocal(globIdx) // localIdx
       wMat(i) = zippedData(i)._2.primalInfo._1
       prevWMat(i) = zippedData(i)._2.primalInfo._1.copy
       ellMat(i) = zippedData(i)._2.primalInfo._2
@@ -305,6 +311,10 @@ class DBCFWSolver[X, Y](
 
       // Convert globalIdx to localIdx a.k.a "i"
       val i: Index = globalToLocal(globalIdx)
+      // val i: Index = globalIdx
+      
+      //if (globalIdx < 10)
+        //println("Index = " + globalIdx)
 
       // 1) Pick example
       val pattern: X = datapoint.pattern
@@ -436,6 +446,8 @@ class DBCFWSolver[X, Y](
     localModel.updateEll(localModel.getEll() - prevModel.getEll())
 
     val localProcessedData = LocalProcessedShard(localModel, localIndexedDeltaPrimals, deltaLocalModel, localWeightedAverageOfPrimals, k)
+    
+    //println("*mapper end*")
 
     // Finally return a single element iterator
     { List.empty[(LocalProcessedShard[X, Y])] :+ localProcessedData }.iterator

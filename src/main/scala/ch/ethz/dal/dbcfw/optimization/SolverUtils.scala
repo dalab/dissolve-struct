@@ -31,7 +31,8 @@ object SolverUtils {
   def averageLoss[X, Y](data: RDD[LabeledObject[X, Y]],
                         lossFn: (Y, Y) => Double,
                         predictFn: (StructSVMModel[X, Y], X) => Y,
-                        model: StructSVMModel[X, Y]): Double = {
+                        model: StructSVMModel[X, Y],
+                        dataSize: Int): Double = {
 
     val loss =
       data.map {
@@ -40,7 +41,7 @@ object SolverUtils {
           lossFn(datapoint.label, ystar_i)
       }.fold(0.0)((acc, ele) => acc + ele)
 
-    loss / data.count()
+    loss / dataSize
   }
 
   /**
@@ -97,7 +98,8 @@ object SolverUtils {
                        lossFn: (Y, Y) => Double,
                        oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
                        model: StructSVMModel[X, Y],
-                       lambda: Double)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
+                       lambda: Double,
+                       dataSize: Int)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
 
     val phi = featureFn
     val maxOracle = oracleFn
@@ -105,7 +107,7 @@ object SolverUtils {
     val w: Vector[Double] = model.getWeights()
     val ell: Double = model.getEll()
 
-    val n: Int = data.count().toInt
+    val n: Int = dataSize.toInt
     val d: Int = model.getWeights().size
 
     var (w_s, ell_s) = data.map {

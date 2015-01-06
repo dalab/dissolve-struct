@@ -226,12 +226,18 @@ class DBCFWSolverTuned[X, Y](
        * Collect models from all partitions and compute the new model locally on master
        */
 
-      val newGlobalModelList =
+      /*val newGlobalModelList =
         indexedLocalProcessedData
           .filter {
             case (idx, shard) => shard.deltaLocalModel.isDefined
           }
           .mapValues(_.deltaLocalModel.get)
+          .values
+          .collect()*/
+
+      val newGlobalModelList =
+        indexedLocalProcessedData
+          .flatMapValues(_.deltaLocalModel)
           .values
           .collect()
 
@@ -307,15 +313,15 @@ class DBCFWSolverTuned[X, Y](
         debugSb ++= "Model weights: " + debugModel.getWeights()(0 to 5).toDenseVector + "\n"
       }
 
-      val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
+      val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel, dataSize)
       val testError =
         if (solverOptions.testDataRDD.isDefined)
-          SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, debugModel)
+          SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, debugModel, dataSize)
         else
           0.00
 
       val f = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
-      val gapTup = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda)
+      val gapTup = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda, dataSize)
       val gap = gapTup._1
       val primal = f + gap
 
@@ -418,7 +424,6 @@ class DBCFWSolverTuned[X, Y](
           else None
         } else None
 
-        
       // 2.b) Solve loss-augmented inference for point i
       val yAndCache =
         if (bestCachedCandidateForI.isEmpty) {
