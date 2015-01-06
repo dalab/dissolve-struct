@@ -9,6 +9,7 @@ import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
 import java.io.FileWriter
 import ch.ethz.dal.dbcfw.optimization.SolverUtils
 import scala.reflect.ClassTag
+import ch.ethz.dal.dbcfw.optimization.DBCFWSolverTuned
 
 class StructSVMWithDBCFW[X, Y](
   val data: RDD[LabeledObject[X, Y]],
@@ -19,7 +20,7 @@ class StructSVMWithDBCFW[X, Y](
   val solverOptions: SolverOptions[X, Y]) {
 
   def trainModel()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
-    val (trainedModel, debugInfo) = new DBCFWSolver[X, Y](
+    val (trainedModel, debugInfo) = new DBCFWSolverTuned[X, Y](
       data,
       featureFn,
       lossFn,
@@ -56,7 +57,7 @@ object StructSVMWithDBCFW {
                   oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label
                   predictFn: (StructSVMModel[X, Y], X) => Y,
                   solverOptions: SolverOptions[X, Y])(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
-    val (trainedModel, debugInfo) = new DBCFWSolver[X, Y](
+    val (trainedModel, debugInfo) = new DBCFWSolverTuned[X, Y](
       data,
       featureFn,
       lossFn,

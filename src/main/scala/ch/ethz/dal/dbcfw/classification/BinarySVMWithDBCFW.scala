@@ -5,18 +5,15 @@
 package ch.ethz.dal.dbcfw.classification
 
 import scala.reflect.ClassTag
-
 import java.io.FileWriter
-
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import ch.ethz.dal.dbcfw.optimization.SolverOptions
 import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
 import ch.ethz.dal.dbcfw.optimization.SolverUtils
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
-
 import breeze.linalg.{ Vector, SparseVector, DenseVector }
+import ch.ethz.dal.dbcfw.optimization.DBCFWSolverTuned
 
 /**
  * @author tribhu
@@ -116,7 +113,7 @@ object BinarySVMWithDBCFW {
 
     println(solverOptions)
 
-    val (trainedModel, debugInfo) = new DBCFWSolver[Vector[Double], Double](
+    val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
       repartData,
       this.featureFn,
       this.lossFn,
@@ -175,7 +172,7 @@ object BinarySVMWithDBCFW {
 
     println(solverOptions)
 
-    val (trainedModel, debugInfo) = new DBCFWSolver[Vector[Double], Double](
+    val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
       repartData,
       featureFn,
       lossFn,
