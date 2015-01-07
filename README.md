@@ -8,7 +8,7 @@ The interface to the user is the same as in the widely used SVM<sup>struct</sup>
 
 # Usage
 
-This is a standalone spark project, and works with the Scala version of the Eclipse IDE for Scala 2.10.4 (Spark requires this version of Scala currently).
+This is a standalone spark project, and works with the Scala version of the Eclipse IDE for Scala 2.10.4 (Spark requires this version of Scala currently), download here:
 <http://scala-ide.org/download/sdk.html>
 
 Our setup mostly follows the quick-start guide here:
@@ -19,9 +19,9 @@ use
 Import > New project from git
 
 ## Install Spark
-(The Spark distribution is not included on git here since the .jar file is over 100MB)
+Not necessary anymore here, as all dependencies are automatically taken care of by maven.
 
-Download spark-1.1.0-bin-hadoop2.4
+Old fashioned way: Download spark-1.1.0-bin-hadoop2.4
 from here:
 <http://spark.apache.org/downloads.html>
 and expand the archive in this directory here. This will be the Spark home from now on.
@@ -29,7 +29,7 @@ Refresh the project in Eclipse, to recognize the Spark jar dependency.
 
 Right click on you project > project properties > java build path, add the spark .jar as a library (the .jar file in question is 'lib/spark-assembly-1.1.0-hadoop2.4.0.jar')
 
-## How to compile
+### How to compile
 In a console while in this directory here, run
 
     sbt package
