@@ -32,7 +32,7 @@ class SolverOptions[X, Y] extends Serializable {
   var oracleCacheSize: Int = 10
 
   // DBCFW specific params
-  var H: Int = 5 // Number of points to sample in each pass
+  var H: Int = 5 // Number of data points to sample in each round of CoCoA (= number of local coordinate updates)
   var sampleFrac: Double = 0.5
   var sampleWithReplacement: Boolean = false
 
