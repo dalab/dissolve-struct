@@ -22,7 +22,7 @@ class SolverOptions[X, Y] extends Serializable {
   var testData: Option[Seq[LabeledObject[X, Y]]] = Option.empty[Seq[LabeledObject[X, Y]]]
   var testDataRDD: Option[RDD[LabeledObject[X, Y]]] = Option.empty[RDD[LabeledObject[X, Y]]]
 
-  var doLineSearch: Boolean = false
+  var doLineSearch: Boolean = true
 
   // In case of multi-class
   var numClasses = -1
@@ -32,7 +32,6 @@ class SolverOptions[X, Y] extends Serializable {
   var oracleCacheSize: Int = 10
 
   // DBCFW specific params
-  var autoconfigure: Boolean = false
   var H: Int = 5 // Number of points to sample in each pass
   var sampleFrac: Double = 0.5
   var sampleWithReplacement: Boolean = false
