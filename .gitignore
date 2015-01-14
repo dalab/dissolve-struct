@@ -46,3 +46,6 @@ checkpoint-files/*
 # Custom stuff
 *.cache
 *.log
+
+debug/*
+data/generated/*

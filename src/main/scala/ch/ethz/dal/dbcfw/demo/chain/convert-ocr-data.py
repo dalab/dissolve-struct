@@ -8,15 +8,15 @@ TST_FOLD_NUMS = [0,] # Datapoints from these folds will be treated as test datas
 def main():
 
     if len(sys.argv) != 2:
-        sys.exit("Format: convert-ocr-data.py ocr.mat")
+        sys.exit("usage (within data directory):   python convert-ocr-data.py ocr.mat")
 
     idx_trn = 0
     idx_tst = 0
 
     mat = scipy.io.loadmat(sys.argv[1], struct_as_record=False, squeeze_me=True)
     n = np.shape(mat['dataset'])[0]
-    with open('patterns_train.csv', 'w') as fpat_trn, open('labels_train.csv', 'w') as flab_trn, open('folds_train.csv', 'w') as ffold_trn, \
-            open('patterns_test.csv', 'w') as fpat_tst, open('labels_test.csv', 'w') as flab_tst, open('folds_test.csv', 'w') as ffold_tst:
+    with open('generated/patterns_train.csv', 'w') as fpat_trn, open('generated/labels_train.csv', 'w') as flab_trn, open('generated/folds_train.csv', 'w') as ffold_trn, \
+         open('generated/patterns_test.csv', 'w')  as fpat_tst, open('generated/labels_test.csv', 'w')  as flab_tst, open('generated/folds_test.csv', 'w') as ffold_tst:
         for i in range(n):
             ### Write folds
             fold = mat['dataset'][i].__dict__['fold']
