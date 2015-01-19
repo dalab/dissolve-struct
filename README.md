@@ -20,34 +20,36 @@ Our setup mostly follows the quick-start guide here:
 
 ## Running the examples
 In order to run the examples, the solver needs to built first:
-
-	cd dissolve-struct
-	sbt publish-local
-
+```bash
+cd dissolve-struct
+sbt publish-local
+```
 This is followed by building the example package:
-
-	cd dissolve-struct-examples
-	sbt package
-
+```bash
+cd dissolve-struct-examples
+sbt package
+```
 The example can be executed locally as:
 
-	spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+```bash
+spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+```
 
 In case this throws an OutOfMemoryError, the executor memory can be increased like so:
-
-	spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
-
+```bash
+spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+```
 ## Setting up a development environment
 To import the packages in Eclipse, the respective .classpath files needs to be generated for the dissolve-struct:
-
-	cd dissolve-struct
-	sbt eclipse
-
+```bash
+cd dissolve-struct
+sbt eclipse
+```
 Similarly, for dissolve-struct-examples package too:
-
-	cd dissolve-struct-examples
-	sbt eclipse
-
+```bash
+cd dissolve-struct-examples
+sbt eclipse
+```
 The above packages can be imported individually into Eclipse using: File -> Import -> Existing Projects into Workspace
 
 Suppose Eclipse defaults to Scala 2.11, it might issue a "cross-compiled with an incompatible version of Scala", the correct version needs to be set for both the projects by:
