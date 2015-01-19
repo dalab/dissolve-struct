@@ -29,6 +29,12 @@ This is followed by building the example package:
 cd dissolve-struct-examples
 sbt package
 ```
+
+Obtain the datasets by:
+```bash
+cd data
+bash retrieve_datasets.sh
+```
 The example can be executed locally as:
 
 ```bash
