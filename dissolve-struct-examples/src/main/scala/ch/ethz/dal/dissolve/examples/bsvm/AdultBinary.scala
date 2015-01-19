@@ -50,7 +50,6 @@ object AdultBinary {
     solverOptions.debugLoss = false
 
     solverOptions.sampleWithReplacement = false
-    solverOptions.autoconfigure = false
 
     solverOptions.enableManualPartitionSize = true
     solverOptions.NUM_PART = 1

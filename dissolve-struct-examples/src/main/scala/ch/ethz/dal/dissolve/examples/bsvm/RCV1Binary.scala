@@ -36,7 +36,6 @@ object RCV1Binary {
 
     solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
     solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
-    solverOptions.autoconfigure = options.getOrElse("autoconfigure", "false").toBoolean
 
     solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
     solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
