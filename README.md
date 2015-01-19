@@ -14,27 +14,33 @@ This is a standalone spark project, and works with the Scala version of the Ecli
 Our setup mostly follows the quick-start guide here:
 <http://spark.apache.org/docs/latest/quick-start.html#standalone-applications>
 
-## Checkout the example project in Eclipse
-use
-Import > New project from git
+## Checkout the project repository
+	git clone https://github.com/dalab/dissolve-struct.git
 
-## Install Spark
-Not necessary anymore here, as all dependencies are automatically taken care of by maven.
+## Running the examples
+In order to run the examples, the solver needs to built first:
+	cd dissolve-struct
+	sbt publish-local
 
-Old fashioned way: Download spark-1.1.0-bin-hadoop2.4
-from here:
-<http://spark.apache.org/downloads.html>
-and expand the archive in this directory here. This will be the Spark home from now on.
-Refresh the project in Eclipse, to recognize the Spark jar dependency.
+This is followed by building the example package:
+	cd dissolve-struct-examples
+	sbt package
 
-Right click on you project > project properties > java build path, add the spark .jar as a library (the .jar file in question is 'lib/spark-assembly-1.1.0-hadoop2.4.0.jar')
+The example can be executed locally as:
+	spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 
-### How to compile
-In a console while in this directory here, run
+In case this throws an OutOfMemoryError, the executor memory can be increased like so:
+	spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 
-    sbt package
+## Setting up a development environment
+To import the packages in Eclipse, the respective .classpath files needs to be generated for the dissolve-struct:
+	cd dissolve-struct
+	sbt eclipse
+Similarly, for dissolve-struct-examples package too:
+	cd dissolve-struct-examples
+	sbt eclipse
 
-To run the sample application locally on 4 threads, use
+The above packages can be imported individually into Eclipse using: File -> Import -> Existing Projects into Workspace
 
-    spark-1.1.0-bin-hadoop2.4/bin/spark-submit   --class "SimpleApp"   --master local[4]   target/scala-2.10/simple-project_2.10-1.0.jar
-    
+Suppose Eclipse defaults to Scala 2.11, it might issue a "cross-compiled with an incompatible version of Scala", the correct version needs to be set for both the projects by:
+Right clicking on the project -> Scala Compiler -> Setting "Scala Installation" to "Latest 2.10 bundle"
