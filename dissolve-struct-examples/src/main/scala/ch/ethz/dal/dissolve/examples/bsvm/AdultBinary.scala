@@ -31,7 +31,7 @@ object AdultBinary {
    * DBCFW Implementation
    */
   def dbcfwAdult() {
-    val a1aPath = "data/a1a.txt"
+    val a1aPath = "../data/generated/a1a"
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)

@@ -32,10 +32,12 @@ sbt package
 
 Obtain the datasets by:
 ```bash
-cd data
 bash retrieve_datasets.sh
 ```
+(you might have to install `brew install wget` first if on a mac)
+
 The example can be executed locally as:
+TODO: if you want to do this outside eclipse, download a binary version of spark first
 
 ```bash
 spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar

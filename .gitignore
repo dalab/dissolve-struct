@@ -49,3 +49,5 @@ checkpoint-files/*
 
 debug/*
 data/generated/*
+
+dissolve-struct/lib_managed/*

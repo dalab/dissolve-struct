@@ -29,7 +29,7 @@ object COVBinary {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val data = MLUtils.loadLibSVMFile(sc, "../data/covtype.libsvm.binary.scale.head.mllib")
+    val data = MLUtils.loadLibSVMFile(sc, "../data/generated/covtype.libsvm.binary.scale.head.mllib")
 
     // Split data into training and test set
     val splits = data.randomSplit(Array(0.8, 0.2), seed = 1L)

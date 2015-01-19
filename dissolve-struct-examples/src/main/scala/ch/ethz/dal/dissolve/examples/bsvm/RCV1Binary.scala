@@ -20,7 +20,7 @@ object RCV1Binary {
   def dbcfwRcv1(options: Map[String, String]) {
     val appName: String = options.getOrElse("appname", "RCV1-Dissolve")
 
-    val dataDir: String = options.getOrElse("datadir", "data")
+    val dataDir: String = options.getOrElse("datadir", "../data/generated")
 
     val solverOptions: SolverOptions[Vector[Double], Double] = new SolverOptions()
     solverOptions.numPasses = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
