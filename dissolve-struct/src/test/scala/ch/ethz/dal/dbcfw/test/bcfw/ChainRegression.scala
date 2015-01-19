@@ -4,7 +4,7 @@
 package ch.ethz.dal.dbcfw.test.bcfw
 
 import org.scalatest.FunSpec
-import org.scalatest.GivenWhenThen.{ Given, When, Then }
+import org.scalatest.GivenWhenThen
 import org.scalatest.BeforeAndAfter
 import breeze.linalg._
 import org.apache.spark.SparkConf
@@ -22,7 +22,7 @@ import org.apache.log4j.Logger
  * @author tribhu
  *
  */
-class ChainRegression extends FunSpec {
+class ChainRegression extends FunSpec with GivenWhenThen {
 
   def compareResults(baselineResults: String, currentResults: String): Unit = {
 
