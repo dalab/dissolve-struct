@@ -15,28 +15,36 @@ Our setup mostly follows the quick-start guide here:
 <http://spark.apache.org/docs/latest/quick-start.html#standalone-applications>
 
 ## Checkout the project repository
+
 	git clone https://github.com/dalab/dissolve-struct.git
 
 ## Running the examples
 In order to run the examples, the solver needs to built first:
+
 	cd dissolve-struct
 	sbt publish-local
 
 This is followed by building the example package:
+
 	cd dissolve-struct-examples
 	sbt package
 
 The example can be executed locally as:
+
 	spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 
 In case this throws an OutOfMemoryError, the executor memory can be increased like so:
+
 	spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 
 ## Setting up a development environment
 To import the packages in Eclipse, the respective .classpath files needs to be generated for the dissolve-struct:
+
 	cd dissolve-struct
 	sbt eclipse
+
 Similarly, for dissolve-struct-examples package too:
+
 	cd dissolve-struct-examples
 	sbt eclipse
 
