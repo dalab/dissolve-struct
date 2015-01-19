@@ -48,6 +48,12 @@ trait LogHelper {
   lazy val logger = Logger.getLogger(loggerName)
 }
 
+/**
+ * How to generate the input data:
+ * While in the data directory, run
+ * python ../src/main/scala/ch/ethz/dal/dbcfw/demo/chain/convert-ocr-data.py ocr.mat 
+ *
+ */
 object ChainDemo extends LogHelper {
 
   val debugOn = true
@@ -394,8 +400,10 @@ object ChainDemo extends LogHelper {
 
     val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
-    val train_data_unord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
-    val test_data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+    val dataDir: String = "data/generated";
+    
+    val train_data_unord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
+    val test_data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
 
     // Read order from the file and permute the Vector accordingly
     val trainOrder: String = "data/perm_train.csv"
@@ -408,12 +416,12 @@ object ChainDemo extends LogHelper {
     // val train_data = DenseVector.fill(5){temp(0)}
 
     if (debugOn) {
-      println("Loaded %d training examples, pattern:%dx%d and labels:%dx1"
+      println("Running chainBCFW (single worker). Loaded %d training examples, pattern:%dx%d and labels:%dx1"
         .format(train_data.size,
           train_data(0).pattern.rows,
           train_data(0).pattern.cols,
           train_data(0).label.size))
-      println("Loaded %d test examples, pattern:%dx%d and labels:%dx1"
+      println("Running chainBCFW (single worker). Loaded %d test examples, pattern:%dx%d and labels:%dx1"
         .format(test_data.size,
           test_data(0).pattern.rows,
           test_data(0).pattern.cols,
@@ -432,7 +440,7 @@ object ChainDemo extends LogHelper {
     solverOptions.enableOracleCache = false
     solverOptions.oracleCacheSize = 10
     
-    solverOptions.debugInfoPath = "/Users/tribhu/git/DBCFWstruct/debug/debug-bcfw-%d.csv".format(System.currentTimeMillis())
+    solverOptions.debugInfoPath = "debug/debug-bcfw-%d.csv".format(System.currentTimeMillis())
     
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
@@ -489,9 +497,9 @@ object ChainDemo extends LogHelper {
     
     val appName: String = options.getOrElse("appname", "Chain-Dissolve")
     
-    val dataDir: String = options.getOrElse("datadir", "data")
+    val dataDir: String = options.getOrElse("datadir", "data/generated")
     
-    val runLocally: Boolean = options.getOrElse("local", "false").toBoolean
+    val runLocally: Boolean = options.getOrElse("local", "true").toBoolean
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
     solverOptions.numPasses = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
@@ -507,7 +515,6 @@ object ChainDemo extends LogHelper {
     
     solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
     solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
-    solverOptions.autoconfigure = options.getOrElse("autoconfigure", "false").toBoolean
     
     solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
     solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
@@ -527,7 +534,7 @@ object ChainDemo extends LogHelper {
       solverOptions.doWeightedAveraging = false
     }
     
-    solverOptions.debugInfoPath = "/Users/tribhu/git/DBCFWstruct/debug/debug-dissolve-%d.csv".format(System.currentTimeMillis())
+    solverOptions.debugInfoPath = "debug/debug-dissolve-%d.csv".format(System.currentTimeMillis())
     println(solverOptions.toString())
 
     /**
@@ -536,7 +543,7 @@ object ChainDemo extends LogHelper {
     val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
     val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
 
-    println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
+    println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
     val conf = 
       if(runLocally)
@@ -550,7 +557,7 @@ object ChainDemo extends LogHelper {
     println(SolverUtils.getSparkConfString(sc.getConf))
 
     // Read order from the file and permute the Vector accordingly
-    val trainOrder: String = dataDir + "/perm_train.csv"
+    val trainOrder: String = "data/perm_train.csv"
     val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
