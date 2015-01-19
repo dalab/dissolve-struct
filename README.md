@@ -52,5 +52,6 @@ sbt eclipse
 ```
 The above packages can be imported individually into Eclipse using: File -> Import -> Existing Projects into Workspace
 
-Suppose Eclipse defaults to Scala 2.11, it might issue a "cross-compiled with an incompatible version of Scala", the correct version needs to be set for both the projects by:
+Suppose Eclipse defaults to Scala 2.11, it might issue a "cross-compiled with an incompatible version of Scala".
+The correct version needs to be set for both the projects by:
 Right clicking on the project -> Scala Compiler -> Setting "Scala Installation" to "Latest 2.10 bundle"
