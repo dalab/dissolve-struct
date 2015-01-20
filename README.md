@@ -32,7 +32,9 @@ sbt package
 
 Obtain the datasets by:
 ```bash
+cd data
 bash retrieve_datasets.sh
+python convert-ocr-data.py
 ```
 (you might have to install `brew install wget` first if on a mac)
 
