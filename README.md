@@ -38,9 +38,8 @@ python convert-ocr-data.py
 ```
 (you might have to install `brew install wget` first if on a mac)
 
-The example can be executed locally as:
-TODO: if you want to do this outside eclipse, download a binary version of spark first
-
+#### Executing though command line (Requires Apache Spark Binaries)
+Binary classification on the Forest Cover (COV) dataset for example can be executed locally on command-line as:
 ```bash
 spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
@@ -49,6 +48,17 @@ In case this throws an OutOfMemoryError, the executor memory can be increased li
 ```bash
 spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
+
+#### Executing within Eclipse
+To ease debugging and development, the examples can be run within Eclipse by `Run As | Scala Application`.
+However, this can be run only in local mode since all the interactions needs to be visible to Eclipse.
+In order to enable this, the `SparkContext` needs to be initialized by setting the master to `local`:
+```scala
+val conf = new SparkConf()
+	       .setAppName("COV-example")
+	       .setMaster("local[4]")
+```
+
 ## Setting up a development environment
 To import the packages in Eclipse, the respective .classpath files needs to be generated for the `dissolve-struct`:
 ```bash
@@ -60,8 +70,8 @@ Similarly, for `dissolve-struct-examples` package too:
 cd dissolve-struct-examples
 sbt eclipse
 ```
-The above packages can be imported individually into Eclipse using: File -> Import -> Existing Projects into Workspace
+The above packages can be imported individually into Eclipse using: `File | Import | Existing Projects into Workspace`
 
 Suppose Eclipse defaults to Scala 2.11, it might issue a "cross-compiled with an incompatible version of Scala".
 The correct version needs to be set for both the projects by:
-Right clicking on the project -> Scala Compiler -> Setting "Scala Installation" to "Latest 2.10 bundle"
+`Project Properties | Scala Compiler | Setting "Scala Installation" to "Latest 2.10 bundle"`
