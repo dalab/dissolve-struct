@@ -1,4 +1,10 @@
-cd data/generated
+GEN_DIR="generated"
+
+if [ ! -d "$GEN_DIR" ]; then
+	mkdir $GEN_DIR
+fi
+
+cd $GEN_DIR
 
 # Adult
 wget http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/a1a
@@ -11,4 +17,4 @@ bzip2 -d covtype.libsvm.binary.scale.bz2
 wget http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/rcv1_train.binary.bz2
 bzip2 -d rcv1_train.binary.bz2
 
-cd ../..
+cd ..
