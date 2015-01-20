@@ -38,7 +38,7 @@ python convert-ocr-data.py
 ```
 (you might have to install `brew install wget` first if on a mac)
 
-### Executing though command line
+#### Executing though command line (Requires Apache Spark Binaries)
 Binary classification on the Forest Cover (COV) dataset for example can be executed locally on command-line as:
 ```bash
 spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
@@ -49,7 +49,7 @@ In case this throws an OutOfMemoryError, the executor memory can be increased li
 spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
 
-### Executing within Eclipse
+#### Executing within Eclipse
 To ease debugging and development, the examples can be run within Eclipse by `Run As | Scala Application`.
 However, this can be run only in local mode since all the interactions needs to be visible to Eclipse.
 In order to enable this, the `SparkContext` needs to be initialized by setting the master to `local`:
