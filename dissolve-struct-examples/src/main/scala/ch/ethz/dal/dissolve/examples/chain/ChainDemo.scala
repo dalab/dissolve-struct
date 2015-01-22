@@ -32,7 +32,7 @@ import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
 /**
  * How to generate the input data:
  * While in the data directory, run
- * python ../src/main/scala/ch/ethz/dal/dbcfw/demo/chain/convert-ocr-data.py ocr.mat 
+ * python convert-ocr-data.py
  *
  */
 object ChainDemo {
