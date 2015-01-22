@@ -1,6 +1,6 @@
 package ch.ethz.dal.dbcfw.test.bcfw
 
-import ch.ethz.dal.dbcfw.demo.chain.ChainDemo._
+import ch.ethz.dal.dissolve.examples.chain.ChainDemo.{ loadData, featureFn, lossFn, oracleFn, predictFn }
 import org.scalatest.FunSpec
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import breeze.linalg._
