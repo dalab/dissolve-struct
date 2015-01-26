@@ -11,6 +11,9 @@ import breeze.linalg.sum
 import breeze.linalg.Axis
 import cc.factorie.model.Factor1
 import cc.factorie.model.Factor
+import cc.factorie.model.Factor2
+import cc.factorie.model.ItemizedModel
+import cc.factorie.infer.MaximizeByMPLP
 
 case class ROIFeature(feature: Vector[Double]) // Represent each pixel/region by a feature vector
 
@@ -147,7 +150,8 @@ object ImageSegmentationDemo {
     val unaryStartIdx = 0
     val unaryEndIdx = xFeatureSize * numClasses
     // This should be a vector of dimensions 1 x (K x h), where K = #Classes, h = dim(x_i)
-    val unary: Vector[Double] = weightVec(unaryStartIdx until unaryEndIdx)
+    val unary: DenseVector[Double] = weightVec(unaryStartIdx until unaryEndIdx).toDenseVector
+    val unaryMat: DenseMatrix[Double] = unary.toDenseMatrix.reshape(numClasses, xFeatureSize).t // Returns a K x h matrix, i.e, class to feature mapping
 
     val pairwiseStartIdx = unaryEndIdx
     val pairwiseEndIdx = weightVec.size
@@ -173,16 +177,51 @@ object ImageSegmentationDemo {
     def getUnaryFactor(yi: ROIClassVar, x: Int, y: Int): Factor = {
       new Factor1(yi) {
         def score(i: ROIClassVar#Value) = {
-          val unaryStartIdx = i.intValue
-          val unaryEndIdx = unaryStartIdx + xFeatureSize
-          val unaryPotAtxy = xi(x, y).feature dot unary(unaryStartIdx until unaryEndIdx)
+          val w_yi = unaryMat(::, yi.intValue)
+          val unaryPotAtxy = xi(x, y).feature dot w_yi
 
           unaryPotAtxy
         }
       }
     }
 
-    null
+    def getPairwiseFactor(yi: ROIClassVar, yj: ROIClassVar): Factor = {
+      new Factor2(yi, yj) {
+        def score(i: ROIClassVar#Value, j: ROIClassVar#Value) = thetaPairwise(i.intValue, j.intValue)
+      }
+    }
+
+    val letterChain: IndexedSeq[ROIClassVar] = for (i <- 0 until numROI) yield new ROIClassVar(0)
+
+    val unaryFactors: IndexedSeq[Factor] = for (i <- 0 until numROI) yield {
+      // Column-major strides
+      val colNum = i / numCols
+      val rowNum = i % numRows
+      getUnaryFactor(letterChain(i), rowNum, colNum)
+    }
+
+    val pairwiseFactors: IndexedSeq[Factor] = for (i <- 0 until numROI - 1) yield getPairwiseFactor(letterChain(i), letterChain(i + 1))
+
+    val bpmodel = new ItemizedModel
+    bpmodel ++= unaryFactors
+    bpmodel ++= pairwiseFactors
+
+    val label: DenseVector[Int] = DenseVector.zeros[Int](numROI)
+    val assgn = MaximizeByMPLP.infer(letterChain, bpmodel).mapAssignment
+    for (i <- 0 until numROI)
+      label(i) = assgn(letterChain(i)).intValue
+
+    // Convert these inferred labels into an image-class mask
+    val imgMask = DenseMatrix.zeros[ROILabel](numRows, numCols)
+    for (
+      r <- 0 until numRows;
+      c <- 0 until numCols
+    ) {
+      val idx = r * (numRows - 1) + c
+      imgMask(r, c) = ROILabel(label(idx))
+    }
+
+    imgMask
   }
 
   /**
@@ -190,7 +229,87 @@ object ImageSegmentationDemo {
    */
   def predictFn(model: StructSVMModel[Matrix[ROIFeature], Matrix[ROILabel]], xi: Matrix[ROIFeature]): Matrix[ROILabel] = {
 
-    null
+    val numClasses = 24
+    val numRows = xi.rows
+    val numCols = xi.cols
+    val numROI = numRows * numCols
+    val xFeatureSize = xi(0, 0).feature.size
+
+    val weightVec = model.getWeights()
+
+    val unaryStartIdx = 0
+    val unaryEndIdx = xFeatureSize * numClasses
+    // This should be a vector of dimensions 1 x (K x h), where K = #Classes, h = dim(x_i)
+    val unary: DenseVector[Double] = weightVec(unaryStartIdx until unaryEndIdx).toDenseVector
+    val unaryMat: DenseMatrix[Double] = unary.toDenseMatrix.reshape(numClasses, xFeatureSize).t // Returns a K x h matrix, i.e, class to feature mapping
+
+    val pairwiseStartIdx = unaryEndIdx
+    val pairwiseEndIdx = weightVec.size
+    assert(pairwiseEndIdx - pairwiseStartIdx == numClasses * numClasses)
+    val pairwise: DenseMatrix[Double] = weightVec(pairwiseStartIdx until pairwiseEndIdx)
+      .toDenseVector
+      .toDenseMatrix
+      .reshape(numClasses, numClasses)
+
+    val thetaPairwise = pairwise
+
+    /**
+     * Parameter estimation
+     */
+    object ROIDomain extends DiscreteDomain(numClasses)
+
+    class ROIClassVar(i: Int) extends DiscreteVariable(i) {
+      def domain = ROIDomain
+    }
+
+    def getUnaryFactor(yi: ROIClassVar, x: Int, y: Int): Factor = {
+      new Factor1(yi) {
+        def score(i: ROIClassVar#Value) = {
+          val w_yi = unaryMat(::, yi.intValue)
+          val unaryPotAtxy = xi(x, y).feature dot w_yi
+
+          unaryPotAtxy
+        }
+      }
+    }
+
+    def getPairwiseFactor(yi: ROIClassVar, yj: ROIClassVar): Factor = {
+      new Factor2(yi, yj) {
+        def score(i: ROIClassVar#Value, j: ROIClassVar#Value) = thetaPairwise(i.intValue, j.intValue)
+      }
+    }
+
+    val letterChain: IndexedSeq[ROIClassVar] = for (i <- 0 until numROI) yield new ROIClassVar(0)
+
+    val unaryFactors: IndexedSeq[Factor] = for (i <- 0 until numROI) yield {
+      // Column-major strides
+      val colNum = i / numCols
+      val rowNum = i % numRows
+      getUnaryFactor(letterChain(i), rowNum, colNum)
+    }
+
+    val pairwiseFactors: IndexedSeq[Factor] = for (i <- 0 until numROI - 1) yield getPairwiseFactor(letterChain(i), letterChain(i + 1))
+
+    val bpmodel = new ItemizedModel
+    bpmodel ++= unaryFactors
+    bpmodel ++= pairwiseFactors
+
+    val label: DenseVector[Int] = DenseVector.zeros[Int](numROI)
+    val assgn = MaximizeByMPLP.infer(letterChain, bpmodel).mapAssignment
+    for (i <- 0 until numROI)
+      label(i) = assgn(letterChain(i)).intValue
+
+    // Convert these inferred labels into an image-class mask
+    val imgMask = DenseMatrix.zeros[ROILabel](numRows, numCols)
+    for (
+      r <- 0 until numRows;
+      c <- 0 until numCols
+    ) {
+      val idx = r * (numRows - 1) + c
+      imgMask(r, c) = ROILabel(label(idx))
+    }
+
+    imgMask
   }
 
   def dissolveImageSementation(options: Map[String, String]) {
