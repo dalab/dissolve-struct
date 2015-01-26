@@ -39,14 +39,24 @@ python convert-ocr-data.py
 (you might have to install `brew install wget` first if on a mac)
 
 #### Executing though command line (Requires Apache Spark Binaries)
-Binary classification on the Forest Cover (COV) dataset for example can be executed locally on command-line as:
+Binary classification on the Forest Cover (COV) dataset for example can be executed locally (within `dissolve-struct-examples` folder) on command-line as:
 ```bash
-spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.bsvm.COVBinary" --master local target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
 
 In case this throws an OutOfMemoryError, the executor memory can be increased like so:
 ```bash
-spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+```
+
+[Chain OCR](http://www.seas.upenn.edu/~taskar/ocr/):
+```bash
+spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.chain.ChainDemo" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+```
+
+[Chain OCR](http://www.seas.upenn.edu/~taskar/ocr/) using [Factorie](http://factorie.cs.umass.edu/):
+```bash
+spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar --class "ch.ethz.dalab.dissolve.examples.chain.ChainBPDemo" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
 
 #### Executing within Eclipse
