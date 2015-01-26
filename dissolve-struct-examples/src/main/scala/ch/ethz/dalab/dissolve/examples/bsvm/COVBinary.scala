@@ -83,15 +83,15 @@ object COVBinary {
     solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
     solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
 
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", dataDir + "/cov-%d.csv".format(System.currentTimeMillis()))
+    solverOptions.debugInfoPath = options.getOrElse("debugpath", "../debug/cov-%d.csv".format(System.currentTimeMillis()))
 
-    val defaultCovPath = dataDir + "/covtype.libsvm.binary.scale"
+    val defaultCovPath = dataDir + "/generated/covtype.libsvm.binary.scale"
     val covPath = options.getOrElse("traindata", defaultCovPath)
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)
 
-    val conf = new SparkConf().setAppName("COV-example").setMaster("local")
+    val conf = new SparkConf().setAppName("COV-example")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir(dataDir + "/checkpoint-files")
 

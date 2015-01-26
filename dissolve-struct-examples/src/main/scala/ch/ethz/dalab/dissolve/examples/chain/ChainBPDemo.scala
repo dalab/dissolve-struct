@@ -3,7 +3,6 @@ package ch.ethz.dalab.dissolve.examples.chain
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
-
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Matrix
@@ -16,16 +15,26 @@ import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
-import ch.ethz.dalab.dissolve.regression.LabeledObject;
+import ch.ethz.dalab.dissolve.regression.LabeledObject
+import cc.factorie.model.Factor1
+import cc.factorie.model.Factor2
+import cc.factorie.model.ItemizedModel
+import cc.factorie.infer.MaximizeByMPLP
+import cc.factorie.variable.DiscreteVariable
+import cc.factorie.variable.DiscreteDomain
+import cc.factorie.model.Factor
 
 
 /**
  * How to generate the input data:
  * While in the data directory, run
  * python convert-ocr-data.py
+ * 
+ * Requires Factorie jar to be available at run-time.
+ * Download at: https://github.com/factorie/factorie/releases/download/factorie-1.0/factorie-1.0.jar
  *
  */
-object ChainDemo {
+object ChainBPDemo {
 
   val debugOn = true
 
@@ -167,52 +176,55 @@ object ChainDemo {
   }
 
   /**
-   * Log decode, with forward and backward passes
-   * (works for both loss-augmented or not, just takes the given potentials)
-   * Was ist das?
+   * Alternate decoding function using Factor Graphs
    */
-  def logDecode(logNodePotMat: Matrix[Double], logEdgePotMat: Matrix[Double]): Vector[Double] = {
+  def decodeFn(thetaUnary: Matrix[Double], thetaPairwise: Matrix[Double]): Vector[Double] = {
+    // thetaUnary is a (lengthOfChain x 26) dimensional matrix
+    val nNodes: Int = thetaUnary.rows
+    val nStates: Int = thetaUnary.cols
 
-    val logNodePot: DenseMatrix[Double] = logNodePotMat.toDenseMatrix
-    val logEdgePot: DenseMatrix[Double] = logEdgePotMat.toDenseMatrix
+    val label: DenseVector[Double] = DenseVector.zeros[Double](nNodes)
 
-    val nNodes: Int = logNodePot.rows
-    val nStates: Int = logNodePot.cols
+    object LetterDomain extends DiscreteDomain(nStates)
 
-    /*--- Forward pass ---*/
-    val alpha: DenseMatrix[Double] = DenseMatrix.zeros[Double](nNodes, nStates) // nx26 matrix
-    val mxState: DenseMatrix[Double] = DenseMatrix.zeros[Double](nNodes, nStates) // nx26 matrix
-    alpha(0, ::) := logNodePot(0, ::)
-    for (n <- 1 until nNodes) {
-      /* Equivalent to `tmp = repmat(alpha(n-1, :)', 1, nStates) + logEdgePot` */
-      // Create an empty 26x26 repmat term
-      val alphaRepmat: DenseMatrix[Double] = DenseMatrix.zeros[Double](nStates, nStates)
-      for (col <- 0 until nStates) {
-        // Take the (n-1)th row from alpha and represent it as a column in repMat
-        // alpha(n-1, ::) returns a Transposed view, so use the below workaround
-        alphaRepmat(::, col) := alpha.t(::, n - 1)
+    class LetterVar(i: Int) extends DiscreteVariable(i) {
+      def domain = LetterDomain
+    }
+
+    def getUnaryFactor(yi: LetterVar, posInChain: Int): Factor = {
+      new Factor1(yi) {
+        def score(i: LetterVar#Value) = thetaUnary(posInChain, i.intValue)
       }
-      val tmp: DenseMatrix[Double] = alphaRepmat + logEdgePot
-      val colMaxTmp: DenseMatrix[Double] = columnwiseMax(tmp)
-      alpha(n, ::) := logNodePot(n, ::) + colMaxTmp(0, ::)
-      mxState(n, ::) := colMaxTmp(1, ::)
     }
-    /*--- Backward pass ---*/
-    val y: DenseVector[Double] = DenseVector.zeros[Double](nNodes)
-    // [dummy, y(nNodes)] = max(alpha(nNodes, :))
-    y(nNodes - 1) = argmax(alpha.t(::, nNodes - 1).toDenseVector)
-    for (n <- nNodes - 2 to 0 by -1) {
-      y(n) = mxState(n + 1, y(n + 1).toInt)
+
+    def getPairwiseFactor(yi: LetterVar, yj: LetterVar): Factor = {
+      new Factor2(yi, yj) {
+        def score(i: LetterVar#Value, j: LetterVar#Value) = thetaPairwise(i.intValue, j.intValue)
+      }
     }
-    y
+
+    val letterChain: IndexedSeq[LetterVar] = for (i <- 0 until nNodes) yield new LetterVar(0)
+
+    val unaries: IndexedSeq[Factor] = for (i <- 0 until nNodes) yield getUnaryFactor(letterChain(i), i)
+    val pairwise: IndexedSeq[Factor] = for (i <- 0 until nNodes - 1) yield getPairwiseFactor(letterChain(i), letterChain(i + 1))
+
+    val model = new ItemizedModel
+    model ++= unaries
+    model ++= pairwise
+
+    // val m = BP.inferChainMax(letterChain, model)
+    val assgn = MaximizeByMPLP.infer(letterChain, model).mapAssignment
+    for (i <- 0 until nNodes)
+      label(i) = assgn(letterChain(i)).intValue.toDouble
+
+    label
   }
 
   /**
    * The Maximization Oracle
    * y_i (true label) is used for Loss Augmentation
    */
-  def oracleFnWithDecode(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double],
-    decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
+  def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
@@ -247,15 +259,11 @@ object ChainDemo {
     label
   }
 
-  def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double]): Vector[Double] =
-    oracleFnWithDecode(model, yi, xi, logDecode)
-    
   /**
    * Predict (this could use (non-loss-augmented) decoding
    *
    */
-  def predictFnWithDecode(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double],
-    decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
+  def predictFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
@@ -280,10 +288,6 @@ object ChainDemo {
     val label: Vector[Double] = decodeFn(thetaUnary.t, thetaPairwise) // - 1.0
 
     label
-  }
-
-  def predictFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double]): Vector[Double] = {
-    predictFnWithDecode(model, xi, logDecode)
   }
 
   /**
