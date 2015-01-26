@@ -36,7 +36,7 @@ cd data
 bash retrieve_datasets.sh
 python convert-ocr-data.py
 ```
-(you might have to install `brew install wget` first if on a mac)
+(you might have to install `brew install sbt` and `brew install wget` first if on a mac)
 
 #### Executing though command line (Requires Apache Spark Binaries)
 Binary classification on the Forest Cover (COV) dataset for example can be executed locally (within `dissolve-struct-examples` directory) on command-line as:
@@ -80,7 +80,7 @@ Similarly, for `dissolve-struct-examples` package too:
 cd dissolve-struct-examples
 sbt eclipse
 ```
-The above packages can be imported individually into Eclipse using: `File | Import | Existing Projects into Workspace`
+The above packages can be imported individually into Eclipse using: `File | Import | Existing Projects into Workspace`. Make sure you have `search for nested projects` checked, so you'll have the choice to select both the `dissolve-struct-lib` and `dissolve-struct-examples` projects, if desired.
 
 Suppose Eclipse defaults to Scala 2.11, it might issue a "cross-compiled with an incompatible version of Scala".
 The correct version needs to be set for both the projects by:
