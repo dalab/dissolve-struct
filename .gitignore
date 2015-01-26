@@ -50,4 +50,4 @@ checkpoint-files/*
 debug/*
 data/generated/*
 
-dissolve-struct/lib_managed/*
+dissolve-struct-lib/lib_managed/*

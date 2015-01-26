@@ -1,11 +1,11 @@
 package ch.ethz.dalab.dissolve.utils
 
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg.max
 import breeze.linalg.DenseVector
 import breeze.linalg.DenseMatrix
 import breeze.linalg.VectorBuilder
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg.CSCMatrix
 import breeze.linalg._
 
