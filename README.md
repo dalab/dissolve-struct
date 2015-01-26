@@ -21,7 +21,7 @@ Our setup mostly follows the quick-start guide here:
 ## Running the examples
 In order to run the examples, the solver package needs to be built and published locally first:
 ```bash
-cd dissolve-struct
+cd dissolve-struct-lib
 sbt publish-local
 ```
 This is followed by building the example package:
@@ -41,12 +41,12 @@ python convert-ocr-data.py
 #### Executing though command line (Requires Apache Spark Binaries)
 Binary classification on the Forest Cover (COV) dataset for example can be executed locally on command-line as:
 ```bash
-spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.bsvm.COVBinary" --master local dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
 
 In case this throws an OutOfMemoryError, the executor memory can be increased like so:
 ```bash
-spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dal.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+spark-1.1.0/bin/spark-submit --jars dissolve-struct/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G dissolve-struct-examples/target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
 
 #### Executing within Eclipse
@@ -60,9 +60,9 @@ val conf = new SparkConf()
 ```
 
 ## Setting up a development environment
-To import the packages in Eclipse, the respective .classpath files needs to be generated for the `dissolve-struct`:
+To import the packages in Eclipse, the respective .classpath files needs to be generated for the `dissolve-struct-lib`:
 ```bash
-cd dissolve-struct
+cd dissolve-struct-lib
 sbt eclipse
 ```
 Similarly, for `dissolve-struct-examples` package too:
