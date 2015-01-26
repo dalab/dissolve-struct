@@ -1,4 +1,4 @@
-package ch.ethz.dal.dissolve.examples.imageseg
+package ch.ethz.dalab.dissolve.examples.imageseg
 
 import org.apache.log4j.PropertyConfigurator
 import breeze.linalg.{ Matrix, Vector }

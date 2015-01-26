@@ -1,4 +1,4 @@
-package ch.ethz.dal.dissolve.examples.chain
+package ch.ethz.dalab.dissolve.examples.chain
 
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf

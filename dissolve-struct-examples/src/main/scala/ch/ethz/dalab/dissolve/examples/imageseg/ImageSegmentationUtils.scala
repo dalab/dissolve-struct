@@ -1,4 +1,4 @@
-package ch.ethz.dal.dissolve.examples.imageseg
+package ch.ethz.dalab.dissolve.examples.imageseg
 
 import java.io.File
 import java.awt.image.BufferedImage

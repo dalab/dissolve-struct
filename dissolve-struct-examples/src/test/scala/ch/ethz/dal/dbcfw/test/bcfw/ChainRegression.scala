@@ -11,7 +11,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dal.dissolve.examples.chain.ChainDemo.{ loadData, featureFn, lossFn, oracleFn, predictFn }
+import ch.ethz.dalab.dissolve.examples.chain.ChainDemo.{ loadData, featureFn, lossFn, oracleFn, predictFn }
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import org.apache.log4j.PropertyConfigurator
