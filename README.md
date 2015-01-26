@@ -39,14 +39,16 @@ python convert-ocr-data.py
 (you might have to install `brew install sbt` and `brew install wget` first if on a mac)
 
 #### Executing though command line (Requires Apache Spark Binaries)
+Download the [pre-build binary package of spark](http://spark.apache.org/downloads.html).
+
 Binary classification on the Forest Cover (COV) dataset for example can be executed locally (within `dissolve-struct-examples` directory) on command-line as:
 ```bash
-spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.bsvm.COVBinary" --master local target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.binaryclassification.COVBinary" --master local target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
 
 In case this throws an OutOfMemoryError, the executor memory can be increased like so:
 ```bash
-spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.bsvm.COVBinary" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.binaryclassification.COVBinary" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
 
 [Chain OCR](http://www.seas.upenn.edu/~taskar/ocr/):

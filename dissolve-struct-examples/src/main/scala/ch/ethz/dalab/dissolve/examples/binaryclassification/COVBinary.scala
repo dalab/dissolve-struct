@@ -1,4 +1,4 @@
-package ch.ethz.dalab.dissolve.examples.bsvm
+package ch.ethz.dalab.dissolve.examples.binaryclassification
 
 import ch.ethz.dalab.dissolve.utils.DissolveUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject

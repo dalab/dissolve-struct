@@ -111,6 +111,7 @@ object BinarySVMWithDBCFW {
       else
         objectifiedData
 
+    println("Running BinarySVMWithDBCFW solver")
     println(solverOptions)
 
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
@@ -170,6 +171,7 @@ object BinarySVMWithDBCFW {
       else
         objectifiedData
 
+    println("Running BinarySVMWithDBCFW solver")
     println(solverOptions)
 
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](

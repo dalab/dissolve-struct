@@ -51,3 +51,5 @@ debug/*
 data/generated/*
 
 dissolve-struct-lib/lib_managed/*
+
+dissolve-struct-examples/spark-1.*

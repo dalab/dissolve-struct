@@ -1,4 +1,4 @@
-package ch.ethz.dalab.dissolve.examples.bsvm
+package ch.ethz.dalab.dissolve.examples.binaryclassification
 
 import ch.ethz.dalab.dissolve.utils.DissolveUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject
@@ -7,14 +7,12 @@ import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
-
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.classification.SVMWithSGD
-
 import breeze.linalg._
 import breeze.numerics.abs
 
@@ -59,7 +57,7 @@ object AdultBinary {
 
     solverOptions.enableOracleCache = false
 
-    solverOptions.debugInfoPath = "/Users/tribhu/dev-local/dbcfw/DissolveStructExample/debug/debugInfo-a1a-%d.csv".format(System.currentTimeMillis())
+    solverOptions.debugInfoPath = "../debug/debugInfo-a1a-%d.csv".format(System.currentTimeMillis())
 
 
     val data = MLUtils.loadLibSVMFile(sc, a1aPath)
