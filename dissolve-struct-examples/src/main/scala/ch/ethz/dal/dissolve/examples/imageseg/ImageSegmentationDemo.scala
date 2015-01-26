@@ -2,9 +2,15 @@ package ch.ethz.dal.dissolve.examples.imageseg
 
 import org.apache.log4j.PropertyConfigurator
 import breeze.linalg.{ Matrix, Vector }
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import breeze.linalg.DenseVector
 import breeze.linalg.DenseMatrix
+import cc.factorie.variable.DiscreteDomain
+import cc.factorie.variable.DiscreteVariable
+import breeze.linalg.sum
+import breeze.linalg.Axis
+import cc.factorie.model.Factor1
+import cc.factorie.model.Factor
 
 case class ROIFeature(feature: Vector[Double]) // Represent each pixel/region by a feature vector
 
@@ -17,65 +23,90 @@ case class ROILabel(label: Int, numClasses: Int = 24) {
 
 object ImageSegmentationDemo {
 
+  def getUnaryFeatureMap(yMat: Matrix[ROILabel], xMat: Matrix[ROIFeature]): DenseMatrix[Double] = {
+    assert(xMat.rows == yMat.rows)
+    assert(xMat.cols == yMat.cols)
+
+    val numFeatures = xMat(0, 0).feature.size
+    val numClasses = yMat(0, 0).numClasses
+    val numRegions = xMat.rows * xMat.cols
+
+    val unaryMat = DenseMatrix.zeros[Double](numFeatures * numClasses, numRegions)
+
+    /**
+     * Populate unary features
+     * For each node i in graph defined by xMat, whose feature vector is x_i and corresponding label is y_i,
+     * construct a feature map phi_i given by: [I(y_i = 0)x_i I(y_i = 1)x_i ... I(y_i = K)x_i ]
+     */
+
+    for (
+      r <- 0 until xMat.rows;
+      c <- 0 until xMat.cols
+    ) {
+      val i = r * xMat.rows + c // Column-major iteration
+
+      val x_i = xMat(r, c).feature
+      val y_i = yMat(r, c).label
+
+      val phi_i = DenseVector.zeros[Double](numFeatures * numClasses)
+
+      val startIdx = numFeatures * y_i
+      val endIdx = startIdx + numFeatures
+
+      // For y_i'th position of phi_i, populate x_i's feature vector
+      phi_i(startIdx until endIdx) := x_i
+
+      unaryMat(::, i) := phi_i
+    }
+
+    unaryMat
+  }
+
+  def getPairwiseFeatureMap(yMat: Matrix[ROILabel], xMat: Matrix[ROIFeature]): DenseMatrix[Double] = {
+    assert(xMat.rows == yMat.rows)
+    assert(xMat.cols == yMat.cols)
+
+    val numFeatures = xMat(0, 0).feature.size
+    val numClasses = yMat(0, 0).numClasses
+    val numRegions = xMat.rows * xMat.cols
+
+    val pairwiseMat = DenseMatrix.zeros[Double](numClasses, numClasses)
+
+    for (
+      c <- 1 until xMat.cols - 1;
+      r <- 1 until xMat.rows - 1
+    ) {
+      val classA = yMat(c, r).label
+
+      for (
+        delx <- List(-1, 0, 1);
+        dely <- List(-1, 0, 1) if ((delx != 0) && (dely != 0))
+      ) {
+        val classB = yMat(c + delx, r + dely).label
+
+        pairwiseMat(classA, classB) += 1.0
+        pairwiseMat(classB, classA) += 1.0
+      }
+    }
+
+    pairwiseMat
+  }
+
   /**
    * Feature Function.
    * Uses: http://arxiv.org/pdf/1408.6804v2.pdf
+   * http://www.kev-smith.com/papers/LUCCHI_ECCV12.pdf
    */
   def featureFn(yMat: Matrix[ROILabel], xMat: Matrix[ROIFeature]): Vector[Double] = {
 
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
 
-    val x = xMat.toDenseMatrix.toDenseVector
-    val y = yMat.toDenseMatrix.toDenseVector
+    val unaryMat = getUnaryFeatureMap(yMat, xMat)
+    val pairwiseMat = getPairwiseFeatureMap(yMat, xMat)
 
-    val numFeatures = x(0).feature.size
-    val numClasses = y(0).numClasses
-    val numRegions = x.size
-
-    val unary = DenseMatrix.zeros[Double](numFeatures * numRegions, numClasses)
-    val pairwise = DenseMatrix.zeros[Double](numClasses, numClasses)
-
-    // Populate the unary features
-    for (classNum <- 0 until numClasses) {
-
-      // For each class label, zero-out the x_i whose class label does not agree
-      val xTimesIndicator = x.toArray
-        .zipWithIndex
-        .flatMap {
-          case (roiFeature, idx) =>
-            if (classNum == y(idx)) // Compare this feature's label
-              roiFeature.feature.toArray
-            else
-              Array.fill(numFeatures)(0.0)
-        }
-
-      val startIdx = classNum * numFeatures * numRegions
-      val endIdx = (classNum + 1) * numFeatures * numRegions
-
-      unary(::, classNum) := DenseVector(xTimesIndicator)
-
-    }
-
-    // Populate the pairwise features
-    for (
-      i <- 1 until xMat.cols - 1;
-      j <- 1 until xMat.rows - 1
-    ) {
-      val classA = yMat(i, j).label
-
-      for (
-        delx <- List(-1, 0, 1);
-        dely <- List(-1, 0, 1) if ((delx != 0) && (dely != 0))
-      ) {
-        val classB = yMat(i + delx, j + dely).label
-
-        pairwise(classA, classB) += 1.0
-        pairwise(classB, classA) += 1.0
-      }
-    }
-
-    DenseVector.vertcat(unary.toDenseVector, pairwise.toDenseVector)
+    val unarySumVec = sum(unaryMat, Axis._1)
+    DenseVector.vertcat(unarySumVec, pairwiseMat.toDenseVector)
   }
 
   /**
@@ -114,11 +145,9 @@ object ImageSegmentationDemo {
     val weightVec = model.getWeights()
 
     val unaryStartIdx = 0
-    val unaryEndIdx = xFeatureSize * numROI * numClasses
-    val unary: DenseMatrix[Double] = weightVec(unaryStartIdx until unaryEndIdx)
-      .toDenseVector
-      .toDenseMatrix
-      .reshape(xFeatureSize * numROI, numClasses)
+    val unaryEndIdx = xFeatureSize * numClasses
+    // This should be a vector of dimensions 1 x (K x h), where K = #Classes, h = dim(x_i)
+    val unary: Vector[Double] = weightVec(unaryStartIdx until unaryEndIdx)
 
     val pairwiseStartIdx = unaryEndIdx
     val pairwiseEndIdx = weightVec.size
@@ -128,7 +157,30 @@ object ImageSegmentationDemo {
       .toDenseMatrix
       .reshape(numClasses, numClasses)
 
-    // object ROIDomain extends DiscreteDomain(numClasses)
+    val phi_Y: DenseMatrix[Double] = getUnaryFeatureMap(yi, xi) // Retrieves a (K x h) x m matrix
+    val thetaUnary = phi_Y * unary // Construct a (1 x m) vector
+    val thetaPairwise = pairwise
+
+    /**
+     * Parameter estimation
+     */
+    object ROIDomain extends DiscreteDomain(numClasses)
+
+    class ROIClassVar(i: Int) extends DiscreteVariable(i) {
+      def domain = ROIDomain
+    }
+
+    def getUnaryFactor(yi: ROIClassVar, x: Int, y: Int): Factor = {
+      new Factor1(yi) {
+        def score(i: ROIClassVar#Value) = {
+          val unaryStartIdx = i.intValue
+          val unaryEndIdx = unaryStartIdx + xFeatureSize
+          val unaryPotAtxy = xi(x, y).feature dot unary(unaryStartIdx until unaryEndIdx)
+
+          unaryPotAtxy
+        }
+      }
+    }
 
     null
   }

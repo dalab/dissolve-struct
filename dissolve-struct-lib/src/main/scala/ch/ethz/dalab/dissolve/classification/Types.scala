@@ -1,4 +1,4 @@
-package ch.ethz.dal.dbcfw.classification
+package ch.ethz.dalab.dissolve.classification
 
 import breeze.linalg.{Vector, DenseVector}
 import scala.collection.mutable.MutableList

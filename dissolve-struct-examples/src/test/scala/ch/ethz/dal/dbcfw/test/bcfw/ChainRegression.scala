@@ -1,7 +1,7 @@
 /**
  *
  */
-package ch.ethz.dal.dbcfw.test.bcfw
+package ch.ethz.dalab.dissolve.test.bcfw
 
 import org.scalatest.FunSpec
 import org.scalatest.GivenWhenThen
@@ -9,11 +9,11 @@ import org.scalatest.BeforeAndAfter
 import breeze.linalg._
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 import ch.ethz.dal.dissolve.examples.chain.ChainDemo.{ loadData, featureFn, lossFn, oracleFn, predictFn }
-import ch.ethz.dal.dbcfw.classification.StructSVMWithDBCFW
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import org.apache.log4j.PropertyConfigurator
 import org.apache.log4j.Level
 import org.apache.log4j.Logger

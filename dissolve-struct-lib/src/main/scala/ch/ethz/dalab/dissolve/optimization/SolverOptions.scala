@@ -1,6 +1,6 @@
-package ch.ethz.dal.dbcfw.optimization
+package ch.ethz.dalab.dissolve.optimization
 
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg.Vector
 import org.apache.spark.rdd.RDD
 import java.io.File

@@ -1,7 +1,7 @@
 /**
  *
  */
-package ch.ethz.dal.dbcfw.classification
+package ch.ethz.dalab.dissolve.classification
 
 import breeze.linalg._
 

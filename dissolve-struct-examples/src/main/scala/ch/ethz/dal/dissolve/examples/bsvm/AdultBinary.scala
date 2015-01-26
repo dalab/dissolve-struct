@@ -1,12 +1,12 @@
 package ch.ethz.dal.dissolve.examples.bsvm
 
-import ch.ethz.dal.dbcfw.utils.DissolveUtils
-import ch.ethz.dal.dbcfw.regression.LabeledObject
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
-import ch.ethz.dal.dbcfw.classification.StructSVMWithDBCFW
-import ch.ethz.dal.dbcfw.classification.BinarySVMWithDBCFW
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
-import ch.ethz.dal.dbcfw.optimization.SolverUtils
+import ch.ethz.dalab.dissolve.utils.DissolveUtils
+import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
+import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.optimization.SolverUtils
 
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.SparkConf

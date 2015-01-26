@@ -1,4 +1,4 @@
-package ch.ethz.dal.dbcfw.regression
+package ch.ethz.dalab.dissolve.regression
 
 import org.apache.spark.mllib.regression.LabeledPoint
 

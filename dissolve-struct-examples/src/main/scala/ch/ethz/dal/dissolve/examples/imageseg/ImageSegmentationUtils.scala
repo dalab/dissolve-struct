@@ -4,7 +4,7 @@ import java.io.File
 import java.awt.image.BufferedImage
 import javax.imageio.ImageIO
 import breeze.linalg.{ Matrix, Vector }
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 import scala.io.Source
 import org.apache.spark.mllib.linalg.DenseMatrix
 import breeze.linalg.DenseMatrix

@@ -1,12 +1,12 @@
 /**
  *
  */
-package ch.ethz.dal.dbcfw.classification
+package ch.ethz.dalab.dissolve.classification
 
 import breeze.linalg._
-import ch.ethz.dal.dbcfw.regression.LabeledObject
-import ch.ethz.dal.dbcfw.optimization.SSGSolver
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.optimization.SSGSolver
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import scala.reflect.ClassTag
 
 /**

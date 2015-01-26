@@ -1,4 +1,4 @@
-package ch.ethz.dal.dbcfw.utils
+package ch.ethz.dalab.dissolve.utils
 
 import breeze.linalg._
 

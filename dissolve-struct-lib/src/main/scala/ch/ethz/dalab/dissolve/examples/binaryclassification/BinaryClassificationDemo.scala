@@ -1,4 +1,4 @@
-package ch.ethz.dal.dissolve.examples.binaryclassification
+package ch.ethz.dalab.dissolve.examples.binaryclassification
 
 import ch.ethz.dal.dbcfw.utils.DissolveUtils
 import ch.ethz.dal.dbcfw.regression.LabeledObject

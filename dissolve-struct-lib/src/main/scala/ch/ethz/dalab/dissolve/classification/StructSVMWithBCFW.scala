@@ -1,14 +1,14 @@
 /**
  *
  */
-package ch.ethz.dal.dbcfw.classification
+package ch.ethz.dalab.dissolve.classification
 
 import org.apache.spark.SparkContext
 import breeze.linalg._
 import org.apache.spark.rdd.RDD
-import ch.ethz.dal.dbcfw.regression.LabeledObject
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
-import ch.ethz.dal.dbcfw.optimization.BCFWSolver
+import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.optimization.BCFWSolver
 import scala.reflect.ClassTag
 import java.io.FileWriter
 

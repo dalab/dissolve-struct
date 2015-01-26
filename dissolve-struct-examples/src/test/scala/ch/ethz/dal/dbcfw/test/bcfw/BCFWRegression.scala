@@ -1,13 +1,13 @@
-package ch.ethz.dal.dbcfw.test.bcfw
+package ch.ethz.dalab.dissolve.test.bcfw
 
 import ch.ethz.dal.dissolve.examples.chain.ChainDemo.{ loadData, featureFn, lossFn, oracleFn, predictFn }
 import org.scalatest.FunSpec
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg._
 import breeze.numerics._
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
-import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
 
 class BCFWRegression extends FunSpec {
 

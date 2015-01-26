@@ -1,4 +1,4 @@
-package ch.ethz.dal.dbcfw.utils
+package ch.ethz.dalab.dissolve.utils
 
 import ch.ethz.dal.dbcfw.regression.LabeledObject
 import breeze.linalg.max

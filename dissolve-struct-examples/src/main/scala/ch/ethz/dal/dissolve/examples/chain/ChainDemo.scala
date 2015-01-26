@@ -1,32 +1,22 @@
 package ch.ethz.dal.dissolve.examples.chain
 
-import breeze.linalg._
-import breeze.numerics._
-import breeze.generic._
-
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-import org.apache.spark.SparkConf
-import org.apache.spark.rdd.RDD
-
-import org.apache.log4j.Logger
 import org.apache.log4j.PropertyConfigurator
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
 
-import java.io.File
-import java.io.PrintWriter
-
-import collection.JavaConversions.enumerationAsScalaIterator
-
-import ch.ethz.dal.dbcfw.regression.LabeledObject
-import ch.ethz.dal.dbcfw.classification.Types._
-import ch.ethz.dal.dbcfw.classification.StructSVMWithDBCFW
-import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
-import ch.ethz.dal.dbcfw.classification.StructSVMWithMiniBatch
-import ch.ethz.dal.dbcfw.optimization.SolverUtils
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
-import ch.ethz.dal.dbcfw.classification.StructSVMWithSSG
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
-import ch.ethz.dal.dbcfw.classification.StructSVMWithBCFW
+import breeze.linalg.DenseMatrix
+import breeze.linalg.DenseVector
+import breeze.linalg.Matrix
+import breeze.linalg.Vector
+import breeze.linalg.argmax
+import breeze.linalg.max
+import breeze.linalg.sum
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
+import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.optimization.SolverUtils
+import ch.ethz.dalab.dissolve.regression.LabeledObject;
 
 
 /**

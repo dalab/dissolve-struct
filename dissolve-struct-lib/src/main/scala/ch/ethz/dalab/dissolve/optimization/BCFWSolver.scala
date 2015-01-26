@@ -1,17 +1,21 @@
 /**
  *
  */
-package ch.ethz.dal.dbcfw.optimization
+package ch.ethz.dalab.dissolve.optimization
 
 import org.apache.spark.mllib.optimization.Optimizer
 import org.apache.spark.rdd.RDD
+
 import scala.util.Random
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import breeze.linalg._
 import breeze.numerics._
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.optimization.SolverUtils;
+import ch.ethz.dalab.dissolve.regression.LabeledObject
+
 import java.io.File
 import java.io.PrintWriter
+
 import scala.collection.mutable.MutableList
 import scala.reflect.ClassTag
 

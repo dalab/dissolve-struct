@@ -2,18 +2,18 @@
 /**
  *
  */
-package ch.ethz.dal.dbcfw.classification
+package ch.ethz.dalab.dissolve.classification
 
 import scala.reflect.ClassTag
 import java.io.FileWriter
-import ch.ethz.dal.dbcfw.regression.LabeledObject
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
-import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
-import ch.ethz.dal.dbcfw.optimization.SolverUtils
+import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.optimization.DBCFWSolver
+import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import breeze.linalg.{ Vector, SparseVector, DenseVector }
-import ch.ethz.dal.dbcfw.optimization.DBCFWSolverTuned
+import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
 
 /**
  * @author tribhu

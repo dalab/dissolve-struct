@@ -1,15 +1,15 @@
-package ch.ethz.dal.dbcfw.classification
+package ch.ethz.dalab.dissolve.classification
 
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg._
-import ch.ethz.dal.dbcfw.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import ch.ethz.dal.dbcfw.optimization.DBCFWSolver
+import ch.ethz.dalab.dissolve.optimization.DBCFWSolver
 import java.io.FileWriter
-import ch.ethz.dal.dbcfw.optimization.SolverUtils
+import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import scala.reflect.ClassTag
-import ch.ethz.dal.dbcfw.optimization.DBCFWSolverTuned
+import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
 
 class StructSVMWithDBCFW[X, Y](
   val data: RDD[LabeledObject[X, Y]],

@@ -1,8 +1,8 @@
-package ch.ethz.dal.dbcfw.optimization
+package ch.ethz.dalab.dissolve.optimization
 
-import ch.ethz.dal.dbcfw.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import breeze.linalg._
-import ch.ethz.dal.dbcfw.regression.LabeledObject
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
