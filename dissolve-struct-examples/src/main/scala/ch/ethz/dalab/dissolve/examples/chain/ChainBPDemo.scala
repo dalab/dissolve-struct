@@ -91,7 +91,7 @@ object ChainBPDemo {
    * x is a Pattern matrix, of dimensions numDims x NumVars (say 129 x 9)
    * y is a Label vector, of dimension numVars (9 for above x)
    */
-  def featureFn(y: Vector[Double], xM: Matrix[Double]): Vector[Double] = {
+  def featureFn(xM: Matrix[Double], y: Vector[Double]): Vector[Double] = {
     val x = xM.toDenseMatrix
     val numStates = 26
     val numDims = x.rows // 129 in case of Chain OCR
@@ -176,7 +176,8 @@ object ChainBPDemo {
   }
 
   /**
-   * Alternate decoding function using Factor Graphs
+   * Alternate decoding function using belief propagation on the factor graph,
+   * using the Factorie library.
    */
   def decodeFn(thetaUnary: Matrix[Double], thetaPairwise: Matrix[Double]): Vector[Double] = {
     // thetaUnary is a (lengthOfChain x 26) dimensional matrix
@@ -222,9 +223,14 @@ object ChainBPDemo {
 
   /**
    * The Maximization Oracle
-   * y_i (true label) is used for Loss Augmentation
+   * 
+   * Performs loss-augmented decoding on a given example xi and label yi 
+   * using model.getWeights() as parameter. The loss is normalized Hamming loss.
+   * 
+   * If yi is not given, then standard prediction is done (i.e. MAP decoding),
+   * without any loss term.
    */
-  def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], yi: Vector[Double], xi: Matrix[Double]): Vector[Double] = {
+  def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
@@ -244,13 +250,15 @@ object ChainBPDemo {
     thetaUnary(::, -1) := thetaUnary(::, -1) + weight.lastBias
 
     val thetaPairwise: DenseMatrix[Double] = weight.pairwise
-
+    
     // Add loss-augmentation to the score (normalized Hamming distances used for loss)
-    val l: Int = yi.size
-    for (i <- 0 until numVars) {
-      thetaUnary(::, i) := thetaUnary(::, i) + 1.0 / l
-      val idx = yi(i).toInt // Loss augmentation
-      thetaUnary(idx, i) = thetaUnary(idx, i) - 1.0 / l
+    if (yi != null) { // loss augmentation is only done if a label yi is given. 
+    	val l: Int = yi.size
+    	for (i <- 0 until numVars) {
+    		thetaUnary(::, i) := thetaUnary(::, i) + 1.0 / l
+    		val idx = yi(i).toInt // Loss augmentation
+    		thetaUnary(idx, i) = thetaUnary(idx, i) - 1.0 / l
+    	}
     }
 
     // Solve inference problem
@@ -260,32 +268,12 @@ object ChainBPDemo {
   }
 
   /**
-   * Predict (this could use (non-loss-augmented) decoding
+   * Predict function.
+   * This is (non-loss-augmented) decoding
    *
    */
   def predictFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double]): Vector[Double] = {
-    val numStates = 26
-    // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
-    val numDims = xi.rows // 129 in Chain example 
-    val numVars = xi.cols // The length of word, say 9
-
-    // Convert the lengthy weight vector into an object, to ease representation
-    // weight.unary is a numDims x numStates Matrix (129 x 26 in above example)
-    // weight.firstBias and weight.lastBias is a numStates-dimensional vector
-    // weight.pairwise is a numStates x numStates Matrix
-    val weight: Weight = weightVecToObj(model.getWeights(), numStates, numDims)
-
-    val thetaUnary: DenseMatrix[Double] = weight.unary.t * xi // Produces a 26 x n matrix
-
-    // First position has a bias
-    thetaUnary(::, 0) := thetaUnary(::, 0) + weight.firstBias
-    // Last position has a bias
-    thetaUnary(::, -1) := thetaUnary(::, -1) + weight.lastBias
-
-    val thetaPairwise: DenseMatrix[Double] = weight.pairwise
-
-    // Solve inference problem
-    val label: Vector[Double] = decodeFn(thetaUnary.t, thetaPairwise) // - 1.0
+    val label: Vector[Double] = oracleFn(model, xi, null)
 
     label
   }
