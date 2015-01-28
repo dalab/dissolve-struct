@@ -8,13 +8,16 @@ import java.io.File
 import java.io.PrintWriter
 
 /**
+ * Train a structured SVM using standard Stochastic (Sub)Gradient Descent (SGD).
+ * The implementation here is single machine, not distributed.
+ * 
  * Input:
  * Each data point (x_i, y_i) is composed of:
- * x_i, the feature Matrix containing Doubles
- * y_i, the label Vector containing Doubles
+ * x_i, the data example
+ * y_i, the label
  *
- * allPatterns is a vector of x_i Matrices
- * allLabels is a vector of y_i Vectors
+ * @param <X> type for the data examples
+ * @param <Y> type for the labels of each example
  */
 class SSGSolver[X, Y](
   val data: Seq[LabeledObject[X, Y]],

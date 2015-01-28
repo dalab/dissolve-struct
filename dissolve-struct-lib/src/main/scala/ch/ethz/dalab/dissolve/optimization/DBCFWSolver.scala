@@ -20,6 +20,15 @@ import scala.collection.mutable.MutableList
 import ch.ethz.dalab.dissolve.utils.LinAlgOps._
 import scala.reflect.ClassTag
 
+/**
+ * Train a structured SVM using the actual distributed dissolve^struct solver.
+ * This uses primal dual Block-Coordinate Frank-Wolfe solver (BCFW), distributed
+ * via the CoCoA framework (Communication-Efficient Distributed Dual Coordinate Ascent)
+ *
+ * @param <X> type for the data examples
+ * @param <Y> type for the labels of each example
+ */
+@deprecated
 class DBCFWSolver[X, Y](
   val data: RDD[LabeledObject[X, Y]],
   val featureFn: (X, Y) => Vector[Double], // (y, x) => FeatureVect, 

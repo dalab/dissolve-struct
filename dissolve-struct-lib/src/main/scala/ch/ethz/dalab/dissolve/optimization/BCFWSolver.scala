@@ -20,7 +20,13 @@ import scala.collection.mutable.MutableList
 import scala.reflect.ClassTag
 
 /**
+ * Train a structured SVM using the primal dual Block-Coordinate Frank-Wolfe solver (BCFW).
+ * 
+ * The implementation here is single machine, not distributed. See DBCFWSolver... for the
+ * distributed version.
  *
+ * @param <X> type for the data examples
+ * @param <Y> type for the labels of each example
  */
 class BCFWSolver[X, Y] /*extends Optimizer*/ (
   val data: Seq[LabeledObject[X, Y]],
