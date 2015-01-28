@@ -8,7 +8,7 @@ The interface to the user is the same as in the widely used SVM<sup>struct</sup>
 
 # Usage
 
-## Checkout the project repository
+#### Checkout the project repository
 
 	git clone https://github.com/dalab/dissolve-struct.git
 
@@ -32,7 +32,7 @@ python convert-ocr-data.py
 ```
 (you might have to install `brew install sbt` and `brew install wget` first if on a mac)
 
-#### Executing through command line
+### Executing through command line
 Download the [pre-build binary package of Spark](http://spark.apache.org/downloads.html). Here for example we assume the Spark folder is named `spark-1.1.0`.
 
 ##### Binary classification Example
@@ -52,7 +52,7 @@ Here is the same example using more general Belief Propagation, by employing the
 spark-1.1.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar --class "ch.ethz.dalab.dissolve.examples.chain.ChainBPDemo" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 ```
 
-#### Executing within Eclipse
+### Executing within Eclipse
 To ease debugging and development, the examples can directly be run within Eclipse by `Run As | Scala Application`. This does not require Spark binaries. See the section below how to set up the environment.
 
 Within Eclipse, Spark can only be run in local mode since all the interactions need to be visible to Eclipse.
@@ -78,7 +78,7 @@ The above packages can be imported individually into Eclipse using: `File | Impo
 
 Currently Scala 2.10.4 is required by Spark. If Eclipse defaults to Scala 2.11 instead, this can cause an error "cross-compiled with an incompatible version of Scala".
 The correct version needs to be set for both the projects by:
-`Project Properties | Scala Compiler | Setting "Scala Installation" to "Latest 2.10 bundle"`
+`Project Properties | Scala Compiler | Setting "Scala Installation" to "Latest 2.10 bundle"`.
 Alternatively, we recommend directly working with Eclipse IDE for Scala 2.10.4 from <http://scala-ide.org/download/sdk.html>.
 
 ## References
