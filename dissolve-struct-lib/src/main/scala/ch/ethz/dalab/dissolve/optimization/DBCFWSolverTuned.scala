@@ -24,9 +24,9 @@ import org.apache.spark.HashPartitioner
 
 class DBCFWSolverTuned[X, Y](
   val data: RDD[LabeledObject[X, Y]],
-  val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
+  val featureFn: (X, Y) => Vector[Double], // (y, x) => FeatureVect, 
   val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
-  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
+  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label, 
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val solverOptions: SolverOptions[X, Y],
   val miniBatchEnabled: Boolean) extends Serializable {
@@ -35,9 +35,9 @@ class DBCFWSolverTuned[X, Y](
    * Some case classes to make code more readable
    */
 
-  case class HelperFunctions[X, Y](featureFn: (Y, X) => Vector[Double],
+  case class HelperFunctions[X, Y](featureFn: (X, Y) => Vector[Double],
                                    lossFn: (Y, Y) => Double,
-                                   oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+                                   oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
                                    predictFn: (StructSVMModel[X, Y], X) => Y)
 
   // Input to the mapper: idx -> DataShard
@@ -64,7 +64,7 @@ class DBCFWSolverTuned[X, Y](
 
     val verboseDebug: Boolean = false
 
-    val d: Int = featureFn(samplePoint.label, samplePoint.pattern).size
+    val d: Int = featureFn(samplePoint.pattern, samplePoint.label).size
     // Let the initial model contain zeros for all weights
     // Global model uses Dense Vectors by default
     var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn, solverOptions.numClasses)
@@ -409,7 +409,7 @@ class DBCFWSolverTuned[X, Y](
         if (solverOptions.enableOracleCache && optionalCache_i.isDefined) {
           val candidates: Seq[(Double, Int)] =
             optionalCache_i.get
-              .map(y_i => (((phi(label, pattern) - phi(y_i, pattern)) :* (1 / (n * lambda))),
+              .map(y_i => (((phi(pattern, label) - phi(pattern, y_i)) :* (1 / (n * lambda))),
                 (1.0 / n) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
               .map {
                 case (w_s, ell_s) =>
@@ -434,7 +434,7 @@ class DBCFWSolverTuned[X, Y](
       // 2.b) Solve loss-augmented inference for point i
       val yAndCache =
         if (bestCachedCandidateForI.isEmpty) {
-          val ystar = maxOracle(localModel, label, pattern)
+          val ystar = maxOracle(localModel, pattern, label)
 
           val updatedCache: Option[BoundedCacheList[Y]] =
             if (solverOptions.enableOracleCache) {
@@ -458,7 +458,7 @@ class DBCFWSolverTuned[X, Y](
       val updatedCache = yAndCache._2
 
       // 3) Define the update quantities
-      val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
+      val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
       val loss_i: Double = lossFn(label, ystar_i)
       val ell_s: Double = (1.0 / n) * loss_i

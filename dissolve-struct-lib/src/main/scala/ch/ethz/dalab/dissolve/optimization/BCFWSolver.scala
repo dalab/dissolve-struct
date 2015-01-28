@@ -24,9 +24,9 @@ import scala.reflect.ClassTag
  */
 class BCFWSolver[X, Y] /*extends Optimizer*/ (
   val data: Seq[LabeledObject[X, Y]],
-  val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
+  val featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVect, 
   val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
-  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
+  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Lab, 
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val solverOptions: SolverOptions[X, Y],
   val testData: Seq[LabeledObject[X, Y]]) {
@@ -34,9 +34,9 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
   // Constructor without test data
   def this(
     data: Seq[LabeledObject[X, Y]],
-    featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVect, 
+    featureFn: (X, Y) => Vector[Double], // (y, x) => FeatureVect, 
     lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
-    oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Lab, 
+    oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Lab, 
     predictFn: (StructSVMModel[X, Y], X) => Y,
     solverOptions: SolverOptions[X, Y]) = this(data, featureFn, lossFn, oracleFn, predictFn, solverOptions, null)
 
@@ -49,7 +49,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
   val maxOracle = oracleFn
   val phi = featureFn
   // Number of dimensions of \phi(x, y)
-  val ndims: Int = phi(data(0).label, data(0).pattern).size
+  val ndims: Int = phi(data(0).pattern, data(0).label).size
 
   val eps: Double = 2.2204E-16
 
@@ -63,7 +63,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     /* Initialization */
     var k: Integer = 0
     val n: Int = data.length
-    val d: Int = featureFn(data(0).label, data(0).pattern).size
+    val d: Int = featureFn(data(0).pattern, data(0).label).size
     // Use first example to determine dimension of w
     val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
     val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
@@ -120,7 +120,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
           if (solverOptions.enableOracleCache && oracleCache.contains(i)) {
             val candidates: Seq[(Double, Int)] =
               oracleCache(i)
-                .map(y_i => (((phi(label, pattern) - phi(y_i, pattern)) :* (1 / (n * lambda))),
+                .map(y_i => (((phi(pattern, label) - phi(pattern, y_i)) :* (1 / (n * lambda))),
                   (1.0 / n) * lossFn(label, y_i))) // Map each cached y_i to their respective (w_s, ell_s)
                 .map {
                   case (w_s, ell_s) => (model.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
@@ -145,7 +145,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
         // 2.b) In case cache is disabled or a good contender from cache hasn't been found, call max Oracle
         val ystar_i: Y =
           if (bestCachedCandidateForI.isEmpty) {
-            val ystar = maxOracle(model, label, pattern)
+            val ystar = maxOracle(model, pattern, label)
 
             if (solverOptions.enableOracleCache)
               // Add this newly computed ystar to the cache of this i
@@ -163,7 +163,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
         }
 
         // 3) Define the update quantities
-        val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
+        val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
         val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
         val loss_i: Double = lossFn(label, ystar_i)
         val ell_s: Double = (1.0 / n) * loss_i

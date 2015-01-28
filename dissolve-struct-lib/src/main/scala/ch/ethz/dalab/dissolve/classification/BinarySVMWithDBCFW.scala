@@ -28,7 +28,7 @@ object BinarySVMWithDBCFW {
    * Returns y_i * x_i
    *
    */
-  def featureFn(y: Double, x: Vector[Double]): Vector[Double] = {
+  def featureFn(x: Vector[Double], y: Double): Vector[Double] = {
     x * y
   }
 
@@ -50,12 +50,12 @@ object BinarySVMWithDBCFW {
    * Want: max L(y_i, y) - <w, psi_i(y)>
    * This returns the most violating (Loss-augmented) label.
    */
-  def oracleFn(model: StructSVMModel[Vector[Double], Double], yi: Double, xi: Vector[Double]): Double = {
+  def oracleFn(model: StructSVMModel[Vector[Double], Double], xi: Vector[Double], yi: Double): Double = {
 
     val weights = model.getWeights()
 
-    var score_neg1 = weights dot featureFn(-1.0, xi)
-    var score_pos1 = weights dot featureFn(1.0, xi)
+    var score_neg1 = weights dot featureFn(xi, -1.0)
+    var score_pos1 = weights dot featureFn(xi, 1.0)
 
     // Loss augment the scores
     score_neg1 += 1.0
@@ -81,8 +81,8 @@ object BinarySVMWithDBCFW {
 
     val weights = model.getWeights()
 
-    val score_neg1 = weights dot featureFn(-1.0, xi)
-    val score_pos1 = weights dot featureFn(1.0, xi)
+    val score_neg1 = weights dot featureFn(xi, -1.0)
+    val score_pos1 = weights dot featureFn(xi, 1.0)
 
     if (score_neg1 > score_pos1)
       -1.0
@@ -148,9 +148,9 @@ object BinarySVMWithDBCFW {
    */
   def train(
     data: RDD[LabeledPoint],
-    featureFn: (Double, Vector[Double]) => Vector[Double], // (y, x) => FeatureVector
+    featureFn: (Vector[Double], Double) => Vector[Double], // (x, y) => FeatureVector
     lossFn: (Double, Double) => Double, // (yTruth, yPredict) => LossValue
-    oracleFn: (StructSVMModel[Vector[Double], Double], Double, Vector[Double]) => Double, // (model, y_i, x_i) => Label
+    oracleFn: (StructSVMModel[Vector[Double], Double], Vector[Double], Double) => Double, // (model, x_i, y_i) => Label
     predictFn: (StructSVMModel[Vector[Double], Double], Vector[Double]) => Double,
     solverOptions: SolverOptions[Vector[Double], Double]): StructSVMModel[Vector[Double], Double] = {
 

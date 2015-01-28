@@ -13,9 +13,9 @@ import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
 
 class StructSVMWithDBCFW[X, Y](
   val data: RDD[LabeledObject[X, Y]],
-  val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVector
+  val featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVector
   val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label
+  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val solverOptions: SolverOptions[X, Y]) {
 
@@ -52,9 +52,9 @@ class StructSVMWithDBCFW[X, Y](
 
 object StructSVMWithDBCFW {
   def train[X, Y](data: RDD[LabeledObject[X, Y]],
-                  featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVector
+                  featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVector
                   lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
-                  oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label
+                  oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label
                   predictFn: (StructSVMModel[X, Y], X) => Y,
                   solverOptions: SolverOptions[X, Y])(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[X, Y](

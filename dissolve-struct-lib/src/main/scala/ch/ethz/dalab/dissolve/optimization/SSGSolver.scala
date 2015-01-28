@@ -17,12 +17,10 @@ import java.io.PrintWriter
  * allLabels is a vector of y_i Vectors
  */
 class SSGSolver[X, Y](
-  // val allPatterns: Vector[Matrix[Double]],
-  // val allLabels: Vector[Vector[Double]],
- val data: Seq[LabeledObject[X, Y]],
-  val featureFn: (Y, X) => Vector[Double], // (y, x) => FeatureVector
+  val data: Seq[LabeledObject[X, Y]],
+  val featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVector
   val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y, // (model, y_i, x_i) => Label
+  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val solverOptions: SolverOptions[X, Y]) {
 
@@ -33,7 +31,7 @@ class SSGSolver[X, Y](
   val maxOracle = oracleFn
   val phi = featureFn
   // Number of dimensions of \phi(x, y)
-  val ndims: Int = phi(data(0).label, data(0).pattern).size
+  val ndims: Int = phi(data(0).pattern, data(0).label).size
 
   // Filenames
   val lossWriterFileName = "data/debug/ssg-loss.csv"
@@ -45,9 +43,9 @@ class SSGSolver[X, Y](
 
     var k: Integer = 0
     val n: Int = data.length
-    val d: Int = featureFn(data(0).label, data(0).pattern).size
+    val d: Int = featureFn(data(0).pattern, data(0).label).size
     // Use first example to determine dimension of w
-    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(featureFn(data(0).label, data(0).pattern).size),
+    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(featureFn(data(0).pattern, data(0).label).size),
       0.0,
       DenseVector.zeros(ndims),
       featureFn,
@@ -93,10 +91,10 @@ class SSGSolver[X, Y](
         val label: Y = data(i).label
 
         // 2) Solve loss-augmented inference for point i
-        val ystar_i: Y = maxOracle(model, label, pattern)
+        val ystar_i: Y = maxOracle(model, pattern, label)
 
         // 3) Get the subgradient
-        val psi_i: Vector[Double] = phi(label, pattern) - phi(ystar_i, pattern)
+        val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
         val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
 
         if (debugOn && dummy == (n - 1))

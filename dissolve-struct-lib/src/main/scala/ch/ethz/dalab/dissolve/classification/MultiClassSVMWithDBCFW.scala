@@ -20,7 +20,7 @@ object MultiClassSVMWithDBCFW {
    * Returns y_i * x_i
    *
    */
-  def featureFn(y: MultiClassLabel, x: Vector[Double]): Vector[Double] = {
+  def featureFn(x: Vector[Double], y: MultiClassLabel): Vector[Double] = {
     val featureVector = DenseVector.zeros[Double](x.size * y.numClasses)
 
     // Populate the featureVector in blocks [<class-0 features> <class-1 features> ...].
@@ -53,7 +53,7 @@ object MultiClassSVMWithDBCFW {
    * Want: max L(y_i, y) - <w, psi_i(y)>
    * This returns the most violating (Loss-augmented) label.
    */
-  def oracleFn(model: StructSVMModel[Vector[Double], MultiClassLabel], yi: MultiClassLabel, xi: Vector[Double]): MultiClassLabel = {
+  def oracleFn(model: StructSVMModel[Vector[Double], MultiClassLabel], xi: Vector[Double], yi: MultiClassLabel): MultiClassLabel = {
 
     val weights = model.getWeights()
     val numClasses = yi.numClasses
@@ -62,7 +62,7 @@ object MultiClassSVMWithDBCFW {
     val mostViolatedContraint: (Double, Double) =
       (0 to numClasses).map {
         case cl =>
-          (cl, weights dot featureFn(MultiClassLabel(cl, numClasses), xi))
+          (cl, weights dot featureFn(xi, MultiClassLabel(cl, numClasses)))
       }.map {
         case (cl, score) =>
           (cl.toDouble, score + 1.0)
@@ -92,7 +92,7 @@ object MultiClassSVMWithDBCFW {
     val prediction =
       (0 to numClasses).map {
         case cl =>
-          (cl.toDouble, weights dot featureFn(MultiClassLabel(cl, numClasses), xi))
+          (cl.toDouble, weights dot featureFn(xi, MultiClassLabel(cl, numClasses)))
       }.maxBy { // Obtain the class with the maximum value
         case (cl, score) => score
       }
@@ -160,9 +160,9 @@ object MultiClassSVMWithDBCFW {
    */
   def train(
     data: RDD[LabeledPoint],
-    featureFn: (MultiClassLabel, Vector[Double]) => Vector[Double], // (y, x) => FeatureVector
+    featureFn: (Vector[Double], MultiClassLabel) => Vector[Double], // (y, x) => FeatureVector
     lossFn: (MultiClassLabel, MultiClassLabel) => Double, // (yTruth, yPredict) => LossValue
-    oracleFn: (StructSVMModel[Vector[Double], MultiClassLabel], MultiClassLabel, Vector[Double]) => MultiClassLabel, // (model, y_i, x_i) => Label
+    oracleFn: (StructSVMModel[Vector[Double], MultiClassLabel], Vector[Double], MultiClassLabel) => MultiClassLabel, // (model, y_i, x_i) => Label
     predictFn: (StructSVMModel[Vector[Double], MultiClassLabel], Vector[Double]) => MultiClassLabel,
     solverOptions: SolverOptions[Vector[Double], MultiClassLabel]): StructSVMModel[Vector[Double], MultiClassLabel] = {
 

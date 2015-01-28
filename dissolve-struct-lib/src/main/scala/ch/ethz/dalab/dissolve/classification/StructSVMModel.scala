@@ -20,9 +20,9 @@ class StructSVMModel[X, Y](
   var weights: Vector[Double],
   var ell: Double,
   val ellMat: Vector[Double],
-  val featureFn: (Y, X) => Vector[Double],
+  val featureFn: (X, Y) => Vector[Double],
   val lossFn: (Y, Y) => Double,
-  val oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val numClasses: Int) extends Serializable {
 
@@ -30,9 +30,9 @@ class StructSVMModel[X, Y](
     weights: Vector[Double],
     ell: Double,
     ellMat: Vector[Double],
-    featureFn: (Y, X) => Vector[Double],
+    featureFn: (X, Y) => Vector[Double],
     lossFn: (Y, Y) => Double,
-    oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+    oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
     predictFn: (StructSVMModel[X, Y], X) => Y) = this(weights, ell, ellMat, featureFn, lossFn, oracleFn, predictFn, -1)
 
   def getWeights(): Vector[Double] = {

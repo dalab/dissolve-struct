@@ -45,7 +45,7 @@ object SolverUtils {
   }
 
   /**
-   * Objective function
+   * Objective function (SVM dual, assuming we know the vector b of all losses. See BCFW paper)
    */
   def objectiveFunction(w: Vector[Double],
                         b_alpha: Double,
@@ -56,11 +56,12 @@ object SolverUtils {
 
   /**
    * Compute Duality gap
+   * Requires one full pass of decoding over all data examples.
    */
   def dualityGap[X, Y](data: Seq[LabeledObject[X, Y]],
-                       featureFn: (Y, X) => Vector[Double],
+                       featureFn: (X, Y) => Vector[Double],
                        lossFn: (Y, Y) => Double,
-                       oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+                       oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
                        model: StructSVMModel[X, Y],
                        lambda: Double)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
 
@@ -75,13 +76,13 @@ object SolverUtils {
     val yStars = new Array[Y](n)
 
     for (i <- 0 until n) {
-      yStars(i) = maxOracle(model, data(i).label, data(i).pattern)
+      yStars(i) = maxOracle(model, data(i).pattern, data(i).label)
     }
 
     var w_s: DenseVector[Double] = DenseVector.zeros[Double](d)
     var ell_s: Double = 0.0
     for (i <- 0 until n) {
-      w_s += phi(data(i).label, data(i).pattern) - phi(yStars(i), data(i).pattern)
+      w_s += phi(data(i).pattern, data(i).label) - phi(data(i).pattern, yStars(i))
       ell_s += lossFn(data(i).label, yStars(i))
     }
 
@@ -93,10 +94,14 @@ object SolverUtils {
     (gap, w_s, ell_s)
   }
 
+  /**
+   * Alternative implementation, using fold. TODO: delete this or the above
+   * Requires one full pass of decoding over all data examples.
+   */
   def dualityGap[X, Y](data: RDD[LabeledObject[X, Y]],
-                       featureFn: (Y, X) => Vector[Double],
+                       featureFn: (X, Y) => Vector[Double],
                        lossFn: (Y, Y) => Double,
-                       oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+                       oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
                        model: StructSVMModel[X, Y],
                        lambda: Double,
                        dataSize: Int)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
@@ -112,8 +117,8 @@ object SolverUtils {
 
     var (w_s, ell_s) = data.map {
       case datapoint =>
-        val yStar = maxOracle(model, datapoint.label, datapoint.pattern)
-        val w_s = phi(datapoint.label, datapoint.pattern) - phi(yStar, datapoint.pattern)
+        val yStar = maxOracle(model, datapoint.pattern, datapoint.label)
+        val w_s = phi(datapoint.pattern, datapoint.label) - phi(datapoint.pattern, yStar)
         val ell_s = lossFn(datapoint.label, yStar)
 
         (w_s, ell_s)
@@ -131,20 +136,21 @@ object SolverUtils {
   }
 
   /**
-   * Primal objective
+   * Primal objective.
+   * Requires one full pass of decoding over all data examples.
    */
   def primalObjective[X, Y](data: Vector[LabeledObject[X, Y]],
-                            featureFn: (Y, X) => Vector[Double],
-                            lossFn: (Y, Y) => Double,
-                            oracleFn: (StructSVMModel[X, Y], Y, X) => Y,
+                       		featureFn: (X, Y) => Vector[Double],
+                       		lossFn: (Y, Y) => Double,
+                       		oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
                             model: StructSVMModel[X, Y],
                             lambda: Double): Double = {
 
     var hingeLosses: Double = 0.0
     for (i <- 0 until data.size) {
-      val yStar_i = oracleFn(model, data(i).label, data(i).pattern)
+      val yStar_i = oracleFn(model, data(i).pattern, data(i).label)
       val loss_i = lossFn(data(i).label, yStar_i)
-      val psi_i = featureFn(data(i).label, data(i).pattern) - featureFn(yStar_i, data(i).pattern)
+      val psi_i = featureFn(data(i).pattern, data(i).label) - featureFn(data(i).pattern, yStar_i)
 
       val hingeloss_i = loss_i - model.getWeights().t * psi_i
       // println("loss_i = %f, other_loss = %f".format(loss_i, model.getWeights().t * psi_i))
