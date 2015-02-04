@@ -9,8 +9,8 @@ syntax: glob
 
 # eclipse conf file
 .settings
-# .classpath
-# .project
+.classpath
+.project
 .manager
 .scala_dependencies
 
@@ -53,3 +53,14 @@ data/generated/*
 dissolve-struct-lib/lib_managed/*
 
 dissolve-struct-examples/spark-1.*
+
+# Experiment related scripts/data
+conf/*
+expt-data/*
+figures/*
+*.ipynb
+setup_cluster.sh
+run.sh
+
+# Data for regression testing
+data/debug/*
