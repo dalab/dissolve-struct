@@ -27,7 +27,7 @@ class SSGSolver[X, Y](
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val solverOptions: SolverOptions[X, Y]) {
 
-  val numPasses = solverOptions.numPasses
+  val numRounds = solverOptions.numRounds
   val lambda = solverOptions.lambda
   val debugOn: Boolean = solverOptions.debug
 
@@ -70,8 +70,8 @@ class SSGSolver[X, Y](
     }
     val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
 
-    val lossWriter = if (solverOptions.debugLoss) new PrintWriter(new File(lossWriterFileName)) else null
-    if (solverOptions.debugLoss) {
+    val lossWriter = if (solverOptions.debug) new PrintWriter(new File(lossWriterFileName)) else null
+    if (solverOptions.debug) {
       if (solverOptions.testData != null)
         lossWriter.write("pass_num,iter,primal,dual,duality_gap,train_error,test_error\n")
       else
@@ -79,10 +79,10 @@ class SSGSolver[X, Y](
     }
 
     if (debugOn) {
-      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
+      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numRounds, lambda))
     }
 
-    for (passNum <- 0 until numPasses) {
+    for (passNum <- 0 until numRounds) {
 
       if (debugOn)
         println("Starting pass #%d".format(passNum))
@@ -132,12 +132,12 @@ class SSGSolver[X, Y](
             println("Pass %d Iteration %d, SVM primal = %f, Train error = %f, Test error = %f"
               .format(passNum + 1, k, primal, trainError, testError))
 
-            if (solverOptions.debugLoss)
+            if (solverOptions.debug)
               lossWriter.write("%d,%d,%f,%f,%f\n".format(passNum + 1, k, primal, trainError, testError))
           } else {
             println("Pass %d Iteration %d, SVM primal = %f, Train error = %f"
               .format(passNum + 1, k, primal, trainError))
-            if (solverOptions.debugLoss)
+            if (solverOptions.debug)
               lossWriter.write("%d,%d,%f,%f,\n".format(passNum + 1, k, primal, trainError))
           }
 

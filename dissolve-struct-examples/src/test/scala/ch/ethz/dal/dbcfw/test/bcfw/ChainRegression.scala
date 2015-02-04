@@ -107,11 +107,11 @@ class ChainRegression extends FunSpec with GivenWhenThen {
      *  Start with a default setting of Solver Options
      */
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
-    solverOptions.numPasses = 5
+    solverOptions.numRounds = 5
     solverOptions.debug = true
     solverOptions.lambda = 0.01
     solverOptions.doLineSearch = true
-    solverOptions.debugLoss = true
+    solverOptions.debug = true
     solverOptions.testDataRDD = Some(sc.parallelize(testDataUnord.toArray, solverOptions.NUM_PART))
     solverOptions.debugInfoPath = "debug/regression-chain.csv".format(System.currentTimeMillis())
     solverOptions.enableManualPartitionSize = true

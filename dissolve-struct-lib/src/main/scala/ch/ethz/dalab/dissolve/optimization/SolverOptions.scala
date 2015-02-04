@@ -6,9 +6,7 @@ import org.apache.spark.rdd.RDD
 import java.io.File
 
 class SolverOptions[X, Y] extends Serializable {
-  var numPasses: Int = 50 // #Passes in case of BCFW, #Rounds in case of DBCFW
   var doWeightedAveraging: Boolean = true
-  var timeBudget = Int.MaxValue
 
   var randSeed: Int = 42
   /**
@@ -16,7 +14,6 @@ class SolverOptions[X, Y] extends Serializable {
    *  DBCFW - "count", "frac"
    */
   var sample: String = "perm"
-  var debugMultiplier: Int = 0
   var lambda: Double = 0.01 // FIXME This is 1/n in Matlab code
 
   var testData: Option[Seq[LabeledObject[X, Y]]] = Option.empty[Seq[LabeledObject[X, Y]]]
@@ -42,10 +39,24 @@ class SolverOptions[X, Y] extends Serializable {
   // For debugging/Testing purposes
   // Basic debugging flag
   var debug: Boolean = false
-  // Write weights to CSV after each pass
-  var debugWeights: Boolean = false
-  // Dump loss through iterations
-  var debugLoss: Boolean = true
+  // Obtain statistics (primal value, duality gap, train error, test error, etc.) once in these many rounds.
+  // If 1, obtains statistics in each round
+  var debugMultiplier: Int = 1
+
+  // Define stopping criterion
+  sealed trait StoppingCriterion
+  // Option A - Limit number of communication rounds
+  case object RoundLimitCriterion extends StoppingCriterion
+  var numRounds: Int = 25
+  // Option B - Check gap
+  case object GapThresholdCriterion extends StoppingCriterion
+  var gapThreshold: Double = 0.1
+  var gapCheck: Int = 1 // Check for once these many rounds
+  // Option C - Run for this amount of time (in secs)
+  case object TimeLimitCriterion extends StoppingCriterion
+  var timeLimit: Int = 300
+
+  var stoppingCriterion: StoppingCriterion = RoundLimitCriterion
 
   // Sparse representation of w_i's
   var sparse: Boolean = false
@@ -56,7 +67,7 @@ class SolverOptions[X, Y] extends Serializable {
   override def toString(): String = {
     val sb: StringBuilder = new StringBuilder()
 
-    sb ++= "# numPasses=%s\n".format(numPasses)
+    sb ++= "# numRounds=%s\n".format(numRounds)
     sb ++= "# doWeightedAveraging=%s\n".format(doWeightedAveraging)
 
     sb ++= "# randSeed=%d\n".format(randSeed)

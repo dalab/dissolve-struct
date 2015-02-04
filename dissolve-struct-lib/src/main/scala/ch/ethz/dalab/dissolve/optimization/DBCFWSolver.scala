@@ -141,7 +141,7 @@ class DBCFWSolver[X, Y](
 
     var iterCount: Int = 0
 
-    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.numPasses, solverOptions.lambda))
+    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.numRounds, solverOptions.lambda))
 
     val startTime = System.currentTimeMillis()
     debugSb ++= "round,time,primal,dual,gap,train_error,test_error\n"
@@ -149,7 +149,7 @@ class DBCFWSolver[X, Y](
     /**
      * ==== Begin Training rounds ====
      */
-    for (roundNum <- 1 to solverOptions.numPasses) {
+    for (roundNum <- 1 to solverOptions.numRounds) {
       /**
        * Mapper
        */
@@ -245,7 +245,7 @@ class DBCFWSolver[X, Y](
 
     val prevModel: StructSVMModel[X, Y] = localModel.clone()
 
-    val numPasses = solverOptions.numPasses
+    val numRounds = solverOptions.numRounds
     val lambda = solverOptions.lambda
     val debugOn: Boolean = solverOptions.debug
 

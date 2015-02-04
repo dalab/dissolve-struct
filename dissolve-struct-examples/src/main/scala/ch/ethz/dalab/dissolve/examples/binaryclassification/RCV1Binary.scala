@@ -23,12 +23,12 @@ object RCV1Binary {
     val dataDir: String = options.getOrElse("datadir", "../data/generated")
 
     val solverOptions: SolverOptions[Vector[Double], Double] = new SolverOptions()
-    solverOptions.numPasses = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.numRounds = options.getOrElse("numrounds", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
     solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
     solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
     solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
-    solverOptions.debugLoss = options.getOrElse("debugloss", "false").toBoolean
+    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
 
     solverOptions.sample = options.getOrElse("sample", "frac")
     solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble

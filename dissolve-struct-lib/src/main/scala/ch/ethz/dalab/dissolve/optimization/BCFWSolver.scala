@@ -46,7 +46,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     predictFn: (StructSVMModel[X, Y], X) => Y,
     solverOptions: SolverOptions[X, Y]) = this(data, featureFn, lossFn, oracleFn, predictFn, solverOptions, null)
 
-  val numPasses = solverOptions.numPasses
+  val numRounds = solverOptions.numRounds
   val lambda = solverOptions.lambda
   val debugOn: Boolean = solverOptions.debug
 
@@ -65,6 +65,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
   def optimize()(implicit m: ClassTag[Y]): (StructSVMModel[X, Y], String) = {
 
     val verboseDebug: Boolean = false
+    val debugWeights: Boolean = false
 
     /* Initialization */
     var k: Integer = 0
@@ -91,7 +92,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     }
     val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
 
-    if (solverOptions.debugLoss) {
+    if (solverOptions.debug) {
       if (solverOptions.testData != null)
         debugSb ++= "round,time,iter,primal,dual,gap,train_error,test_error\n"
       else
@@ -100,13 +101,13 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     val startTime = System.currentTimeMillis()
 
     if (debugOn) {
-      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
+      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numRounds, lambda))
     }
 
     // Initialize the cache: Index -> List of precomputed ystar_i's
     var oracleCache = collection.mutable.Map[Int, MutableList[Y]]()
 
-    for (passNum <- 0 until numPasses) {
+    for (passNum <- 0 until numRounds) {
 
       if (verboseDebug) {
         println("wMat before pass: " + model.getWeights()(0 to 10).toDenseVector)
@@ -206,7 +207,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
          * DEBUG/TEST code
          */
         // If this is the last pass and debugWeights flag is true, dump weight vector to CSV
-        if (solverOptions.debugWeights && dummy == (n - 1))
+        if (debugWeights && dummy == (n - 1))
           csvwrite(new File("data/debug/debugWeights/scala-w-%d.csv".format(passNum + 1)),
             { if (solverOptions.doWeightedAveraging) wAvg else model.getWeights }.toDenseVector.toDenseMatrix)
 
@@ -245,12 +246,12 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
                 0.00
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError, testError))
-            if (solverOptions.debugLoss)
+            if (solverOptions.debug)
               debugSb ++= "%d,%f,%d,%f,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError, testError)
           } else {
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError))
-            if (solverOptions.debugLoss)
+            if (solverOptions.debug)
               debugSb ++= "%d,%f,%d,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError)
           }
 

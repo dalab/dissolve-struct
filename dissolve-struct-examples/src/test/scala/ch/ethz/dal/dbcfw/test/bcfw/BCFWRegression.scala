@@ -37,13 +37,12 @@ class BCFWRegression extends FunSpec {
       val rmseThreshold = 1.0
 
       val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions();
-      solverOptions.numPasses = 5
+      solverOptions.numRounds = 5
       solverOptions.lambda = 0.01
       solverOptions.doWeightedAveraging = true
       solverOptions.doLineSearch = true
 
       solverOptions.debug = true
-      solverOptions.debugWeights = true
 
       val trainer: StructSVMWithBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithBCFW(train_data,
         featureFn,
@@ -55,7 +54,7 @@ class BCFWRegression extends FunSpec {
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
       // Verify if weights are similar in all passes
-      for (passNum <- 1 to solverOptions.numPasses) {
+      for (passNum <- 1 to solverOptions.numRounds) {
         val scalaWeightStr: String = scala.io.Source.fromFile(debugWeightsScalaPattern.format(passNum)).getLines.toList(0)
         val matlabWeightStr: String = scala.io.Source.fromFile(debugWeightsMatlabPattern.format(passNum)).getLines.toList(0)
 

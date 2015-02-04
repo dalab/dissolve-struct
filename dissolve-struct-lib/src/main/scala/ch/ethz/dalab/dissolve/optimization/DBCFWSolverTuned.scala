@@ -13,7 +13,6 @@ import org.apache.spark.SparkContext
 import ch.ethz.dalab.dissolve.classification.Types._
 
 import org.apache.spark.SparkContext._
-import org.apache.log4j.Logger
 
 import scala.collection.mutable
 import scala.collection.mutable.MutableList
@@ -57,6 +56,18 @@ class DBCFWSolverTuned[X, Y](
   case class ProcessedDataShard[X, Y](primalInfo: PrimalInfo,
                                       cache: Option[BoundedCacheList[Y]],
                                       deltaLocalModel: Option[StructSVMModel[X, Y]])
+
+  // Experimental data
+  case class RoundEvaluation(roundNum: Int,
+                             elapsedTime: Double,
+                             primal: Double,
+                             dual: Double,
+                             dualityGap: Double,
+                             trainError: Double,
+                             testError: Double) {
+    override def toString(): String = "%d,%f,%f,%f,%f,%f,%f"
+      .format(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError)
+  }
 
   /**
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
@@ -190,58 +201,84 @@ class DBCFWSolverTuned[X, Y](
 
     var iterCount: Int = 0
 
-    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.numPasses, solverOptions.lambda))
+    def getLatestGap(): Double = {
+      val debugModel: StructSVMModel[X, Y] = globalModel.clone()
+      if (solverOptions.doWeightedAveraging) {
+        debugModel.updateWeights(weightedAveragesOfPrimals._1)
+        debugModel.updateEll(weightedAveragesOfPrimals._2)
+      }
+      val gap = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda, dataSize)
+      gap._1
+    }
+
+    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.numRounds, solverOptions.lambda))
 
     val startTime = System.currentTimeMillis()
     debugSb ++= "round,time,primal,dual,gap,train_error,test_error\n"
 
+    def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
+
     /**
      * ==== Begin Training rounds ====
      */
-    for (roundNum <- 1 to solverOptions.numPasses) {
-
-      /**
-       * Step 1 - Create a joint RDD containing all information of idx -> (data, primals, cache)
-       */
-
-      // TODO Any performance benefits of using Int instead of Index, and 3-Tuple instead of DataShard?
-      val indexedJointData: RDD[(Index, InputDataShard[X, Y])] =
-        indexedTrainDataRDD
-          .sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
-          .join(indexedPrimalsRDD)
-          .leftOuterJoin(indexedCacheRDD)
-          .mapValues { // Because mapValues preserves partitioning
-            case ((labeledObject, primalInfo), cache) =>
-              InputDataShard(labeledObject, primalInfo, cache)
+    Stream.from(1)
+      .takeWhile {
+        roundNum =>
+          solverOptions.stoppingCriterion match {
+            case solverOptions.RoundLimitCriterion => roundNum <= solverOptions.numRounds
+            case solverOptions.TimeLimitCriterion  => getElapsedTimeSecs() < solverOptions.timeLimit
+            case solverOptions.GapThresholdCriterion =>
+              // Calculating duality gap is really expensive. So, check ever gapCheck rounds
+              if (roundNum % solverOptions.gapCheck == 0)
+                getLatestGap() > solverOptions.gapThreshold
+              else
+                true
+            case _ => throw new Exception("Unrecognized Stopping Criterion")
           }
+      }
+      .foreach {
+        roundNum =>
 
-      /**
-       * Step 2 - Map each partition to produce: idx -> (newPrimals, newCache, optionalModel)
-       * Note that the optionalModel column is sparse. There exist only `numPartitions` of them in the RDD.
-       */
+          /**
+           * Step 1 - Create a joint RDD containing all information of idx -> (data, primals, cache)
+           */
+          val indexedJointData: RDD[(Index, InputDataShard[X, Y])] =
+            indexedTrainDataRDD
+              .sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
+              .join(indexedPrimalsRDD)
+              .leftOuterJoin(indexedCacheRDD)
+              .mapValues { // Because mapValues preserves partitioning
+                case ((labeledObject, primalInfo), cache) =>
+                  InputDataShard(labeledObject, primalInfo, cache)
+              }
 
-      // if (indexedLocalProcessedData != null)
-      // indexedLocalProcessedData.unpersist(false)
+          /**
+           * Step 2 - Map each partition to produce: idx -> (newPrimals, newCache, optionalModel)
+           * Note that the optionalModel column is sparse. There exist only `numPartitions` of them in the RDD.
+           */
 
-      indexedLocalProcessedData =
-        indexedJointData.mapPartitionsWithIndex(
-          (idx, dataIterator) =>
-            mapper(idx,
-              dataIterator,
-              helperFunctions,
-              solverOptions,
-              globalModel,
-              dataSize,
-              roundNum),
-          preservesPartitioning = true)
-          .cache()
+          // if (indexedLocalProcessedData != null)
+          // indexedLocalProcessedData.unpersist(false)
 
-      /**
-       * Step 3a - Obtain the new global model
-       * Collect models from all partitions and compute the new model locally on master
-       */
+          indexedLocalProcessedData =
+            indexedJointData.mapPartitionsWithIndex(
+              (idx, dataIterator) =>
+                mapper(idx,
+                  dataIterator,
+                  helperFunctions,
+                  solverOptions,
+                  globalModel,
+                  dataSize,
+                  roundNum),
+              preservesPartitioning = true)
+              .cache()
 
-      /*val newGlobalModelList =
+          /**
+           * Step 3a - Obtain the new global model
+           * Collect models from all partitions and compute the new model locally on master
+           */
+
+          /*val newGlobalModelList =
         indexedLocalProcessedData
           .filter {
             case (idx, shard) => shard.deltaLocalModel.isDefined
@@ -250,109 +287,94 @@ class DBCFWSolverTuned[X, Y](
           .values
           .collect()*/
 
-      val newGlobalModelList =
-        indexedLocalProcessedData
-          .flatMapValues(_.deltaLocalModel)
-          .values
-          .collect()
+          val newGlobalModelList =
+            indexedLocalProcessedData
+              .flatMapValues(_.deltaLocalModel)
+              .values
+              .collect()
 
-      val sumDeltaWeightsAndEll =
-        newGlobalModelList
-          .map {
-            case model =>
-              (model.getWeights(), model.getEll())
-          }.reduce(
-            (model1, model2) =>
-              (model1._1 + model2._1, model1._2 + model2._2))
+          val sumDeltaWeightsAndEll =
+            newGlobalModelList
+              .map {
+                case model =>
+                  (model.getWeights(), model.getEll())
+              }.reduce(
+                (model1, model2) =>
+                  (model1._1 + model2._1, model1._2 + model2._2))
 
-      val newGlobalModel = globalModel.clone()
-      newGlobalModel.updateWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
-      newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
-      globalModel = newGlobalModel
+          val newGlobalModel = globalModel.clone()
+          newGlobalModel.updateWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
+          newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
+          globalModel = newGlobalModel
 
-      println("globalModel.w = %s".format(globalModel.getWeights()(0 to 5).toDenseVector))
-      println("globalModel.ell = %f".format(globalModel.getEll()))
+          /**
+           * Step 3b - Obtain the new set of primals
+           */
 
-      /**
-       * Step 3b - Obtain the new set of primals
-       */
+          val newPrimalsRDD = indexedLocalProcessedData
+            .mapValues(_.primalInfo)
 
-      val newPrimalsRDD = indexedLocalProcessedData
-        .mapValues(_.primalInfo)
+          indexedPrimalsRDD = indexedPrimalsRDD
+            .leftOuterJoin(newPrimalsRDD)
+            .mapValues {
+              case ((prevW, prevEll), Some((newW, newEll))) =>
+                (prevW + (newW * (beta / numPartitions)),
+                  prevEll + (newEll * (beta / numPartitions)))
+              case ((prevW, prevEll), None) => (prevW, prevEll)
+            }.cache()
 
-      indexedPrimalsRDD = indexedPrimalsRDD
-        .leftOuterJoin(newPrimalsRDD)
-        .mapValues {
-          case ((prevW, prevEll), Some((newW, newEll))) =>
-            (prevW + (newW * (beta / numPartitions)),
-              prevEll + (newEll * (beta / numPartitions)))
-          case ((prevW, prevEll), None) => (prevW, prevEll)
-        }.cache()
+          /**
+           * Step 3c - Obtain the new cache values
+           */
 
-      /**
-       * Step 3c - Obtain the new cache values
-       */
+          val newCacheRDD = indexedLocalProcessedData
+            .mapValues(_.cache)
 
-      val newCacheRDD = indexedLocalProcessedData
-        .mapValues(_.cache)
+          indexedCacheRDD = indexedCacheRDD
+            .leftOuterJoin(newCacheRDD)
+            .mapValues {
+              case (oldCache, Some(newCache)) => newCache.get
+              case (oldCache, None)           => oldCache
+            }.cache()
 
-      indexedCacheRDD = indexedCacheRDD
-        .leftOuterJoin(newCacheRDD)
-        .mapValues {
-          case (oldCache, Some(newCache)) => newCache.get
-          case (oldCache, None)           => oldCache
-        }.cache()
+          /**
+           * Debug info
+           */
+          // Obtain duality gap after each communication round
+          val debugModel: StructSVMModel[X, Y] = globalModel.clone()
+          if (solverOptions.doWeightedAveraging) {
+            debugModel.updateWeights(weightedAveragesOfPrimals._1)
+            debugModel.updateEll(weightedAveragesOfPrimals._2)
+          }
 
-      /*
-      println("Size of indexedTrainDataRDD = " + indexedTrainDataRDD.count())
-      println("Size of indexedJointData = " + indexedJointData.count())
-      println("Size of indexedLocalProcessedData = " + indexedLocalProcessedData.count())
-      println("Size of indexedPrimalsRDD = " + indexedPrimalsRDD.count())
-      println("Size of indexedCacheRDD = " + indexedCacheRDD.count())
-      */
+          val roundEvaluation =
+            if (solverOptions.debug && roundNum % solverOptions.debugMultiplier == 0) {
+              val dual = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
+              val dualityGap = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda, dataSize)._1
+              val primal = dual + dualityGap
 
-      /**
-       * Debug info
-       */
-      val elapsedTime = (System.currentTimeMillis() - startTime).toDouble / 1000.0
+              val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel, dataSize)
+              val testError =
+                if (solverOptions.testDataRDD.isDefined)
+                  SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, debugModel, dataSize)
+                else
+                  0.00
 
-      // Obtain duality gap after each communication round
-      val debugModel: StructSVMModel[X, Y] = globalModel.clone()
-      if (solverOptions.doWeightedAveraging) {
-        debugModel.updateWeights(weightedAveragesOfPrimals._1)
-        debugModel.updateEll(weightedAveragesOfPrimals._2)
+              val elapsedTime = getElapsedTimeSecs()
+
+              println("[%.3f] Round = %d, Gap = %f, Primal = %f, Dual = %f, TrainLoss = %f, TestLoss = %f"
+                .format(elapsedTime, roundNum, dualityGap, primal, dual, trainError, testError))
+
+              RoundEvaluation(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError)
+            } else {
+              val dual = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
+              val elapsedTime = getElapsedTimeSecs()
+
+              RoundEvaluation(roundNum, elapsedTime, 0.0, dual, 0.0, 0.0, 0.0)
+            }
+
+          debugSb ++= roundEvaluation + "\n"
       }
-
-      if (verboseDebug) {
-        println("Model weights: " + debugModel.getWeights()(0 to 5).toDenseVector)
-        debugSb ++= "Model weights: " + debugModel.getWeights()(0 to 5).toDenseVector + "\n"
-      }
-
-      val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel, dataSize)
-      val testError =
-        if (solverOptions.testDataRDD.isDefined)
-          SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, debugModel, dataSize)
-        else
-          0.00
-
-      val f = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
-      val gapTup = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda, dataSize)
-      val gap = gapTup._1
-      val primal = f + gap
-
-      // assert(gap >= 0.0, "Gap is negative")
-
-      if (verboseDebug)
-        debugSb ++= "# sum(w): %f, ell: %f\n".format(debugModel.getWeights().sum, debugModel.getEll())
-
-      // logger.info("[DATA] %d,%f,%f,%f\n".format(roundNum, elapsedTime, trainError, testError))
-      println("[Round #%d] Train loss = %f, Test loss = %f, Primal = %f, Gap = %f\n".format(roundNum, trainError, testError, primal, gap))
-      val curTime = (System.currentTimeMillis() - startTime) / 1000
-      debugSb ++= "%d,%d,%f,%f,%f,%f,%f\n".format(roundNum, curTime, primal, f, gap, trainError, testError)
-
-      println("-----------------------------------------")
-
-    }
 
     (globalModel, debugSb.toString())
   }

@@ -321,12 +321,12 @@ object ChainDemo {
     }
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions();
-    solverOptions.numPasses = 5
+    solverOptions.numRounds = 5
     solverOptions.debug = true
     solverOptions.lambda = 0.01
     solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true
-    solverOptions.debugLoss = true
+    solverOptions.debug = true
     solverOptions.testData = Some(test_data.toArray)
     
     solverOptions.enableOracleCache = false
@@ -395,12 +395,12 @@ object ChainDemo {
     val runLocally: Boolean = options.getOrElse("local", "true").toBoolean
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
-    solverOptions.numPasses = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.numRounds = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
     solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
     solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
     solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
-    solverOptions.debugLoss = options.getOrElse("debugloss", "false").toBoolean
+    solverOptions.debug = options.getOrElse("debug", "true").toBoolean
 
     solverOptions.sample = options.getOrElse("sample", "frac")
     solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
@@ -421,10 +421,15 @@ object ChainDemo {
       solverOptions.sampleFrac = 1.0
       solverOptions.enableOracleCache = false
       solverOptions.oracleCacheSize = 10
-      solverOptions.numPasses = 5
       solverOptions.enableManualPartitionSize = true
       solverOptions.NUM_PART = 1
       solverOptions.doWeightedAveraging = false
+      
+      solverOptions.stoppingCriterion = solverOptions.GapThresholdCriterion
+      solverOptions.gapThreshold = 0.1
+      
+      solverOptions.debugMultiplier = 10
+      solverOptions.gapCheck = 10
     }
     
     println(solverOptions.toString())
@@ -510,7 +515,7 @@ object ChainDemo {
 
     chainDBCFWCoCoA(options)
     
-    chainBCFW()
+    // chainBCFW()
   }
 
 }
