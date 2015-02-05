@@ -395,7 +395,6 @@ object ChainDemo {
     val runLocally: Boolean = options.getOrElse("local", "false").toBoolean
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
-    solverOptions.roundLimit = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
     solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
     solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
@@ -410,6 +409,25 @@ object ChainDemo {
     
     solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
     solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
+    
+    solverOptions.debugMultiplier = options.getOrElse("debugmultiplier", "5").toInt
+
+    solverOptions.checkpointFreq = options.getOrElse("checkpointfreq", "50").toInt
+
+    options.getOrElse("stoppingcriterion", "round") match {
+      case "round" =>
+        solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
+        solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
+      case "gap" => 
+        solverOptions.stoppingCriterion = solverOptions.GapThresholdCriterion
+        solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
+        solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
+      case "time" => 
+        solverOptions.stoppingCriterion = solverOptions.TimeLimitCriterion
+        solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
+      case _ =>
+        println("Unrecognized Stopping Criterion. Moving to default criterion.")
+    }
     
     solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/chain-%d.csv".format(System.currentTimeMillis()))
     

@@ -309,18 +309,19 @@ class DBCFWSolverTuned[X, Y](
               .cache()
 
           /**
+           * Step 2.5 - A long lineage may cause a StackOverFlow error in the JVM.
+           * So, trigger a checkpointing once in a while.
+           */
+          if (roundNum % solverOptions.checkpointFreq == 0) {
+            indexedPrimalsRDD.checkpoint()
+            indexedCacheRDD.checkpoint()
+            indexedLocalProcessedData.checkpoint()
+          }
+
+          /**
            * Step 3a - Obtain the new global model
            * Collect models from all partitions and compute the new model locally on master
            */
-
-          /*val newGlobalModelList =
-        indexedLocalProcessedData
-          .filter {
-            case (idx, shard) => shard.deltaLocalModel.isDefined
-          }
-          .mapValues(_.deltaLocalModel.get)
-          .values
-          .collect()*/
 
           val newGlobalModelList =
             indexedLocalProcessedData
@@ -398,25 +399,6 @@ class DBCFWSolverTuned[X, Y](
       }
 
     (globalModel, debugSb.toString())
-  }
-
-  def mapper2(partitionNum: Int,
-              dataIterator: Iterator[(Index, InputDataShard[X, Y])],
-              helperFunctions: HelperFunctions[X, Y],
-              solverOptions: SolverOptions[X, Y],
-              localModel: StructSVMModel[X, Y],
-              n: Int,
-              roundNum: Int): Iterator[(Index, ProcessedDataShard[X, Y])] = {
-
-    println("[Round %d] Beginning mapper at partition %d".format(roundNum, partitionNum))
-
-    val foo = dataIterator.next()
-    val idx = foo._1
-    val newprimals = foo._2.primalInfo
-    val cache = foo._2.cache
-
-    // (index, ProcessedDataShard((w_i, ell_i), shard.cache, Some(localModel)))
-    { List.empty[(Index, ProcessedDataShard[X, Y])] :+ (idx, ProcessedDataShard(newprimals, cache, Some(localModel))) }.toIterator
   }
 
   def mapper(partitionNum: Int,

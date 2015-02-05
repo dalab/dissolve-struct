@@ -21,6 +21,9 @@ class SolverOptions[X, Y] extends Serializable {
 
   var doLineSearch: Boolean = true
 
+  // Checkpoint once in these many rounds
+  var checkpointFreq: Int = 50
+  
   // In case of multi-class
   var numClasses = -1
 
@@ -72,7 +75,7 @@ class SolverOptions[X, Y] extends Serializable {
 
   // Path to write the CSVs
   var debugInfoPath: String = new File(".").getCanonicalPath() + "/debugInfo-%d.csv".format(System.currentTimeMillis())
-
+  
   override def toString(): String = {
     val sb: StringBuilder = new StringBuilder()
 
@@ -96,6 +99,8 @@ class SolverOptions[X, Y] extends Serializable {
     sb ++= "# sampleWithReplacement=%s\n".format(sampleWithReplacement)
 
     sb ++= "# debugInfoPath=%s\n".format(debugInfoPath)
+    
+    sb ++= "# checkpointFreq=%d\n".format(checkpointFreq)
 
     sb ++= "# stoppingCriterion=%s\n".format(stoppingCriterion)
     this.stoppingCriterion match {

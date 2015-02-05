@@ -63,15 +63,14 @@ object COVBinary {
      */
     val appName: String = options.getOrElse("appname", "COV-Dissolve")
 
-    val dataDir: String = options.getOrElse("datadir", "../data")
+    val dataDir: String = options.getOrElse("datadir", "../data/generated")
+    val debugDir: String = options.getOrElse("debugdir", "../debug")
 
     val solverOptions: SolverOptions[Vector[Double], Double] = new SolverOptions()
-    solverOptions.roundLimit = options.getOrElse("roundLimit", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
     solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
     solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
     solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
-    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
 
     solverOptions.sample = options.getOrElse("sample", "frac")
     solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
@@ -83,9 +82,28 @@ object COVBinary {
     solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
     solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
 
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", "../debug/cov-%d.csv".format(System.currentTimeMillis()))
+    solverOptions.debugMultiplier = options.getOrElse("debugmultiplier", "5").toInt
 
-    val defaultCovPath = dataDir + "/generated/covtype.libsvm.binary.scale"
+    solverOptions.checkpointFreq = options.getOrElse("checkpointfreq", "50").toInt
+
+    options.getOrElse("stoppingcriterion", "round") match {
+      case "round" =>
+        solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
+        solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
+      case "gap" =>
+        solverOptions.stoppingCriterion = solverOptions.GapThresholdCriterion
+        solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
+        solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
+      case "time" =>
+        solverOptions.stoppingCriterion = solverOptions.TimeLimitCriterion
+        solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
+      case _ =>
+        println("Unrecognized Stopping Criterion. Moving to default criterion.")
+    }
+
+    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/cov-%d.csv".format(System.currentTimeMillis()))
+
+    val defaultCovPath = dataDir + "/covtype.libsvm.binary.scale"
     val covPath = options.getOrElse("traindata", defaultCovPath)
 
     // Fix seed for reproducibility
