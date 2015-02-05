@@ -46,7 +46,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     predictFn: (StructSVMModel[X, Y], X) => Y,
     solverOptions: SolverOptions[X, Y]) = this(data, featureFn, lossFn, oracleFn, predictFn, solverOptions, null)
 
-  val numRounds = solverOptions.numRounds
+  val roundLimit = solverOptions.roundLimit
   val lambda = solverOptions.lambda
   val debugOn: Boolean = solverOptions.debug
 
@@ -101,13 +101,13 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     val startTime = System.currentTimeMillis()
 
     if (debugOn) {
-      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numRounds, lambda))
+      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, roundLimit, lambda))
     }
 
     // Initialize the cache: Index -> List of precomputed ystar_i's
     var oracleCache = collection.mutable.Map[Int, MutableList[Y]]()
 
-    for (passNum <- 0 until numRounds) {
+    for (passNum <- 0 until roundLimit) {
 
       if (verboseDebug) {
         println("wMat before pass: " + model.getWeights()(0 to 10).toDenseVector)

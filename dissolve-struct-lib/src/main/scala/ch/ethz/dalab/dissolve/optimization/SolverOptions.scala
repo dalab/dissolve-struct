@@ -47,7 +47,7 @@ class SolverOptions[X, Y] extends Serializable {
   sealed trait StoppingCriterion
   // Option A - Limit number of communication rounds
   case object RoundLimitCriterion extends StoppingCriterion
-  var numRounds: Int = 25
+  var roundLimit: Int = 25
   // Option B - Check gap
   case object GapThresholdCriterion extends StoppingCriterion
   var gapThreshold: Double = 0.1
@@ -67,7 +67,7 @@ class SolverOptions[X, Y] extends Serializable {
   override def toString(): String = {
     val sb: StringBuilder = new StringBuilder()
 
-    sb ++= "# numRounds=%s\n".format(numRounds)
+    sb ++= "# numRounds=%s\n".format(roundLimit)
     sb ++= "# doWeightedAveraging=%s\n".format(doWeightedAveraging)
 
     sb ++= "# randSeed=%d\n".format(randSeed)

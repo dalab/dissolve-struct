@@ -66,7 +66,7 @@ object COVBinary {
     val dataDir: String = options.getOrElse("datadir", "../data")
 
     val solverOptions: SolverOptions[Vector[Double], Double] = new SolverOptions()
-    solverOptions.numRounds = options.getOrElse("numrounds", "5").toInt // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.roundLimit = options.getOrElse("roundLimit", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
     solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
     solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean

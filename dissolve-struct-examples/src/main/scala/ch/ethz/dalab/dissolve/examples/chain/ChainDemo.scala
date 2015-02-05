@@ -321,7 +321,7 @@ object ChainDemo {
     }
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions();
-    solverOptions.numRounds = 5
+    solverOptions.roundLimit = 5
     solverOptions.debug = true
     solverOptions.lambda = 0.01
     solverOptions.doWeightedAveraging = false
@@ -392,15 +392,14 @@ object ChainDemo {
     val dataDir: String = options.getOrElse("datadir", "../data/generated")
     val debugDir: String = options.getOrElse("debugdir", "../debug")
     
-    val runLocally: Boolean = options.getOrElse("local", "true").toBoolean
+    val runLocally: Boolean = options.getOrElse("local", "false").toBoolean
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
-    solverOptions.numRounds = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.roundLimit = options.getOrElse("numpasses", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
     solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
     solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
     solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
-    solverOptions.debug = options.getOrElse("debug", "true").toBoolean
 
     solverOptions.sample = options.getOrElse("sample", "frac")
     solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
@@ -412,7 +411,7 @@ object ChainDemo {
     solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
     solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
     
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/debug-dissolve-%d.csv".format(System.currentTimeMillis()))
+    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/chain-%d.csv".format(System.currentTimeMillis()))
     
     /**
      * Some local overrides

@@ -27,7 +27,7 @@ class SSGSolver[X, Y](
   val predictFn: (StructSVMModel[X, Y], X) => Y,
   val solverOptions: SolverOptions[X, Y]) {
 
-  val numRounds = solverOptions.numRounds
+  val roundLimit = solverOptions.roundLimit
   val lambda = solverOptions.lambda
   val debugOn: Boolean = solverOptions.debug
 
@@ -79,10 +79,10 @@ class SSGSolver[X, Y](
     }
 
     if (debugOn) {
-      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numRounds, lambda))
+      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, roundLimit, lambda))
     }
 
-    for (passNum <- 0 until numRounds) {
+    for (passNum <- 0 until roundLimit) {
 
       if (debugOn)
         println("Starting pass #%d".format(passNum))

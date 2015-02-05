@@ -211,7 +211,7 @@ class DBCFWSolverTuned[X, Y](
       gap._1
     }
 
-    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.numRounds, solverOptions.lambda))
+    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
 
     val startTime = System.currentTimeMillis()
     debugSb ++= "round,time,primal,dual,gap,train_error,test_error\n"
@@ -225,7 +225,7 @@ class DBCFWSolverTuned[X, Y](
       .takeWhile {
         roundNum =>
           solverOptions.stoppingCriterion match {
-            case solverOptions.RoundLimitCriterion => roundNum <= solverOptions.numRounds
+            case solverOptions.RoundLimitCriterion => roundNum <= solverOptions.roundLimit
             case solverOptions.TimeLimitCriterion  => getElapsedTimeSecs() < solverOptions.timeLimit
             case solverOptions.GapThresholdCriterion =>
               // Calculating duality gap is really expensive. So, check ever gapCheck rounds

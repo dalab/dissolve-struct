@@ -331,7 +331,7 @@ object ChainBPDemo {
     }
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions();
-    solverOptions.numRounds = 5
+    solverOptions.roundLimit = 5
     solverOptions.debug = true
     solverOptions.lambda = 0.01
     solverOptions.doWeightedAveraging = false
@@ -405,7 +405,7 @@ object ChainBPDemo {
     val runLocally: Boolean = options.getOrElse("local", "true").toBoolean
 
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
-    solverOptions.numRounds = options.getOrElse("numRounds", "5").toInt // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.roundLimit = options.getOrElse("roundLimit", "5").toInt // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = options.getOrElse("debug", "false").toBoolean
     solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
     solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
@@ -431,7 +431,7 @@ object ChainBPDemo {
       solverOptions.sampleFrac = 1.0
       solverOptions.enableOracleCache = false
       solverOptions.oracleCacheSize = 10
-      solverOptions.numRounds = 5
+      solverOptions.roundLimit = 5
       solverOptions.enableManualPartitionSize = true
       solverOptions.NUM_PART = 1
       solverOptions.doWeightedAveraging = false

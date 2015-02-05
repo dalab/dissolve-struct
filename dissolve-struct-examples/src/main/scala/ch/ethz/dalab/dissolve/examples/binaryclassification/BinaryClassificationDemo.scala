@@ -30,7 +30,7 @@ object BinaryClassificationDemo {
 
     val solverOptions: SolverOptions[Vector[Double], Double] = new SolverOptions()
 
-    solverOptions.numRounds = 20 // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.roundLimit = 20 // After these many passes, each slice of the RDD returns a trained model
     solverOptions.debug = true
     solverOptions.lambda = 0.01
     solverOptions.doWeightedAveraging = false

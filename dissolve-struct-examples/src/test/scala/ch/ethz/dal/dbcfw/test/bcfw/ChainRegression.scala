@@ -107,7 +107,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
      *  Start with a default setting of Solver Options
      */
     val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
-    solverOptions.numRounds = 5
+    solverOptions.roundLimit = 5
     solverOptions.debug = true
     solverOptions.lambda = 0.01
     solverOptions.doLineSearch = true
