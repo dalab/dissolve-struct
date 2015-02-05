@@ -74,12 +74,15 @@ class DBCFWSolverTuned[X, Y](
    */
   def optimize()(implicit m: ClassTag[Y]): (StructSVMModel[X, Y], String) = {
 
+    val startTime = System.currentTimeMillis()
+
     val sc = data.context
 
     val debugSb: StringBuilder = new StringBuilder()
 
     val samplePoint = data.first()
     val dataSize = data.count().toInt
+    val testDataSize = if (solverOptions.testDataRDD.isDefined) solverOptions.testDataRDD.get.count().toInt else 0
 
     val verboseDebug: Boolean = false
 
@@ -201,19 +204,43 @@ class DBCFWSolverTuned[X, Y](
 
     var iterCount: Int = 0
 
-    def getLatestGap(): Double = {
+    def getLatestModel(): StructSVMModel[X, Y] = {
       val debugModel: StructSVMModel[X, Y] = globalModel.clone()
       if (solverOptions.doWeightedAveraging) {
         debugModel.updateWeights(weightedAveragesOfPrimals._1)
         debugModel.updateEll(weightedAveragesOfPrimals._2)
       }
+      debugModel
+    }
+
+    def getLatestGap(): Double = {
+      val debugModel: StructSVMModel[X, Y] = getLatestModel()
       val gap = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda, dataSize)
       gap._1
     }
 
+    def evaluateModel(model: StructSVMModel[X, Y], roundNum: Int = 0): RoundEvaluation = {
+      val dual = -SolverUtils.objectiveFunction(model.getWeights(), model.getEll(), solverOptions.lambda)
+      val dualityGap = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, model, solverOptions.lambda, dataSize)._1
+      val primal = dual + dualityGap
+
+      val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, model, dataSize)
+      val testError =
+        if (solverOptions.testDataRDD.isDefined)
+          SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, model, testDataSize)
+        else
+          0.00
+
+      val elapsedTime = getElapsedTimeSecs()
+
+      println("[%.3f] Round = %d, Gap = %f, Primal = %f, Dual = %f, TrainLoss = %f, TestLoss = %f"
+        .format(elapsedTime, roundNum, dualityGap, primal, dual, trainError, testError))
+
+      RoundEvaluation(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError)
+    }
+
     println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
 
-    val startTime = System.currentTimeMillis()
     debugSb ++= "round,time,primal,dual,gap,train_error,test_error\n"
 
     def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
@@ -224,17 +251,25 @@ class DBCFWSolverTuned[X, Y](
     Stream.from(1)
       .takeWhile {
         roundNum =>
-          solverOptions.stoppingCriterion match {
-            case solverOptions.RoundLimitCriterion => roundNum <= solverOptions.roundLimit
-            case solverOptions.TimeLimitCriterion  => getElapsedTimeSecs() < solverOptions.timeLimit
-            case solverOptions.GapThresholdCriterion =>
-              // Calculating duality gap is really expensive. So, check ever gapCheck rounds
-              if (roundNum % solverOptions.gapCheck == 0)
-                getLatestGap() > solverOptions.gapThreshold
-              else
-                true
-            case _ => throw new Exception("Unrecognized Stopping Criterion")
+          val continueExecution =
+            solverOptions.stoppingCriterion match {
+              case solverOptions.RoundLimitCriterion => roundNum <= solverOptions.roundLimit
+              case solverOptions.TimeLimitCriterion  => getElapsedTimeSecs() < solverOptions.timeLimit
+              case solverOptions.GapThresholdCriterion =>
+                // Calculating duality gap is really expensive. So, check ever gapCheck rounds
+                if (roundNum % solverOptions.gapCheck == 0)
+                  getLatestGap() > solverOptions.gapThreshold
+                else
+                  true
+              case _ => throw new Exception("Unrecognized Stopping Criterion")
+            }
+
+          if (solverOptions.debug && (!(continueExecution || (roundNum - 1 % solverOptions.debugMultiplier == 0)) || roundNum == 1)) {
+            // Force evaluation of model in 2 cases - Before beginning the very first round, and after the last round
+            debugSb ++= evaluateModel(getLatestModel(), if (roundNum == 1) 0 else roundNum) + "\n"
           }
+
+          continueExecution
       }
       .foreach {
         roundNum =>
@@ -349,24 +384,10 @@ class DBCFWSolverTuned[X, Y](
 
           val roundEvaluation =
             if (solverOptions.debug && roundNum % solverOptions.debugMultiplier == 0) {
-              val dual = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
-              val dualityGap = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda, dataSize)._1
-              val primal = dual + dualityGap
-
-              val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel, dataSize)
-              val testError =
-                if (solverOptions.testDataRDD.isDefined)
-                  SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, debugModel, dataSize)
-                else
-                  0.00
-
-              val elapsedTime = getElapsedTimeSecs()
-
-              println("[%.3f] Round = %d, Gap = %f, Primal = %f, Dual = %f, TrainLoss = %f, TestLoss = %f"
-                .format(elapsedTime, roundNum, dualityGap, primal, dual, trainError, testError))
-
-              RoundEvaluation(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError)
+              // If debug flag is enabled, make few more passes to obtain training error, gap, etc.
+              evaluateModel(debugModel, roundNum)
             } else {
+              // If debug flag isn't on, perform calculations that don't trigger a shuffle
               val dual = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
               val elapsedTime = getElapsedTimeSecs()
 
