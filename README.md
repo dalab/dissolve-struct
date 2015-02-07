@@ -15,24 +15,35 @@ The interface to the user is the same as in the widely used SVM<sup>struct</sup>
 	git clone https://github.com/dalab/dissolve-struct.git
 
 ## Running the examples
-In order to run the examples, the solver package needs to be built and published locally first:
-```bash
-cd dissolve-struct-lib
-sbt publish-local
-```
-This is followed by building the example package:
-```bash
-cd dissolve-struct-examples
-sbt package
-```
 
-Obtain the datasets by:
+Obtain the datasets using:
 ```bash
 cd data
 bash retrieve_datasets.sh
 python convert-ocr-data.py
 ```
-(you might have to install `brew install sbt` and `brew install wget` first if on a mac)
+(you might have to install `brew install sbt` and `brew install wget` first if on a mac. Additionally, `pip -r requirements.txt` to obtain the python dependencies.)
+
+The library and examples packages need to be built and packaged to execute the examples.
+This can be done in two ways.
+
+#### Building locally using sbt (Recommended)
+Build the solver package first:
+```bash
+cd dissolve-struct-lib
+sbt publish-local
+```
+Followed by building the example package:
+```bash
+cd dissolve-struct-examples
+sbt package
+```
+
+#### Obtain built binaries
+
+The binaries for both the solver and the examples package can be obtained at the [releases](https://github.com/dalab/dissolve-struct/releases) page.
+
+But be warned, these binaries might not be up-to-date since the project is still in the development stage.
 
 ### Executing through command line
 Download the [pre-build binary package of Spark](http://spark.apache.org/downloads.html). Here for example we assume the Spark folder is named `spark-1.2.0`.
