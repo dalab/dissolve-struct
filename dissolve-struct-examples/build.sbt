@@ -1,10 +1,12 @@
 name := "DissolveStructExample"
 
+organization := "ch.ethz.dalab"
+
 version := "0.1-SNAPSHOT"
 
 scalaVersion := "2.10.4"
 
-libraryDependencies += "ch.ethz.dal" %% "dissolvestruct" % "0.1-SNAPSHOT"
+libraryDependencies += "ch.ethz.dalab" %% "dissolvestruct" % "0.1-SNAPSHOT"
 
 libraryDependencies += "org.scalatest" % "scalatest_2.10" % "2.0" % "test"
 

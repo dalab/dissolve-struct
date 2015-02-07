@@ -1,6 +1,6 @@
 name := "DissolveStruct"
 
-organization := "ch.ethz.dal"
+organization := "ch.ethz.dalab"
 
 version := "0.1-SNAPSHOT"
 
@@ -26,9 +26,3 @@ unmanagedJars in Compile ++= {
 	val customJars = baseDirectories ** "*.jar"
 	customJars.classpath
 }
-
-resolvers += "IESL Release" at "http://dev-iesl.cs.umass.edu/nexus/content/groups/public"
-
-// libraryDependencies += "cc.factorie" % "factorie" % "1.0"
-
-
