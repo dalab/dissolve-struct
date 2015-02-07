@@ -28,7 +28,7 @@ python convert-ocr-data.py
 The library and examples packages need to be built and packaged to execute the examples.
 This can be done in two ways.
 
-#### Building locally using sbt (Recommended)
+##### Build locally using sbt (Recommended)
 Build the solver package first:
 ```bash
 cd dissolve-struct-lib
@@ -40,7 +40,7 @@ cd dissolve-struct-examples
 sbt package
 ```
 
-#### Obtain built binaries
+##### Obtain packaged binaries
 
 The binaries for both the solver and the examples package can be obtained at the [releases](https://github.com/dalab/dissolve-struct/releases) page.
 
