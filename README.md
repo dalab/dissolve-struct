@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/dalab/dissolve-struct.svg?branch=tuning)](https://travis-ci.org/dalab/dissolve-struct)
+
 dissolve<sup>struct</sup>
 ===========
 
