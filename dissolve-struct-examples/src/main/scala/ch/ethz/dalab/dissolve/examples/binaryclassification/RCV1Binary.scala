@@ -14,11 +14,14 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import breeze.linalg._
 import breeze.numerics.abs
 import org.apache.log4j.PropertyConfigurator
+import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
 
 object RCV1Binary {
 
   def dbcfwRcv1(options: Map[String, String]) {
-    val appName: String = options.getOrElse("appname", "RCV1-Dissolve")
+    val prefix: String = "rcv1"
+    val appName: String = options.getOrElse("appname", ExampleUtils
+      .generateExperimentName(prefix = List(prefix, "%d".format(System.currentTimeMillis() / 1000))))
 
     val dataDir: String = options.getOrElse("datadir", "../data/generated")
     val debugDir: String = options.getOrElse("debugdir", "../debug")
@@ -38,27 +41,27 @@ object RCV1Binary {
 
     solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
     solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
-    
+
     solverOptions.debugMultiplier = options.getOrElse("debugmultiplier", "5").toInt
 
     solverOptions.checkpointFreq = options.getOrElse("checkpointfreq", "50").toInt
-    
+
     options.getOrElse("stoppingcriterion", "round") match {
       case "round" =>
         solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
         solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
-      case "gap" => 
+      case "gap" =>
         solverOptions.stoppingCriterion = solverOptions.GapThresholdCriterion
         solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
         solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
-      case "time" => 
+      case "time" =>
         solverOptions.stoppingCriterion = solverOptions.TimeLimitCriterion
         solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
       case _ =>
         println("Unrecognized Stopping Criterion. Moving to default criterion.")
     }
 
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/rcv1-%d.csv".format(System.currentTimeMillis()))
+    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/%s.csv".format(appName))
 
     solverOptions.sparse = true
 
@@ -67,7 +70,7 @@ object RCV1Binary {
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)
-    
+
     println(solverOptions.toString())
 
     val conf = new SparkConf().setAppName("RCV1-example")

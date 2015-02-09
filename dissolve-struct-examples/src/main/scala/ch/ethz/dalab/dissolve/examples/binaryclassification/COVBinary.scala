@@ -6,18 +6,16 @@ import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
-
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.classification.SVMWithSGD
-
 import breeze.linalg._
 import breeze.numerics.abs
-
 import org.apache.log4j.PropertyConfigurator
+import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
 
 object COVBinary {
 
@@ -61,7 +59,9 @@ object COVBinary {
     /**
      * Load all options
      */
-    val appName: String = options.getOrElse("appname", "COV-Dissolve")
+    val prefix: String = "cov"
+    val appName: String = options.getOrElse("appname", ExampleUtils
+      .generateExperimentName(prefix = List(prefix, "%d".format(System.currentTimeMillis() / 1000))))
 
     val dataDir: String = options.getOrElse("datadir", "../data/generated")
     val debugDir: String = options.getOrElse("debugdir", "../debug")
@@ -101,7 +101,7 @@ object COVBinary {
         println("Unrecognized Stopping Criterion. Moving to default criterion.")
     }
 
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/cov-%d.csv".format(System.currentTimeMillis()))
+    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/%s.csv".format(appName))
 
     val defaultCovPath = dataDir + "/covtype.libsvm.binary.scale"
     val covPath = options.getOrElse("traindata", defaultCovPath)

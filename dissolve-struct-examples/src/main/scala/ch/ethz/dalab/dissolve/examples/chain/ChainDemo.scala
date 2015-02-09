@@ -3,7 +3,6 @@ package ch.ethz.dalab.dissolve.examples.chain
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
-
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Matrix
@@ -17,6 +16,7 @@ import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject;
+import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
 
 
 /**
@@ -387,7 +387,9 @@ object ChainDemo {
      */
     val PERC_TRAIN: Double = options.getOrElse("perctrain", "0.05").toDouble // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
     
-    val appName: String = options.getOrElse("appname", "Chain-Dissolve")
+    val prefix: String = "chain"
+    val appName: String = options.getOrElse("appname", ExampleUtils
+        .generateExperimentName(prefix = List(prefix, "%d".format(System.currentTimeMillis() / 1000))))
     
     val dataDir: String = options.getOrElse("datadir", "../data/generated")
     val debugDir: String = options.getOrElse("debugdir", "../debug")
@@ -429,7 +431,7 @@ object ChainDemo {
         println("Unrecognized Stopping Criterion. Moving to default criterion.")
     }
     
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/chain-%d.csv".format(System.currentTimeMillis()))
+    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/%s.csv".format(appName))
     
     /**
      * Some local overrides
@@ -471,7 +473,7 @@ object ChainDemo {
     println(SolverUtils.getSparkConfString(sc.getConf))
 
     // Read order from the file and permute the Vector accordingly
-    val trainOrder: String = "../data/perm_train.csv"
+    val trainOrder: String = dataDir + "/perm_train.csv"
     val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
