@@ -6,7 +6,6 @@ import javax.imageio.ImageIO
 import breeze.linalg.{ Matrix, Vector }
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import scala.io.Source
-import org.apache.spark.mllib.linalg.DenseMatrix
 import breeze.linalg.DenseMatrix
 import java.awt.image.DataBufferInt
 import breeze.linalg.DenseVector
@@ -17,8 +16,8 @@ object ImageSegmentationUtils {
 
   val featurizer_options: List[String] = List("HIST")
 
-  val colormapFile = "../data/imageseg_colormap.txt"
-  val colormap: Map[Int, Int] = Source.fromFile(colormapFile)
+  val colormapFile = "imageseg_colormap.txt"
+  val colormap: Map[Int, Int] = Source.fromURL(getClass.getResource(colormapFile))
     .getLines()
     .map { line => line.split(" ") }
     .map {
@@ -37,6 +36,7 @@ object ImageSegmentationUtils {
     // bin 2 is 128-191, and bin 3 is 192-255.
     val NUM_BINS = 4
     // Store the histogram in 3 blocks of [ R | G | B ]
+    // The index in the histogram feature vector is function of R,G,B intensity bins
     val histogramVector = DenseVector.zeros[Double](NUM_BINS * NUM_BINS * NUM_BINS)
 
     // Convert patchWithContext region into an ARGB vector
@@ -78,6 +78,8 @@ object ImageSegmentationUtils {
     val xstep = regionWidth
     val ystep = regionHeight
 
+    val featureMaskWidth = img.getWidth() / xstep
+    val featureMaskHeight = img.getHeight() / xstep
     val featureMask = DenseMatrix.zeros[ROIFeature](ymax, xmax)
 
     // Upper left of the image is (0, 0)
@@ -87,16 +89,72 @@ object ImageSegmentationUtils {
     ) {
       // Extract a region given by coordinates (x, y) and (x + PATCH_WIDTH, y + PATCH_HEIGHT)
       val patch = img.getSubimage(x, y, regionWidth, regionHeight)
-      val patchWithContext = img.getSubimage(max(0, x - PATCH_CONTEXT_SIZE),
-        max(0, y - PATCH_CONTEXT_SIZE),
-        min(img.getWidth(), regionWidth + PATCH_CONTEXT_SIZE),
-        min(img.getHeight(), regionHeight + PATCH_CONTEXT_SIZE))
+
+      val xminPc = max(0, x - PATCH_CONTEXT_SIZE)
+      val yminPc = max(0, y - PATCH_CONTEXT_SIZE)
+
+      val pcWidth = regionWidth + 2 * PATCH_CONTEXT_SIZE
+      val pcHeight = regionHeight + 2 * PATCH_CONTEXT_SIZE
+
+      // In case the patch context window exceeds and/or spills over the boundaries, truncate the window size
+      val pcWidthTrunc =
+        if (xminPc + pcWidth > img.getWidth())
+          img.getWidth() - xminPc
+        else
+          pcWidth
+      val pcHeightTrunc =
+        if (yminPc + pcHeight > img.getHeight())
+          img.getHeight() - yminPc
+        else
+          pcHeight
+
+      // Obtain the region, but now with a context
+      val patchWithContext = img.getSubimage(xminPc,
+        yminPc,
+        pcWidthTrunc,
+        pcHeightTrunc)
+
       val patchFeature = histogramFeaturizer(patch, patchWithContext)
 
-      featureMask(x, y) = patchFeature
+      val xf = x / xstep
+      val yf = y / ystep
+      featureMask(yf, xf) = patchFeature
     }
 
     featureMask
+  }
+
+  /**
+   * Convert a pixel given in ARGB format to the respective MSRC class label
+   */
+  def rgbToLabel(rgb: Int): Int = {
+    val red = (rgb >> 16) & 0xFF
+    val green = (rgb >> 8) & 0xFF
+    val blue = (rgb) & 0xFF
+
+    val rgbIndex = blue + (255 * green) + (255 * 255 * red)
+    val label = colormap(rgbIndex)
+
+    label
+  }
+
+  /**
+   * Convert a ground truth image (mask) to a matrix of its classes
+   */
+  def convertGtImageToLabels(gtImage: BufferedImage): DenseMatrix[Int] = {
+
+    val classMask: DenseMatrix[Int] = DenseMatrix.zeros[Int](gtImage.getHeight(), gtImage.getWidth())
+    for (
+      x <- 0 until gtImage.getWidth();
+      y <- 0 until gtImage.getHeight()
+    ) {
+      val rgb = gtImage.getRGB(x, y) // Returns in TYPE_INT_ARGB format (4 bytes integer, in ARGB order)
+      val label = rgbToLabel(rgb)
+
+      classMask(y, x) = label
+    }
+
+    classMask
   }
 
   /**
@@ -115,7 +173,9 @@ object ImageSegmentationUtils {
     val xstep = regionWidth
     val ystep = regionHeight
 
-    val labelMask = DenseMatrix.zeros[ROILabel](ymax, xmax)
+    val labelMaskWidth = gtImage.getWidth() / regionWidth
+    val labelMaskHeight = gtImage.getHeight() / regionHeight
+    val labelMask = DenseMatrix.zeros[ROILabel](labelMaskHeight, labelMaskWidth)
 
     // Upper left of the image is (0, 0)
     for (
@@ -123,15 +183,20 @@ object ImageSegmentationUtils {
       x <- xmin until xmax by xstep
     ) {
 
-      val rgb = gtImage.getRGB(x, y) // Returns in TYPE_INT_ARGB format (4 bytes integer, in ARGB order)
-      val red = (rgb >> 16) & 0xFF
-      val green = (rgb >> 8) & 0xFF
-      val blue = (rgb) & 0xFF
+      val patch = gtImage.getSubimage(x, y, regionWidth, regionHeight)
+      val patchLabelMask = convertGtImageToLabels(gtImage)
 
-      val rgbIndex = blue + (255 * green) + (255 * 255 * red)
-      val label = colormap(rgbIndex)
+      // Obtain the majority class in this mask
+      val majorityLabel = patchLabelMask.toArray.toList
+        .groupBy(identity)
+        .map { case (k, v) => (k, v.size) }
+        .toList
+        .sortBy(-_._2)
+        .head._1
 
-      labelMask(x, y) = ROILabel(label)
+      val xf = x / xstep
+      val yf = y / ystep
+      labelMask(y, x) = ROILabel(majorityLabel)
     }
 
     labelMask
