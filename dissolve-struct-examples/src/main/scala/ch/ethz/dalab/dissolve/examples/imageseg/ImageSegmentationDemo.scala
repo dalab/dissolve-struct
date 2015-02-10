@@ -26,13 +26,22 @@ case class ROILabel(label: Int, numClasses: Int = 24) {
 
 object ImageSegmentationDemo {
 
-  def getUnaryFeatureMap(yMat: Matrix[ROILabel], xMat: Matrix[ROIFeature]): DenseMatrix[Double] = {
+  /**
+   * Given:
+   * - a matrix xMat of super-pixels, of size r = n x m, and x_i, an f-dimensional vector
+   * - corresponding labels of these super-pixels yMat, with K classes
+   * Return:
+   * - a matrix of size (f*K) x r, i.e, each column corresponds to the feature map of x_i
+   */
+  def getUnaryFeatureMap(yMat: DenseMatrix[ROILabel], xMat: DenseMatrix[ROIFeature]): DenseMatrix[Double] = {
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
 
-    val numFeatures = xMat(0, 0).feature.size
-    val numClasses = yMat(0, 0).numClasses
-    val numRegions = xMat.rows * xMat.cols
+    println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
+
+    val numFeatures = xMat(0, 0).feature.size // f
+    val numClasses = yMat(0, 0).numClasses // K
+    val numRegions = xMat.rows * xMat.cols // r
 
     val unaryMat = DenseMatrix.zeros[Double](numFeatures * numClasses, numRegions)
 
@@ -41,31 +50,37 @@ object ImageSegmentationDemo {
      * For each node i in graph defined by xMat, whose feature vector is x_i and corresponding label is y_i,
      * construct a feature map phi_i given by: [I(y_i = 0)x_i I(y_i = 1)x_i ... I(y_i = K)x_i ]
      */
+    
+    xMat.keysIterator.foreach {
+      case (r, c) =>
+        val i = r * xMat.rows + c // Column-major iteration
 
-    for (
-      r <- 0 until xMat.rows;
-      c <- 0 until xMat.cols
-    ) {
-      val i = r * xMat.rows + c // Column-major iteration
+        // println("(r, c) = (%d, %d)".format(r, c))
+        val x_i = xMat(r, c).feature
+        val y_i = yMat(r, c).label
 
-      val x_i = xMat(r, c).feature
-      val y_i = yMat(r, c).label
+        val phi_i = DenseVector.zeros[Double](numFeatures * numClasses)
 
-      val phi_i = DenseVector.zeros[Double](numFeatures * numClasses)
+        val startIdx = numFeatures * y_i
+        val endIdx = startIdx + numFeatures
 
-      val startIdx = numFeatures * y_i
-      val endIdx = startIdx + numFeatures
+        // For y_i'th position of phi_i, populate x_i's feature vector
+        phi_i(startIdx until endIdx) := x_i
 
-      // For y_i'th position of phi_i, populate x_i's feature vector
-      phi_i(startIdx until endIdx) := x_i
-
-      unaryMat(::, i) := phi_i
+        unaryMat(::, i) := phi_i
     }
 
     unaryMat
   }
 
-  def getPairwiseFeatureMap(yMat: Matrix[ROILabel], xMat: Matrix[ROIFeature]): DenseMatrix[Double] = {
+  /**
+   * Given:
+   * - a matrix xMat of super-pixels, of size r = n x m, and x_i, an f-dimensional vector
+   * - corresponding labels of these super-pixels yMat, with K classes
+   * return:
+   * - a matrix of size K x K, capturing pairwise scores
+   */
+  def getPairwiseFeatureMap(yMat: DenseMatrix[ROILabel], xMat: DenseMatrix[ROIFeature]): DenseMatrix[Double] = {
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
 
@@ -79,13 +94,14 @@ object ImageSegmentationDemo {
       c <- 1 until xMat.cols - 1;
       r <- 1 until xMat.rows - 1
     ) {
-      val classA = yMat(c, r).label
+      val classA = yMat(r, c).label
 
+      // Iterate all neighbours
       for (
         delx <- List(-1, 0, 1);
         dely <- List(-1, 0, 1) if ((delx != 0) && (dely != 0))
       ) {
-        val classB = yMat(c + delx, r + dely).label
+        val classB = yMat(r + delx, c + dely).label
 
         pairwiseMat(classA, classB) += 1.0
         pairwiseMat(classB, classA) += 1.0
@@ -100,7 +116,7 @@ object ImageSegmentationDemo {
    * Uses: http://arxiv.org/pdf/1408.6804v2.pdf
    * http://www.kev-smith.com/papers/LUCCHI_ECCV12.pdf
    */
-  def featureFn(yMat: Matrix[ROILabel], xMat: Matrix[ROIFeature]): Vector[Double] = {
+  def featureFn(yMat: DenseMatrix[ROILabel], xMat: DenseMatrix[ROIFeature]): Vector[Double] = {
 
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
@@ -108,14 +124,22 @@ object ImageSegmentationDemo {
     val unaryMat = getUnaryFeatureMap(yMat, xMat)
     val pairwiseMat = getPairwiseFeatureMap(yMat, xMat)
 
+    // Collapse feature function of each x_i by addition
     val unarySumVec = sum(unaryMat, Axis._1)
+
+    // Double-check dimensions
+    val numClasses = yMat(0, 0).numClasses
+    val numFeatures = xMat(0, 0).feature.size
+    assert(unarySumVec.size == numClasses * numFeatures)
+    assert(pairwiseMat.size == numClasses * numClasses)
+
     DenseVector.vertcat(unarySumVec, pairwiseMat.toDenseVector)
   }
 
   /**
    * Loss function
    */
-  def lossFn(yTruth: Matrix[ROILabel], yPredict: Matrix[ROILabel]): Double = {
+  def lossFn(yTruth: DenseMatrix[ROILabel], yPredict: DenseMatrix[ROILabel]): Double = {
 
     assert(yTruth.rows == yPredict.rows)
     assert(yTruth.cols == yPredict.cols)
@@ -134,7 +158,7 @@ object ImageSegmentationDemo {
   /**
    * Oracle function
    */
-  def oracleFn(model: StructSVMModel[Matrix[ROIFeature], Matrix[ROILabel]], yi: Matrix[ROILabel], xi: Matrix[ROIFeature]): Matrix[ROILabel] = {
+  def oracleFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], yi: DenseMatrix[ROILabel], xi: DenseMatrix[ROIFeature]): DenseMatrix[ROILabel] = {
 
     assert(xi.rows == yi.rows)
     assert(xi.cols == yi.cols)
