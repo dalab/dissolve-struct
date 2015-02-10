@@ -11,6 +11,7 @@ import java.awt.image.DataBufferInt
 import breeze.linalg.DenseVector
 import breeze.linalg.max
 import breeze.linalg.min
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
 
 object ImageSegmentationUtils {
 
@@ -274,8 +275,19 @@ object ImageSegmentationUtils {
     println("featureSize = %d".format(x(0, 0).feature.size))
     println("numClasses = %d".format(y(0, 0).numClasses))
 
-    val phi = ImageSegmentationDemo.featureFn(y, x)
+    val phi = ImageSegmentationDemo.featureFn(x, y)
     println("phi.size = %d".format(phi.size))
+
+    val w = DenseVector.zeros[Double](phi.size)
+    val ell = 0
+    val ellMat = DenseVector.zeros[Double](phi.size)
+    val dummy = new StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]](w, ell, ellMat,
+      ImageSegmentationDemo.featureFn,
+      ImageSegmentationDemo.lossFn,
+      ImageSegmentationDemo.oracleFn,
+      ImageSegmentationDemo.predictFn)
+    val dumy = ImageSegmentationDemo.oracleFn(dummy, x, y)
+    println("oracle_y.size = %d x %d".format(dumy.rows, dumy.cols))
 
   }
 

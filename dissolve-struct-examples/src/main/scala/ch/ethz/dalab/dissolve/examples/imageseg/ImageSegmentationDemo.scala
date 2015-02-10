@@ -50,7 +50,7 @@ object ImageSegmentationDemo {
      * For each node i in graph defined by xMat, whose feature vector is x_i and corresponding label is y_i,
      * construct a feature map phi_i given by: [I(y_i = 0)x_i I(y_i = 1)x_i ... I(y_i = K)x_i ]
      */
-    
+
     xMat.keysIterator.foreach {
       case (r, c) =>
         val i = r * xMat.rows + c // Column-major iteration
@@ -116,7 +116,7 @@ object ImageSegmentationDemo {
    * Uses: http://arxiv.org/pdf/1408.6804v2.pdf
    * http://www.kev-smith.com/papers/LUCCHI_ECCV12.pdf
    */
-  def featureFn(yMat: DenseMatrix[ROILabel], xMat: DenseMatrix[ROIFeature]): Vector[Double] = {
+  def featureFn(xMat: DenseMatrix[ROIFeature], yMat: DenseMatrix[ROILabel]): Vector[Double] = {
 
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
@@ -155,10 +155,34 @@ object ImageSegmentationDemo {
     loss.sum
   }
 
+  def unpackWeightVec(weightVec: Vector[Double], xFeatureSize: Int, numClasses: Int): (DenseMatrix[Double], DenseMatrix[Double]) = {
+    // Unary features
+    val startIdx = 0
+    val endIdx = xFeatureSize * numClasses
+    val unaryFeatureVec = weightVec(startIdx until endIdx).toDenseVector
+    val unaryPot = unaryFeatureVec.toDenseMatrix.reshape(xFeatureSize, numClasses)
+
+    // Each column in this vector contains [I(K=0) w_0 ... I(K=0) w_k]
+    val unaryPotPadded = DenseMatrix.zeros[Double](xFeatureSize * numClasses, numClasses)
+    for (k <- 0 until numClasses) {
+      val w = unaryPot(::, k)
+      val startIdx = k * xFeatureSize
+      val endIdx = startIdx + xFeatureSize
+      unaryPotPadded(startIdx until endIdx, k) := w
+    }
+
+    // Pairwise feature Vector
+    val pairwiseFeatureVec = weightVec(endIdx until weightVec.size).toDenseVector
+    assert(pairwiseFeatureVec.size == numClasses * numClasses)
+    val pairwisePot = pairwiseFeatureVec.toDenseMatrix.reshape(numClasses, numClasses)
+
+    (unaryPotPadded, pairwisePot)
+  }
+
   /**
    * Oracle function
    */
-  def oracleFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], yi: DenseMatrix[ROILabel], xi: DenseMatrix[ROIFeature]): DenseMatrix[ROILabel] = {
+  def oracleFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature], yi: DenseMatrix[ROILabel]): DenseMatrix[ROILabel] = {
 
     assert(xi.rows == yi.rows)
     assert(xi.cols == yi.cols)
@@ -171,87 +195,31 @@ object ImageSegmentationDemo {
 
     val weightVec = model.getWeights()
 
-    val unaryStartIdx = 0
-    val unaryEndIdx = xFeatureSize * numClasses
-    // This should be a vector of dimensions 1 x (K x h), where K = #Classes, h = dim(x_i)
-    val unary: DenseVector[Double] = weightVec(unaryStartIdx until unaryEndIdx).toDenseVector
-    val unaryMat: DenseMatrix[Double] = unary.toDenseMatrix.reshape(numClasses, xFeatureSize).t // Returns a K x h matrix, i.e, class to feature mapping
+    // Unary is of size (f*K) x K
+    // Pairwise is of size K x K
+    val (unary, pairwise) = unpackWeightVec(weightVec, xFeatureSize, numClasses)
+    assert(unary.rows == numClasses * xFeatureSize)
+    assert(unary.cols == pairwise.cols)
 
-    val pairwiseStartIdx = unaryEndIdx
-    val pairwiseEndIdx = weightVec.size
-    assert(pairwiseEndIdx - pairwiseStartIdx == numClasses * numClasses)
-    val pairwise: DenseMatrix[Double] = weightVec(pairwiseStartIdx until pairwiseEndIdx)
-      .toDenseVector
-      .toDenseMatrix
-      .reshape(numClasses, numClasses)
-
-    val phi_Y: DenseMatrix[Double] = getUnaryFeatureMap(yi, xi) // Retrieves a (K x h) x m matrix
-    val thetaUnary = phi_Y * unary // Construct a (1 x m) vector
+    val phi_Y: DenseMatrix[Double] = getUnaryFeatureMap(yi, xi) // Retrieves a (f * K) x r matrix
+    val thetaUnary = phi_Y.t * unary // Returns a r x K matrix, where theta(r, k) is the unary potential of region i having label k
     val thetaPairwise = pairwise
+
+    println("unary.size = %d x %d".format(unary.rows, unary.cols))
+    println("theta_unary.size = %d x %d".format(thetaUnary.rows, thetaUnary.cols))
+    println("theta_pairwise.size = %d x %d".format(thetaPairwise.rows, thetaPairwise.cols))
 
     /**
      * Parameter estimation
      */
-    object ROIDomain extends DiscreteDomain(numClasses)
 
-    class ROIClassVar(i: Int) extends DiscreteVariable(i) {
-      def domain = ROIDomain
-    }
-
-    def getUnaryFactor(yi: ROIClassVar, x: Int, y: Int): Factor = {
-      new Factor1(yi) {
-        def score(i: ROIClassVar#Value) = {
-          val w_yi = unaryMat(::, yi.intValue)
-          val unaryPotAtxy = xi(x, y).feature dot w_yi
-
-          unaryPotAtxy
-        }
-      }
-    }
-
-    def getPairwiseFactor(yi: ROIClassVar, yj: ROIClassVar): Factor = {
-      new Factor2(yi, yj) {
-        def score(i: ROIClassVar#Value, j: ROIClassVar#Value) = thetaPairwise(i.intValue, j.intValue)
-      }
-    }
-
-    val letterChain: IndexedSeq[ROIClassVar] = for (i <- 0 until numROI) yield new ROIClassVar(0)
-
-    val unaryFactors: IndexedSeq[Factor] = for (i <- 0 until numROI) yield {
-      // Column-major strides
-      val colNum = i / numCols
-      val rowNum = i % numRows
-      getUnaryFactor(letterChain(i), rowNum, colNum)
-    }
-
-    val pairwiseFactors: IndexedSeq[Factor] = for (i <- 0 until numROI - 1) yield getPairwiseFactor(letterChain(i), letterChain(i + 1))
-
-    val bpmodel = new ItemizedModel
-    bpmodel ++= unaryFactors
-    bpmodel ++= pairwiseFactors
-
-    val label: DenseVector[Int] = DenseVector.zeros[Int](numROI)
-    val assgn = MaximizeByMPLP.infer(letterChain, bpmodel).mapAssignment
-    for (i <- 0 until numROI)
-      label(i) = assgn(letterChain(i)).intValue
-
-    // Convert these inferred labels into an image-class mask
-    val imgMask = DenseMatrix.zeros[ROILabel](numRows, numCols)
-    for (
-      r <- 0 until numRows;
-      c <- 0 until numCols
-    ) {
-      val idx = r * (numRows - 1) + c
-      imgMask(r, c) = ROILabel(label(idx))
-    }
-
-    imgMask
+    yi
   }
 
   /**
    * Prediction Function
    */
-  def predictFn(model: StructSVMModel[Matrix[ROIFeature], Matrix[ROILabel]], xi: Matrix[ROIFeature]): Matrix[ROILabel] = {
+  def predictFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature]): DenseMatrix[ROILabel] = {
 
     val numClasses = 24
     val numRows = xi.rows
