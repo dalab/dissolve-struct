@@ -36,7 +36,8 @@ This can be done in two ways.
 
 ### Obtain binaries
 
-##### Build locally using sbt (Recommended)
+**Option 1 - Build locally using sbt (Recommended)**
+
 Build the solver package first:
 {% highlight bash %}
 cd dissolve-struct-lib
@@ -48,7 +49,7 @@ cd dissolve-struct-examples
 sbt package
 {% endhighlight %}
 
-##### Obtain packaged binaries
+**Option 2 - Obtain packaged binaries**
 
 The binaries for both the solver and the examples package can be obtained at the [releases](https://github.com/dalab/dissolve-struct/releases) page.
 
@@ -56,7 +57,8 @@ But be warned, these binaries might not be up-to-date since the project is still
 
 ### Execution
 
-#### Executing through command line
+**Executing through command line**
+
 Download the [pre-build binary package of Spark](http://spark.apache.org/downloads.html). Here for example we assume the Spark folder is named `spark-1.2.0`.
 
 ##### Binary classification Example
@@ -76,7 +78,8 @@ Here is the same example using more general Belief Propagation, by employing the
 spark-1.2.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar --class "ch.ethz.dalab.dissolve.examples.chain.ChainBPDemo" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 {% endhighlight %}
 
-#### Executing within Eclipse
+**Executing within Eclipse**
+
 To ease debugging and development, the examples can directly be run within Eclipse by `Run As | Scala Application`. This does not require Spark binaries. See the section below how to set up the environment.
 
 Within Eclipse, Spark can only be run in local mode since all the interactions need to be visible to Eclipse.
