@@ -1,7 +1,6 @@
 ---
 layout: dis_template
 ---
-[![Build Status](https://travis-ci.org/dalab/dissolve-struct.svg?branch=tuning)](https://travis-ci.org/dalab/dissolve-struct) [![Release status](https://img.shields.io/badge/release-v0.1-orange.svg)](https://github.com/dalab/dissolve-struct/releases)
 
 dissolve<sup>struct</sup> is a Distributed solver library for structured output prediction, based on Spark.
 
