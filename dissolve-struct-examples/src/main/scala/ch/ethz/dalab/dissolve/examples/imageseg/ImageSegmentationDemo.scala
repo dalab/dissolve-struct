@@ -1,19 +1,30 @@
 package ch.ethz.dalab.dissolve.examples.imageseg
 
+import scala.annotation.elidable
+import scala.annotation.elidable.ASSERTION
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.Buffer
 import org.apache.log4j.PropertyConfigurator
-import breeze.linalg.{ Matrix, Vector }
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import breeze.linalg.DenseVector
+import breeze.linalg.Axis
 import breeze.linalg.DenseMatrix
+import breeze.linalg.DenseVector
+import breeze.linalg.Vector
+import breeze.linalg.sum
+import cc.factorie.infer.MaximizeByMPLP
+import cc.factorie.infer.SamplingMaximizer
+import cc.factorie.infer.VariableSettingsSampler
+import cc.factorie.model.CombinedModel
+import cc.factorie.model.Factor
+import cc.factorie.model.ItemizedModel
+import cc.factorie.model.TupleTemplateWithStatistics2
+import cc.factorie.singleFactorIterable
 import cc.factorie.variable.DiscreteDomain
 import cc.factorie.variable.DiscreteVariable
-import breeze.linalg.sum
-import breeze.linalg.Axis
-import cc.factorie.model.Factor1
-import cc.factorie.model.Factor
+import cc.factorie.variable.IntegerVariable
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import cc.factorie.model.Factor2
-import cc.factorie.model.ItemizedModel
-import cc.factorie.infer.MaximizeByMPLP
+import cc.factorie.variable.HammingTemplate
+import cc.factorie.model.Factor1
 
 case class ROIFeature(feature: Vector[Double]) // Represent each pixel/region by a feature vector
 
@@ -53,7 +64,7 @@ object ImageSegmentationDemo {
 
     xMat.keysIterator.foreach {
       case (r, c) =>
-        val i = r * xMat.rows + c // Column-major iteration
+        val i = r + c * xMat.rows // Column-major iteration
 
         // println("(r, c) = (%d, %d)".format(r, c))
         val x_i = xMat(r, c).feature
@@ -180,6 +191,96 @@ object ImageSegmentationDemo {
   }
 
   /**
+   * thetaUnary is of size r x K, where is the number of regions
+   * thetaPairwise is of size K x K
+   */
+  def decodeFn(thetaUnary: DenseMatrix[Double], thetaPairwise: DenseMatrix[Double], imageWidth: Int, imageHeight: Int): DenseMatrix[ROILabel] = {
+
+    /**
+     *  Construct a model such that there exists 2 kinds of variables - Region and Pixel
+     *  Region encodes the fixed (x, y) position of the Pixel in the image
+     *  Pixel encodes the possible label
+     *
+     *  Factors are between a Region and Pixel, scores given by - thetaUnary
+     *  and between two Pixels, scores given by - thetaPairwise
+     */
+
+    val numRegions: Int = thetaUnary.rows
+    val numClasses: Int = thetaUnary.cols
+
+    def xyToRegion(x: Int, y: Int, numRows: Int) = x + y * numRows
+
+    assert(thetaPairwise.rows == numClasses)
+
+    class RegionVar(val score: Int) extends IntegerVariable(score)
+
+    object PixelDomain extends DiscreteDomain(numClasses)
+
+    class Pixel(val x: Int, val y: Int, val image: Seq[Seq[Pixel]]) extends DiscreteVariable(numClasses) {
+
+      def domain = PixelDomain
+
+      val region: RegionVar = new RegionVar(xyToRegion(x, y, numRegions))
+    }
+
+    object LocalTemplate extends TupleTemplateWithStatistics2[Pixel, RegionVar] {
+
+      val alpha = 1.0
+      def score(k: Pixel#Value, r: RegionVar#Value) = thetaUnary(r.intValue, k.intValue)
+      def unroll1(p: Pixel) = Factor(p, p.region)
+      def unroll2(r: RegionVar) = Nil
+    }
+
+    object PairwiseTemplate extends TupleTemplateWithStatistics2[Pixel, Pixel] /*with Statistics1[Double]*/ {
+
+      def score(v1: Pixel#Value, v2: Pixel#Value) = if (v1.intValue == v2.intValue) 1.0 else -1.0
+
+      def unroll1(v: Pixel) = {
+        val img = v.image
+        val factors = new ArrayBuffer[FactorType]
+        if (v.x < img.length - 1) factors += Factor(v, img(v.x + 1)(v.y))
+        if (v.y < img.length - 1) factors += Factor(v, img(v.x)(v.y + 1))
+        if (v.x > 0) factors += Factor(img(v.x - 1)(v.y), v)
+        if (v.y > 0) factors += Factor(img(v.x)(v.y - 1), v)
+        factors
+      }
+
+      def unroll2(v2: Pixel) = Nil
+    }
+
+    // Convert the image into a grid of Factorie variables
+    val image: Buffer[Seq[Pixel]] = new ArrayBuffer
+    for (i <- 0 until imageHeight) {
+      val row = new ArrayBuffer[Pixel]
+
+      for (j <- 0 until imageWidth) {
+        row += new Pixel(i, j, image)
+      }
+
+      image += row
+    }
+
+    // Run MAP inference
+    val pixels = image.flatMap(_.toSeq).toSeq
+    val gridModel = new CombinedModel(LocalTemplate, PairwiseTemplate)
+    implicit val random = new scala.util.Random(0)
+    pixels.foreach(_.setRandomly)
+
+    val sampler = new SamplingMaximizer[Pixel](new VariableSettingsSampler(gridModel))
+    sampler.maximize(pixels, iterations = 10, rounds = 10)
+
+    // Retrieve assigned labels from these pixels
+    val imgMask: DenseMatrix[ROILabel] = new DenseMatrix[ROILabel](imageHeight, imageWidth)
+    for (i <- 0 until imageHeight) {
+      for (j <- 0 until imageWidth) {
+        imgMask(i, j) = ROILabel(image(i)(j).intValue)
+      }
+    }
+
+    imgMask
+  }
+
+  /**
    * Oracle function
    */
   def oracleFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature], yi: DenseMatrix[ROILabel]): DenseMatrix[ROILabel] = {
@@ -213,95 +314,14 @@ object ImageSegmentationDemo {
      * Parameter estimation
      */
 
-    yi
+    decodeFn(thetaUnary, thetaPairwise, numRows, numCols)
   }
 
   /**
    * Prediction Function
    */
   def predictFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature]): DenseMatrix[ROILabel] = {
-
-    val numClasses = 24
-    val numRows = xi.rows
-    val numCols = xi.cols
-    val numROI = numRows * numCols
-    val xFeatureSize = xi(0, 0).feature.size
-
-    val weightVec = model.getWeights()
-
-    val unaryStartIdx = 0
-    val unaryEndIdx = xFeatureSize * numClasses
-    // This should be a vector of dimensions 1 x (K x h), where K = #Classes, h = dim(x_i)
-    val unary: DenseVector[Double] = weightVec(unaryStartIdx until unaryEndIdx).toDenseVector
-    val unaryMat: DenseMatrix[Double] = unary.toDenseMatrix.reshape(numClasses, xFeatureSize).t // Returns a K x h matrix, i.e, class to feature mapping
-
-    val pairwiseStartIdx = unaryEndIdx
-    val pairwiseEndIdx = weightVec.size
-    assert(pairwiseEndIdx - pairwiseStartIdx == numClasses * numClasses)
-    val pairwise: DenseMatrix[Double] = weightVec(pairwiseStartIdx until pairwiseEndIdx)
-      .toDenseVector
-      .toDenseMatrix
-      .reshape(numClasses, numClasses)
-
-    val thetaPairwise = pairwise
-
-    /**
-     * Parameter estimation
-     */
-    object ROIDomain extends DiscreteDomain(numClasses)
-
-    class ROIClassVar(i: Int) extends DiscreteVariable(i) {
-      def domain = ROIDomain
-    }
-
-    def getUnaryFactor(yi: ROIClassVar, x: Int, y: Int): Factor = {
-      new Factor1(yi) {
-        def score(i: ROIClassVar#Value) = {
-          val w_yi = unaryMat(::, yi.intValue)
-          val unaryPotAtxy = xi(x, y).feature dot w_yi
-
-          unaryPotAtxy
-        }
-      }
-    }
-
-    def getPairwiseFactor(yi: ROIClassVar, yj: ROIClassVar): Factor = {
-      new Factor2(yi, yj) {
-        def score(i: ROIClassVar#Value, j: ROIClassVar#Value) = thetaPairwise(i.intValue, j.intValue)
-      }
-    }
-
-    val letterChain: IndexedSeq[ROIClassVar] = for (i <- 0 until numROI) yield new ROIClassVar(0)
-
-    val unaryFactors: IndexedSeq[Factor] = for (i <- 0 until numROI) yield {
-      // Column-major strides
-      val colNum = i / numCols
-      val rowNum = i % numRows
-      getUnaryFactor(letterChain(i), rowNum, colNum)
-    }
-
-    val pairwiseFactors: IndexedSeq[Factor] = for (i <- 0 until numROI - 1) yield getPairwiseFactor(letterChain(i), letterChain(i + 1))
-
-    val bpmodel = new ItemizedModel
-    bpmodel ++= unaryFactors
-    bpmodel ++= pairwiseFactors
-
-    val label: DenseVector[Int] = DenseVector.zeros[Int](numROI)
-    val assgn = MaximizeByMPLP.infer(letterChain, bpmodel).mapAssignment
-    for (i <- 0 until numROI)
-      label(i) = assgn(letterChain(i)).intValue
-
-    // Convert these inferred labels into an image-class mask
-    val imgMask = DenseMatrix.zeros[ROILabel](numRows, numCols)
-    for (
-      r <- 0 until numRows;
-      c <- 0 until numCols
-    ) {
-      val idx = r * (numRows - 1) + c
-      imgMask(r, c) = ROILabel(label(idx))
-    }
-
-    imgMask
+    null
   }
 
   def dissolveImageSementation(options: Map[String, String]) {
