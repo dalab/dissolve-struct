@@ -27,6 +27,18 @@ object ImageSegmentationUtils {
     }
     .toMap
 
+  val labelToRGB: Map[Int, Int] = Source.fromURL(getClass.getResource(colormapFile))
+    .getLines()
+    .map { line => line.split(" ") }
+    .map {
+      case Array(label, value, r, g, b, className) =>
+        val rgb = ((r.toInt & 0x0ff) << 16) |
+          ((g.toInt & 0x0ff) << 8) |
+          (b.toInt & 0x0ff)
+        label.toInt -> rgb
+    }
+    .toMap
+
   /**
    * Constructs a histogram vector using pixel (i, j) and a surrounding region of size (width x height)
    */
@@ -202,7 +214,7 @@ object ImageSegmentationUtils {
       // println("Extracting label at (%d, %d, %d, %d)".format(x, y, regionWidth, regionHeight))
 
       val patch = gtImage.getSubimage(x, y, regionWidth, regionHeight)
-      val patchLabelMask = convertGtImageToLabels(gtImage)
+      val patchLabelMask = convertGtImageToLabels(patch)
 
       // Obtain the majority class in this mask
       val majorityLabel = patchLabelMask.toArray.toList
@@ -217,6 +229,13 @@ object ImageSegmentationUtils {
       labelMask(yf, xf) = ROILabel(majorityLabel)
     }
 
+    println(gtPath)
+    val gtPathArr = gtPath.split('/')
+    val newfname = gtPathArr(gtPathArr.size - 1).split('.')(0)
+    val outname = "../debug/%s.jpg".format(newfname)
+    printLabeledImage(labelMask, outname)
+    // printLabeledImage(labelMask)
+
     println("Completed - Converting GT image to features")
 
     labelMask
@@ -227,30 +246,19 @@ object ImageSegmentationUtils {
    */
   def getLabeledObject(imgPath: String, gtPath: String): LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] = {
 
-    val REGION_WIDTH = 10
-    val REGION_HEIGHT = 10
+    val REGION_WIDTH = 5
+    val REGION_HEIGHT = 5
 
     LabeledObject(featurizeGT(gtPath, REGION_WIDTH, REGION_HEIGHT), featurizeImage(imgPath, REGION_WIDTH, REGION_HEIGHT))
   }
 
-  /**
-   * Converts the MSRC dataset into an array of LabeledObjects
-   * Requires dataFolder argument should contain two folders: "Images" and "GroundTruth"
-   */
-  def loadMSRC(msrcFolder: String): Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]] = {
-
-    // Split obtained from: http://graphics.stanford.edu/projects/densecrf/unary/
-    // (trainSetFilenames uses training and validation sets)
-    // These files contains filenames of respective GT images
-    // Source.fromURL(getClass.getResource(colormapFile))
-    val trainSetFileListPath: String = "/imageseg_train.txt"
-    val testSetFileListPath: String = "/imageseg_test.txt"
+  def loadMSRCDataFromFile(msrcFolder: String, listFileName: String, limit: Int): Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]] = {
 
     val imagesDir: String = msrcFolder + "/Images"
     val gtDir: String = msrcFolder + "/GroundTruth"
 
     val data =
-      for (imgFilename <- Source.fromURL(getClass.getResource(trainSetFileListPath)).getLines().slice(0, 1)) yield {
+      for (imgFilename <- Source.fromURL(getClass.getResource(listFileName)).getLines()) yield {
         val imgPath = "%s/%s".format(imagesDir, imgFilename)
 
         val gtFilename = imgFilename.replace("_s", "_s_GT")
@@ -260,13 +268,57 @@ object ImageSegmentationUtils {
         getLabeledObject(imgPath, gtPath)
       }
 
-    data.toArray
+    data.take(limit).toArray
+  }
+
+  def printLabeledImage(img: DenseMatrix[ROILabel], outputFile: String): Unit = {
+
+    val out: BufferedImage = new BufferedImage(img.cols, img.rows, BufferedImage.TYPE_INT_RGB)
+
+    img.keysIterator.foreach {
+      case (r, c) =>
+        out.setRGB(c, r, labelToRGB(img(r, c).label))
+    }
+
+    // val img: BufferedImage = ImageIO.read(new File(imgPath))
+    ImageIO.write(out, "jpg", new File(outputFile))
+
+  }
+
+  def printLabeledImage(img: DenseMatrix[ROILabel]): Unit = {
+
+    for (r <- 0 until img.rows) {
+      for (c <- 0 until img.cols) {
+        print("%2d ".format(img(r, c).label))
+      }
+      println()
+    }
+
+  }
+
+  /**
+   * Converts the MSRC dataset into an array of LabeledObjects
+   * Requires dataFolder argument should contain two folders: "Images" and "GroundTruth"
+   */
+  def loadMSRC(msrcFolder: String, trainLimit: Int = 334, testLimit: Int = 256): (Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]], Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]]) = {
+
+    // Split obtained from: http://graphics.stanford.edu/projects/densecrf/unary/
+    // (trainSetFilenames uses training and validation sets)
+    // These files contains filenames of respective GT images
+    // Source.fromURL(getClass.getResource(colormapFile))
+    val trainSetFileListPath: String = "/imageseg_train.txt"
+    val testSetFileListPath: String = "/imageseg_test.txt"
+
+    val trainData = loadMSRCDataFromFile(msrcFolder, trainSetFileListPath, trainLimit)
+    val testData = loadMSRCDataFromFile(msrcFolder, trainSetFileListPath, testLimit)
+
+    (trainData, testData)
   }
 
   def main(args: Array[String]): Unit = {
     val examples = loadMSRC("../data/generated/MSRC_ObjCategImageDatabase_v2")
 
-    val someExample = examples(0)
+    val someExample = examples._1(0)
     val x = someExample.pattern
     val y = someExample.label
 

@@ -5,27 +5,27 @@ import scala.annotation.elidable.ASSERTION
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Buffer
 import org.apache.log4j.PropertyConfigurator
+import org.apache.spark.SparkConf
 import breeze.linalg.Axis
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Vector
+import breeze.linalg.max
 import breeze.linalg.sum
-import cc.factorie.infer.MaximizeByMPLP
 import cc.factorie.infer.SamplingMaximizer
 import cc.factorie.infer.VariableSettingsSampler
 import cc.factorie.model.CombinedModel
-import cc.factorie.model.Factor
-import cc.factorie.model.ItemizedModel
 import cc.factorie.model.TupleTemplateWithStatistics2
 import cc.factorie.singleFactorIterable
 import cc.factorie.variable.DiscreteDomain
 import cc.factorie.variable.DiscreteVariable
 import cc.factorie.variable.IntegerVariable
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import cc.factorie.model.Factor2
-import cc.factorie.variable.HammingTemplate
-import cc.factorie.model.Factor1
-import breeze.linalg.max
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import org.apache.spark.SparkContext
+import ch.ethz.dalab.dissolve.optimization.SolverUtils
+import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
+import scala.io.Source
 
 case class ROIFeature(feature: Vector[Double]) // Represent each pixel/region by a feature vector
 
@@ -49,7 +49,7 @@ object ImageSegmentationDemo {
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
 
-    println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
+    // println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
 
     val numFeatures = xMat(0, 0).feature.size // f
     val numClasses = yMat(0, 0).numClasses // K
@@ -95,7 +95,7 @@ object ImageSegmentationDemo {
    * - a matrix of size f x r, each column corresponding to a (histogram) feature vector of region r
    */
   def getUnaryFeatureMap(xMat: DenseMatrix[ROIFeature]): DenseMatrix[Double] = {
-    println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
+    // println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
 
     val numFeatures = xMat(0, 0).feature.size // f
     val numClasses = 24
@@ -280,7 +280,7 @@ object ImageSegmentationDemo {
       def unroll2(r: RegionVar) = Nil
     }
 
-    object PairwiseTemplate extends TupleTemplateWithStatistics2[Pixel, Pixel] /*with Statistics1[Double]*/ {
+    object PairwiseTemplate extends TupleTemplateWithStatistics2[Pixel, Pixel] {
 
       def score(v1: Pixel#Value, v2: Pixel#Value) = if (v1.intValue == v2.intValue) 1.0 else -1.0
 
@@ -310,14 +310,14 @@ object ImageSegmentationDemo {
       image += row
     }
 
-    println("image rows = %d, cols = %d".format(image.size, image(0).size))
+    // println("image rows = %d, cols = %d".format(image.size, image(0).size))
 
     // Run MAP inference
     val pixels = image.flatMap(_.toSeq).toSeq
     val maxx = pixels.map { x => x.x }.reduce((x, y) => max(x, y))
     val maxy = pixels.map { y => y.y }.reduce((x, y) => max(x, y))
     val maxr = pixels.map { p => p.region.intValue }.reduce((x, y) => max(x, y))
-    println("pixels: max x = %d, max y = %d, max r = %d".format(maxx, maxy, maxr))
+    // println("pixels: max x = %d, max y = %d, max r = %d".format(maxx, maxy, maxr))
 
     val gridModel = new CombinedModel(LocalTemplate, PairwiseTemplate)
     implicit val random = new scala.util.Random(0)
@@ -389,9 +389,9 @@ object ImageSegmentationDemo {
 
     }
 
-    println("unary.size = %d x %d".format(unary.rows, unary.cols))
-    println("theta_unary.size = %d x %d".format(thetaUnary.rows, thetaUnary.cols))
-    println("theta_pairwise.size = %d x %d".format(thetaPairwise.rows, thetaPairwise.cols))
+    // println("unary.size = %d x %d".format(unary.rows, unary.cols))
+    // println("theta_unary.size = %d x %d".format(thetaUnary.rows, thetaUnary.cols))
+    // println("theta_pairwise.size = %d x %d".format(thetaPairwise.rows, thetaPairwise.cols))
 
     /**
      * Parameter estimation
@@ -409,6 +409,115 @@ object ImageSegmentationDemo {
 
   def dissolveImageSementation(options: Map[String, String]) {
 
+    val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+
+    val msrcDir: String = "../data/generated"
+
+    val appName: String = options.getOrElse("appname", "ImageSeg")
+
+    val dataDir: String = options.getOrElse("datadir", "../data/generated")
+    val debugDir: String = options.getOrElse("debugdir", "../debug")
+
+    val runLocally: Boolean = options.getOrElse("local", "true").toBoolean
+
+    val solverOptions: SolverOptions[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] = new SolverOptions()
+    solverOptions.roundLimit = options.getOrElse("roundLimit", "5").toInt // After these many passes, each slice of the RDD returns a trained model
+    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
+    solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
+    solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
+    solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
+    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
+
+    solverOptions.sample = options.getOrElse("sample", "frac")
+    solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
+    solverOptions.sampleWithReplacement = options.getOrElse("samplewithreplacement", "false").toBoolean
+
+    solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
+    solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
+
+    solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
+    solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
+
+    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/imageseg-%d.csv".format(System.currentTimeMillis()))
+
+    /**
+     * Some local overrides
+     */
+    if (runLocally) {
+      solverOptions.sampleFrac = 1.0
+      solverOptions.enableOracleCache = false
+      solverOptions.oracleCacheSize = 10
+      solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
+      solverOptions.roundLimit = 5
+      solverOptions.enableManualPartitionSize = true
+      solverOptions.NUM_PART = 1
+      solverOptions.doWeightedAveraging = false
+
+      solverOptions.debugMultiplier = 1
+    }
+
+    println(solverOptions.toString())
+
+    val (trainData, testData) = ImageSegmentationUtils.loadMSRC("../data/generated/MSRC_ObjCategImageDatabase_v2",
+      trainLimit = 10, testLimit = 10)
+
+    println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainData.size, trainData(0).pattern.rows, trainData(0).pattern.cols, trainData(0).label.size))
+
+    val conf =
+      if (runLocally)
+        new SparkConf().setAppName(appName).setMaster("local")
+      else
+        new SparkConf().setAppName(appName)
+
+    val sc = new SparkContext(conf)
+    sc.setCheckpointDir(debugDir + "/checkpoint-files")
+
+    println(SolverUtils.getSparkConfString(sc.getConf))
+
+    solverOptions.testDataRDD =
+      if (solverOptions.enableManualPartitionSize)
+        Some(sc.parallelize(testData, solverOptions.NUM_PART))
+      else
+        Some(sc.parallelize(testData))
+
+    val trainDataRDD =
+      if (solverOptions.enableManualPartitionSize)
+        sc.parallelize(trainData, solverOptions.NUM_PART)
+      else
+        sc.parallelize(trainData)
+
+    val trainer: StructSVMWithDBCFW[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] =
+      new StructSVMWithDBCFW[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]](
+        trainDataRDD,
+        featureFn,
+        lossFn,
+        oracleFn,
+        predictFn,
+        solverOptions)
+
+    val model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] = trainer.trainModel()
+
+    var avgTrainLoss: Double = 0.0
+    val trainingFileNames = Source.fromURL(getClass.getResource("/imageseg_train.txt")).getLines().toArray
+    trainData.zip(trainingFileNames).foreach {
+      case (item, fname) =>
+        val prediction = model.predictFn(model, item.pattern)
+        avgTrainLoss += lossFn(item.label, prediction)
+
+        val outname = fname.split('.')(0)
+        ImageSegmentationUtils.printLabeledImage(item.label, "%s/%s.jpg".format(debugDir, outname))
+        ImageSegmentationUtils.printLabeledImage(prediction, "%s/%s_p.jpg".format(debugDir, outname))
+
+    }
+    println("Average loss on training set = %f".format(avgTrainLoss / trainData.size))
+
+    var avgTestLoss: Double = 0.0
+    for (item <- testData) {
+      val prediction = model.predictFn(model, item.pattern)
+      avgTestLoss += lossFn(item.label, prediction)
+    }
+    println("Average loss on test set = %f".format(avgTestLoss / testData.size))
+
   }
 
   def main(args: Array[String]): Unit = {
@@ -424,6 +533,8 @@ object ImageSegmentationDemo {
 
     System.setProperty("spark.akka.frameSize", "512")
     println(options)
+
+    dissolveImageSementation(options)
 
   }
 
