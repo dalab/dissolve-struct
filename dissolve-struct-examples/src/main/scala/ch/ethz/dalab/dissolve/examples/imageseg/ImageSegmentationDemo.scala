@@ -453,6 +453,7 @@ object ImageSegmentationDemo {
       solverOptions.NUM_PART = 1
       solverOptions.doWeightedAveraging = false
 
+      solverOptions.debug = true
       solverOptions.debugMultiplier = 1
     }
 

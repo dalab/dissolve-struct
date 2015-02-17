@@ -12,6 +12,8 @@ import breeze.linalg.DenseVector
 import breeze.linalg.max
 import breeze.linalg.min
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import java.io.PrintWriter
+import java.awt.image.DataBufferByte
 
 object ImageSegmentationUtils {
 
@@ -39,6 +41,31 @@ object ImageSegmentationUtils {
     }
     .toMap
 
+  def printLabeledImage(img: DenseMatrix[ROILabel], outputFile: String): Unit = {
+
+    val out: BufferedImage = new BufferedImage(img.cols, img.rows, BufferedImage.TYPE_INT_RGB)
+
+    img.keysIterator.foreach {
+      case (r, c) =>
+        out.setRGB(c, r, labelToRGB(img(r, c).label))
+    }
+
+    // val img: BufferedImage = ImageIO.read(new File(imgPath))
+    ImageIO.write(out, "jpg", new File(outputFile))
+
+  }
+
+  def printLabeledImage(img: DenseMatrix[ROILabel]): Unit = {
+
+    for (r <- 0 until img.rows) {
+      for (c <- 0 until img.cols) {
+        print("%2d ".format(img(r, c).label))
+      }
+      println()
+    }
+
+  }
+
   /**
    * Constructs a histogram vector using pixel (i, j) and a surrounding region of size (width x height)
    */
@@ -53,21 +80,40 @@ object ImageSegmentationUtils {
     val histogramVector = DenseVector.zeros[Double](NUM_BINS * NUM_BINS * NUM_BINS)
 
     // Convert patchWithContext region into an ARGB vector
-    val imageRGBVector: Array[Int] = patchWithContext.getRaster()
+    /*val imageRGBVector: Array[Int] = patch.getRaster()
       .getDataBuffer().asInstanceOf[DataBufferInt]
-      .getData()
+      .getData()*/
+
+    val imageRGBVector = patch.getRGB(0, 0, patch.getWidth, patch.getHeight, null, 0, patch.getWidth)
+
+    val rgb = patch.getRGB(0, 0)
+    val red = (rgb >> 16) & 0xFF
+    val green = (rgb >> 8) & 0xFF
+    val blue = (rgb) & 0xFF
+    println("(%4d,%4d,%4d)".format(red, green, blue))
+
+    val rgb2 = imageRGBVector(0)
+    val red2 = (rgb2 >> 16) & 0xFF
+    val green2 = (rgb2 >> 8) & 0xFF
+    val blue2 = (rgb2) & 0xFF
+    println("(%4d,%4d,%4d)".format(red2, green2, blue2))
 
     for (rgb <- imageRGBVector) {
       val red = (rgb >> 16) & 0xFF
       val green = (rgb >> 8) & 0xFF
       val blue = (rgb) & 0xFF
 
+      // println("(%4d,%4d,%4d)".format(red, green, blue))
+
       // Calculate the index of this pixel in the histogramVector
-      val idx = ((red * NUM_BINS) / 256) +
-        4 * ((green * NUM_BINS) / 256) +
-        16 * ((blue * NUM_BINS) / 256)
-      histogramVector(idx) += 1
+      val idx = ((red * (NUM_BINS - 1)) / 256.0).round +
+        4 * ((green * (NUM_BINS - 1)) / 256.0).round +
+        16 * ((blue * (NUM_BINS - 1)) / 256.0).round
+
+      histogramVector(idx.toInt) += 1
     }
+
+    println(histogramVector)
 
     ROIFeature(histogramVector)
   }
@@ -77,14 +123,14 @@ object ImageSegmentationUtils {
    */
   def featurizeImage(imgPath: String, regionWidth: Int, regionHeight: Int): DenseMatrix[ROIFeature] = {
 
-    println("Converting original image to features")
+    // println("Converting original image to features")
 
     // Use an additional frame whose thickness is given by this size around the patch
     val PATCH_CONTEXT_SIZE = 0
 
     val img: BufferedImage = ImageIO.read(new File(imgPath))
 
-    println("img.size = %d x %d".format(img.getHeight, img.getWidth))
+    // println("img.size = %d x %d".format(img.getHeight, img.getWidth))
 
     val xmin = PATCH_CONTEXT_SIZE
     val ymin = PATCH_CONTEXT_SIZE
@@ -95,9 +141,9 @@ object ImageSegmentationUtils {
     val xstep = regionWidth
     val ystep = regionHeight
 
-    println("xmin, xmax = %d, %d".format(xmin, xmax))
-    println("ymin, ymax = %d, %d".format(ymin, ymax))
-    println("xstep, ystep = %d, %d".format(xstep, ystep))
+    // println("xmin, xmax = %d, %d".format(xmin, xmax))
+    // println("ymin, ymax = %d, %d".format(ymin, ymax))
+    // println("xstep, ystep = %d, %d".format(xstep, ystep))
 
     val featureMaskWidth = img.getWidth() / xstep
     val featureMaskHeight = img.getHeight() / ystep
@@ -109,7 +155,7 @@ object ImageSegmentationUtils {
       x <- xmin to xmax by xstep
     ) {
 
-      // println("Extracting feature at (%d, %d)".format(y, x))
+      println("Extracting feature at (%d, %d)".format(y, x))
 
       // Extract a region given by coordinates (x, y) and (x + PATCH_WIDTH, y + PATCH_HEIGHT)
       val patch = img.getSubimage(x, y, regionWidth, regionHeight)
@@ -145,7 +191,7 @@ object ImageSegmentationUtils {
       featureMask(yf, xf) = patchFeature
     }
 
-    println("Completed - Converting original image to features")
+    // println("Completed - Converting original image to features")
 
     featureMask
   }
@@ -229,12 +275,13 @@ object ImageSegmentationUtils {
       labelMask(yf, xf) = ROILabel(majorityLabel)
     }
 
+    /*
     println(gtPath)
     val gtPathArr = gtPath.split('/')
     val newfname = gtPathArr(gtPathArr.size - 1).split('.')(0)
     val outname = "../debug/%s.jpg".format(newfname)
     printLabeledImage(labelMask, outname)
-    // printLabeledImage(labelMask)
+     */
 
     println("Completed - Converting GT image to features")
 
@@ -246,8 +293,8 @@ object ImageSegmentationUtils {
    */
   def getLabeledObject(imgPath: String, gtPath: String): LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] = {
 
-    val REGION_WIDTH = 5
-    val REGION_HEIGHT = 5
+    val REGION_WIDTH = 20
+    val REGION_HEIGHT = 20
 
     LabeledObject(featurizeGT(gtPath, REGION_WIDTH, REGION_HEIGHT), featurizeImage(imgPath, REGION_WIDTH, REGION_HEIGHT))
   }
@@ -271,31 +318,6 @@ object ImageSegmentationUtils {
     data.take(limit).toArray
   }
 
-  def printLabeledImage(img: DenseMatrix[ROILabel], outputFile: String): Unit = {
-
-    val out: BufferedImage = new BufferedImage(img.cols, img.rows, BufferedImage.TYPE_INT_RGB)
-
-    img.keysIterator.foreach {
-      case (r, c) =>
-        out.setRGB(c, r, labelToRGB(img(r, c).label))
-    }
-
-    // val img: BufferedImage = ImageIO.read(new File(imgPath))
-    ImageIO.write(out, "jpg", new File(outputFile))
-
-  }
-
-  def printLabeledImage(img: DenseMatrix[ROILabel]): Unit = {
-
-    for (r <- 0 until img.rows) {
-      for (c <- 0 until img.cols) {
-        print("%2d ".format(img(r, c).label))
-      }
-      println()
-    }
-
-  }
-
   /**
    * Converts the MSRC dataset into an array of LabeledObjects
    * Requires dataFolder argument should contain two folders: "Images" and "GroundTruth"
@@ -315,7 +337,127 @@ object ImageSegmentationUtils {
     (trainData, testData)
   }
 
+  /**
+   * Serialize image
+   *
+   * Format per line:
+   * i,j,f_1,f_2,...,f_n
+   */
+  def roiFeatureImageToFile(inMat: DenseMatrix[ROIFeature], outFile: String): Unit = {
+    val writer = new PrintWriter(new File(outFile))
+
+    inMat.keysIterator.foreach {
+      case (i, j) =>
+        // Convert a vector to a comma-separated list of values in string representation
+        val strFeatureVector = inMat(i, j).feature.toArray
+          .flatMap { x => "%f".format(x) :: "," :: Nil }
+          .dropRight(1)
+          .reduceLeft((x, y) => x + y)
+        writer.write("%d,%d,%s\n".format(i, j, strFeatureVector))
+    }
+
+    writer.close()
+
+  }
+
+  /**
+   * Deserialize image from file
+   *
+   * Format per line:
+   * i,j,f_1,f_2,...,f_n
+   */
+  def roiFileToFeatureImage(inFile: String): DenseMatrix[ROIFeature] = {
+
+    val lines = Source.fromFile(inFile).getLines()
+
+    // Find height and width of image by a full-scan on the lines
+    val numRows = lines.map { x => x.split(',')(0).toInt }.max
+    val numCols = lines.map { x => x.split(',')(1).toInt }.max
+
+    val img = DenseMatrix.zeros[ROIFeature](numRows, numCols)
+
+    lines.foreach {
+      line =>
+        val elems = line.split(',')
+        val i = elems(0).toInt
+        val j = elems(1).toInt
+        val vec: DenseVector[Double] = DenseVector(elems.slice(2, elems.size).map(_.toDouble))
+        img(i, j) = ROIFeature(vec)
+    }
+
+    img
+  }
+
+  /**
+   * Serialize mask
+   *
+   * Format per line:
+   * i,j,y_{i,j}
+   */
+  def roiLabelImageToFile(inMat: DenseMatrix[ROILabel], outFile: String): Unit = {
+    val writer = new PrintWriter(new File(outFile))
+
+    inMat.keysIterator.foreach {
+      case (i, j) =>
+        writer.write("%d,%d,%d\n".format(i, j, inMat(i, j).label))
+    }
+
+    writer.close()
+  }
+
+  /**
+   * Deserialize mask
+   */
+  def roiFileToLabelImage(inFile: String): DenseMatrix[ROILabel] = {
+
+    val lines = Source.fromFile(inFile).getLines()
+
+    // Find height and width of image by a full-scan on the lines
+    val numRows = lines.map { x => x.split(',')(0).toInt }.max
+    val numCols = lines.map { x => x.split(',')(1).toInt }.max
+    val numClasses = lines.map { x => x.split(',')(2).toInt }.max
+
+    val img = DenseMatrix.zeros[ROILabel](numRows, numCols)
+
+    lines.foreach {
+      line =>
+        val elems = line.split(',')
+        val i = elems(0).toInt
+        val j = elems(1).toInt
+        val lab = elems(2).toInt
+        img(i, j) = ROILabel(lab, numClasses)
+    }
+
+    img
+
+  }
+
+  def featurizeData() = {
+
+    val msrcDir = "../data/generated/MSRC_ObjCategImageDatabase_v2"
+
+    val imagesPath = msrcDir + "/Images"
+    val gtPath = msrcDir + "/GroundTruth"
+    val imagesOpPath = msrcDir + "/ImagesFeatures"
+    val gtOpPath = msrcDir + "/GroundTruthFeatures"
+
+    val REGION_WIDTH = 25
+    val REGION_HEIGHT = 25
+
+    for (file <- new File(imagesPath).listFiles.toIterator.take(2) if file.isFile && file.getName().endsWith(".bmp")) {
+      println("Processing " + file.getName())
+      val imgMat = featurizeImage(file.getAbsolutePath, REGION_WIDTH, REGION_HEIGHT)
+      val outFilePath = "%s/%s.csv".format(imagesOpPath, file.getName())
+      roiFeatureImageToFile(imgMat, outFilePath)
+    }
+
+  }
+
   def main(args: Array[String]): Unit = {
+
+    featurizeData()
+
+    /*
     val examples = loadMSRC("../data/generated/MSRC_ObjCategImageDatabase_v2")
 
     val someExample = examples._1(0)
@@ -340,6 +482,8 @@ object ImageSegmentationUtils {
       ImageSegmentationDemo.predictFn)
     val dumy = ImageSegmentationDemo.oracleFn(dummy, x, y)
     println("oracle_y.size = %d x %d".format(dumy.rows, dumy.cols))
+    * 
+    */
 
   }
 
