@@ -25,6 +25,7 @@ import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import cc.factorie.model.Factor2
 import cc.factorie.variable.HammingTemplate
 import cc.factorie.model.Factor1
+import breeze.linalg.max
 
 case class ROIFeature(feature: Vector[Double]) // Represent each pixel/region by a feature vector
 
@@ -80,6 +81,42 @@ object ImageSegmentationDemo {
 
         unaryMat(::, i) := phi_i
     }
+
+    unaryMat
+  }
+
+  def columnMajorIdx(r: Int, c: Int, numRows: Int) = c * numRows + r
+
+  /**
+   * Given:
+   * - a matrix xMat of super-pixels, of size r = n x m, and x_i, an f-dimensional vector
+   * - corresponding labels of these super-pixels yMat, with K classes
+   * Return:
+   * - a matrix of size f x r, each column corresponding to a (histogram) feature vector of region r
+   */
+  def getUnaryFeatureMap(xMat: DenseMatrix[ROIFeature]): DenseMatrix[Double] = {
+    println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
+
+    val numFeatures = xMat(0, 0).feature.size // f
+    val numClasses = 24
+    val numRegions = xMat.rows * xMat.cols // r
+
+    val unaryMat = DenseMatrix.zeros[Double](numFeatures, numRegions)
+
+    /**
+     * Populate unary features
+     * For each node i in graph defined by xMat, whose feature vector is x_i and corresponding label is y_i,
+     * construct a feature map phi_i given by: [I(y_i = 0)x_i I(y_i = 1)x_i ... I(y_i = K)x_i ]
+     */
+
+    xMat.keysIterator
+      .map {
+        case (r, c) => (xMat(r, c), columnMajorIdx(r, c, xMat.rows))
+      }
+      .map {
+        case (roiFeature, idx) =>
+          unaryMat(::, idx) := roiFeature.feature
+      }
 
     unaryMat
   }
@@ -166,28 +203,40 @@ object ImageSegmentationDemo {
     loss.sum
   }
 
-  def unpackWeightVec(weightVec: Vector[Double], xFeatureSize: Int, numClasses: Int): (DenseMatrix[Double], DenseMatrix[Double]) = {
+  /**
+   * Takes as input:
+   * - a weight vector of size: (f * K) + (K * K), i.e, unary features [xFeatureSize * numClasses] + pairwise features [numClasses * numClasses]
+   * - feature size of x
+   * - number of class labels
+   * - padded - if padded, returns [I(K=0) w_0 ... I(K=0) w_k], else returns [w_1 w_2 ... w_k]
+   */
+  def unpackWeightVec(weightVec: Vector[Double], xFeatureSize: Int, numClasses: Int = 24, padded: Boolean = false): (DenseMatrix[Double], DenseMatrix[Double]) = {
     // Unary features
     val startIdx = 0
     val endIdx = xFeatureSize * numClasses
     val unaryFeatureVec = weightVec(startIdx until endIdx).toDenseVector
-    val unaryPot = unaryFeatureVec.toDenseMatrix.reshape(xFeatureSize, numClasses)
+    val tempUnaryPot = unaryFeatureVec.toDenseMatrix.reshape(xFeatureSize, numClasses)
 
-    // Each column in this vector contains [I(K=0) w_0 ... I(K=0) w_k]
-    val unaryPotPadded = DenseMatrix.zeros[Double](xFeatureSize * numClasses, numClasses)
-    for (k <- 0 until numClasses) {
-      val w = unaryPot(::, k)
-      val startIdx = k * xFeatureSize
-      val endIdx = startIdx + xFeatureSize
-      unaryPotPadded(startIdx until endIdx, k) := w
-    }
+    val unaryPot =
+      if (padded) {
+        // Each column in this vector contains [I(K=0) w_0 ... I(K=0) w_k]
+        val unaryPotPadded = DenseMatrix.zeros[Double](xFeatureSize * numClasses, numClasses)
+        for (k <- 0 until numClasses) {
+          val w = tempUnaryPot(::, k)
+          val startIdx = k * xFeatureSize
+          val endIdx = startIdx + xFeatureSize
+          unaryPotPadded(startIdx until endIdx, k) := w
+        }
+        unaryPotPadded
+      } else
+        tempUnaryPot
 
     // Pairwise feature Vector
     val pairwiseFeatureVec = weightVec(endIdx until weightVec.size).toDenseVector
     assert(pairwiseFeatureVec.size == numClasses * numClasses)
     val pairwisePot = pairwiseFeatureVec.toDenseMatrix.reshape(numClasses, numClasses)
 
-    (unaryPotPadded, pairwisePot)
+    (unaryPot, pairwisePot)
   }
 
   /**
@@ -220,7 +269,7 @@ object ImageSegmentationDemo {
 
       def domain = PixelDomain
 
-      val region: RegionVar = new RegionVar(xyToRegion(x, y, numRegions))
+      val region: RegionVar = new RegionVar(columnMajorIdx(x, y, image.size))
     }
 
     object LocalTemplate extends TupleTemplateWithStatistics2[Pixel, RegionVar] {
@@ -236,6 +285,7 @@ object ImageSegmentationDemo {
       def score(v1: Pixel#Value, v2: Pixel#Value) = if (v1.intValue == v2.intValue) 1.0 else -1.0
 
       def unroll1(v: Pixel) = {
+        // println("v.x = %d, v.y = %d".format(v.x, v.y))
         val img = v.image
         val factors = new ArrayBuffer[FactorType]
         if (v.x < img.length - 1) factors += Factor(v, img(v.x + 1)(v.y))
@@ -260,8 +310,15 @@ object ImageSegmentationDemo {
       image += row
     }
 
+    println("image rows = %d, cols = %d".format(image.size, image(0).size))
+
     // Run MAP inference
     val pixels = image.flatMap(_.toSeq).toSeq
+    val maxx = pixels.map { x => x.x }.reduce((x, y) => max(x, y))
+    val maxy = pixels.map { y => y.y }.reduce((x, y) => max(x, y))
+    val maxr = pixels.map { p => p.region.intValue }.reduce((x, y) => max(x, y))
+    println("pixels: max x = %d, max y = %d, max r = %d".format(maxx, maxy, maxr))
+
     val gridModel = new CombinedModel(LocalTemplate, PairwiseTemplate)
     implicit val random = new scala.util.Random(0)
     pixels.foreach(_.setRandomly)
@@ -285,10 +342,10 @@ object ImageSegmentationDemo {
    */
   def oracleFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature], yi: DenseMatrix[ROILabel]): DenseMatrix[ROILabel] = {
 
-    assert(xi.rows == yi.rows)
-    assert(xi.cols == yi.cols)
+    // assert(xi.rows == yi.rows)
+    // assert(xi.cols == yi.cols)
 
-    val numClasses = yi(0, 0).numClasses
+    val numClasses = 24
     val numRows = xi.rows
     val numCols = xi.cols
     val numROI = numRows * numCols
@@ -296,15 +353,41 @@ object ImageSegmentationDemo {
 
     val weightVec = model.getWeights()
 
+    /*
     // Unary is of size (f*K) x K
     // Pairwise is of size K x K
     val (unary, pairwise) = unpackWeightVec(weightVec, xFeatureSize, numClasses)
     assert(unary.rows == numClasses * xFeatureSize)
     assert(unary.cols == pairwise.cols)
+    */
 
-    val phi_Y: DenseMatrix[Double] = getUnaryFeatureMap(yi, xi) // Retrieves a (f * K) x r matrix
+    // Unary is of size f x K, each column representing feature vector of class K
+    // Pairwise if of size K * K
+    val (unary, pairwise) = unpackWeightVec(weightVec, xFeatureSize, numClasses = numClasses, padded = false)
+    assert(unary.rows == xFeatureSize)
+    assert(unary.cols == numClasses)
+    assert(pairwise.rows == pairwise.cols)
+    assert(pairwise.rows == numClasses)
+
+    val phi_Y: DenseMatrix[Double] = getUnaryFeatureMap(xi) // Retrieves a f x r matrix
     val thetaUnary = phi_Y.t * unary // Returns a r x K matrix, where theta(r, k) is the unary potential of region i having label k
     val thetaPairwise = pairwise
+
+    // If yi is present, do loss-augmentation
+    if (yi != null) {
+      yi.keysIterator
+        .map {
+          case (r, c) => (yi(r, c), columnMajorIdx(r, c, yi.rows))
+        }
+        .map {
+          case (yLab, r) =>
+            thetaUnary(r, ::) := thetaUnary(r, ::) + 1.0 / numROI
+            // Loss augmentation step
+            val k = yLab.label
+            thetaUnary(r, k) = thetaUnary(r, k) - 1.0 / numROI
+        }
+
+    }
 
     println("unary.size = %d x %d".format(unary.rows, unary.cols))
     println("theta_unary.size = %d x %d".format(thetaUnary.rows, thetaUnary.cols))
@@ -314,14 +397,14 @@ object ImageSegmentationDemo {
      * Parameter estimation
      */
 
-    decodeFn(thetaUnary, thetaPairwise, numRows, numCols)
+    decodeFn(thetaUnary, thetaPairwise, numCols, numRows)
   }
 
   /**
    * Prediction Function
    */
   def predictFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature]): DenseMatrix[ROILabel] = {
-    null
+    oracleFn(model, xi, null)
   }
 
   def dissolveImageSementation(options: Map[String, String]) {
