@@ -16,6 +16,8 @@ import java.io.PrintWriter
 import java.awt.image.DataBufferByte
 
 object ImageSegmentationUtils {
+  val REGION_WIDTH = 10
+  val REGION_HEIGHT = 10
 
   val featurizer_options: List[String] = List("HIST")
 
@@ -86,7 +88,7 @@ object ImageSegmentationUtils {
 
     val imageRGBVector = patch.getRGB(0, 0, patch.getWidth, patch.getHeight, null, 0, patch.getWidth)
 
-    val rgb = patch.getRGB(0, 0)
+    /*val rgb = patch.getRGB(0, 0)
     val red = (rgb >> 16) & 0xFF
     val green = (rgb >> 8) & 0xFF
     val blue = (rgb) & 0xFF
@@ -96,7 +98,7 @@ object ImageSegmentationUtils {
     val red2 = (rgb2 >> 16) & 0xFF
     val green2 = (rgb2 >> 8) & 0xFF
     val blue2 = (rgb2) & 0xFF
-    println("(%4d,%4d,%4d)".format(red2, green2, blue2))
+    println("(%4d,%4d,%4d)".format(red2, green2, blue2))*/
 
     for (rgb <- imageRGBVector) {
       val red = (rgb >> 16) & 0xFF
@@ -112,8 +114,6 @@ object ImageSegmentationUtils {
 
       histogramVector(idx.toInt) += 1
     }
-
-    println(histogramVector)
 
     ROIFeature(histogramVector)
   }
@@ -155,7 +155,7 @@ object ImageSegmentationUtils {
       x <- xmin to xmax by xstep
     ) {
 
-      println("Extracting feature at (%d, %d)".format(y, x))
+      // println("Extracting feature at (%d, %d)".format(y, x))
 
       // Extract a region given by coordinates (x, y) and (x + PATCH_WIDTH, y + PATCH_HEIGHT)
       val patch = img.getSubimage(x, y, regionWidth, regionHeight)
@@ -234,7 +234,7 @@ object ImageSegmentationUtils {
    */
   def featurizeGT(gtPath: String, regionWidth: Int, regionHeight: Int): DenseMatrix[ROILabel] = {
 
-    println("Converting GT image to features")
+    // println("Converting GT image to features")
 
     val gtImage: BufferedImage = ImageIO.read(new File(gtPath))
 
@@ -283,7 +283,7 @@ object ImageSegmentationUtils {
     printLabeledImage(labelMask, outname)
      */
 
-    println("Completed - Converting GT image to features")
+    // println("Completed - Converting GT image to features")
 
     labelMask
   }
@@ -291,28 +291,28 @@ object ImageSegmentationUtils {
   /**
    * Returns a LabeledObject instance for an image and its corresponding labeled segments
    */
-  def getLabeledObject(imgPath: String, gtPath: String): LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] = {
-
-    val REGION_WIDTH = 20
-    val REGION_HEIGHT = 20
-
-    LabeledObject(featurizeGT(gtPath, REGION_WIDTH, REGION_HEIGHT), featurizeImage(imgPath, REGION_WIDTH, REGION_HEIGHT))
+  def getLabeledObject(imgPath: String, gtPath: String, loadPrecomputedFeatures: Boolean = true): LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] = {
+    if (loadPrecomputedFeatures)
+      LabeledObject(roiFileToLabelImage(gtPath), roiFileToFeatureImage(imgPath))
+    else
+      LabeledObject(featurizeGT(gtPath, REGION_WIDTH, REGION_HEIGHT), featurizeImage(imgPath, REGION_WIDTH, REGION_HEIGHT))
   }
 
-  def loadMSRCDataFromFile(msrcFolder: String, listFileName: String, limit: Int): Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]] = {
+  def loadMSRCDataFromFile(msrcFolder: String, listFileName: String, limit: Int, loadPrecomputedFeatures: Boolean = true): Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]] = {
 
-    val imagesDir: String = msrcFolder + "/Images"
-    val gtDir: String = msrcFolder + "/GroundTruth"
+    val imagesDir: String = if (loadPrecomputedFeatures) msrcFolder + "/ImagesFeatures" else msrcFolder + "/Images"
+    val gtDir: String = if (loadPrecomputedFeatures) msrcFolder + "/GroundTruthFeatures" else msrcFolder + "/GroundTruth"
 
     val data =
       for (imgFilename <- Source.fromURL(getClass.getResource(listFileName)).getLines()) yield {
-        val imgPath = "%s/%s".format(imagesDir, imgFilename)
+        val pat = if (loadPrecomputedFeatures) "%s/%s.csv" else "%s/%s"
+        val imgPath = pat.format(imagesDir, imgFilename)
 
         val gtFilename = imgFilename.replace("_s", "_s_GT")
-        val gtPath = "%s/%s".format(gtDir, gtFilename)
+        val gtPath = pat.format(gtDir, gtFilename)
 
-        println("Training Image = %s\nMask = %s".format(imgPath, gtPath))
-        getLabeledObject(imgPath, gtPath)
+        // println("Training Image = %s\nMask = %s".format(imgPath, gtPath))
+        getLabeledObject(imgPath, gtPath, true)
       }
 
     data.take(limit).toArray
@@ -368,11 +368,11 @@ object ImageSegmentationUtils {
    */
   def roiFileToFeatureImage(inFile: String): DenseMatrix[ROIFeature] = {
 
-    val lines = Source.fromFile(inFile).getLines()
+    val lines = Source.fromFile(inFile).getLines().toArray
 
     // Find height and width of image by a full-scan on the lines
-    val numRows = lines.map { x => x.split(',')(0).toInt }.max
-    val numCols = lines.map { x => x.split(',')(1).toInt }.max
+    val numRows = lines.map { x => x.split(',')(0).toInt }.max + 1
+    val numCols = lines.map { x => x.split(',')(1).toInt }.max + 1
 
     val img = DenseMatrix.zeros[ROIFeature](numRows, numCols)
 
@@ -410,11 +410,11 @@ object ImageSegmentationUtils {
    */
   def roiFileToLabelImage(inFile: String): DenseMatrix[ROILabel] = {
 
-    val lines = Source.fromFile(inFile).getLines()
+    val lines = Source.fromFile(inFile).getLines().toArray
 
     // Find height and width of image by a full-scan on the lines
-    val numRows = lines.map { x => x.split(',')(0).toInt }.max
-    val numCols = lines.map { x => x.split(',')(1).toInt }.max
+    val numRows = lines.map { x => x.split(',')(0).toInt }.max + 1
+    val numCols = lines.map { x => x.split(',')(1).toInt }.max + 1
     val numClasses = lines.map { x => x.split(',')(2).toInt }.max
 
     val img = DenseMatrix.zeros[ROILabel](numRows, numCols)
@@ -441,14 +441,18 @@ object ImageSegmentationUtils {
     val imagesOpPath = msrcDir + "/ImagesFeatures"
     val gtOpPath = msrcDir + "/GroundTruthFeatures"
 
-    val REGION_WIDTH = 25
-    val REGION_HEIGHT = 25
-
-    for (file <- new File(imagesPath).listFiles.toIterator.take(2) if file.isFile && file.getName().endsWith(".bmp")) {
+    for (file <- new File(imagesPath).listFiles.toIterator if file.isFile && file.getName().endsWith(".bmp")) {
       println("Processing " + file.getName())
       val imgMat = featurizeImage(file.getAbsolutePath, REGION_WIDTH, REGION_HEIGHT)
       val outFilePath = "%s/%s.csv".format(imagesOpPath, file.getName())
       roiFeatureImageToFile(imgMat, outFilePath)
+    }
+
+    for (file <- new File(gtPath).listFiles.toIterator if file.isFile && file.getName().endsWith(".bmp")) {
+      println("Processing " + file.getName())
+      val gtMat = featurizeGT(file.getAbsolutePath, REGION_WIDTH, REGION_HEIGHT)
+      val outFilePath = "%s/%s.csv".format(gtOpPath, file.getName())
+      roiLabelImageToFile(gtMat, outFilePath)
     }
 
   }

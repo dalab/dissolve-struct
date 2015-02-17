@@ -65,7 +65,7 @@ object ImageSegmentationDemo {
 
     xMat.keysIterator.foreach {
       case (r, c) =>
-        val i = r + c * xMat.rows // Column-major iteration
+        val i = columnMajorIdx(r, c, xMat.rows) // Column-major iteration
 
         // println("(r, c) = (%d, %d)".format(r, c))
         val x_i = xMat(r, c).feature
