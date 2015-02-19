@@ -415,7 +415,8 @@ object ImageSegmentationUtils {
     // Find height and width of image by a full-scan on the lines
     val numRows = lines.map { x => x.split(',')(0).toInt }.max + 1
     val numCols = lines.map { x => x.split(',')(1).toInt }.max + 1
-    val numClasses = lines.map { x => x.split(',')(2).toInt }.max
+    // val numClasses = lines.map { x => x.split(',')(2).toInt }.max + 1
+    val numClasses = 24
 
     val img = DenseMatrix.zeros[ROILabel](numRows, numCols)
 

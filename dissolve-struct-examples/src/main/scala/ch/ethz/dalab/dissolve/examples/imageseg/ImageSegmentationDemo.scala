@@ -77,6 +77,11 @@ object ImageSegmentationDemo {
         val endIdx = startIdx + numFeatures
 
         // For y_i'th position of phi_i, populate x_i's feature vector
+        /*println("x_i.size = " + x_i.size)
+        println("endIdx - startIdx = " + (endIdx - startIdx))
+        println("startIdx = %d\tendIdx = %d".format(startIdx, endIdx))
+        println("phi_i.size = " + phi_i.size)*/
+
         phi_i(startIdx until endIdx) := x_i
 
         unaryMat(::, i) := phi_i
@@ -97,11 +102,11 @@ object ImageSegmentationDemo {
   def getUnaryFeatureMap(xMat: DenseMatrix[ROIFeature]): DenseMatrix[Double] = {
     // println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
 
-    val numFeatures = xMat(0, 0).feature.size // f
+    val numDims = xMat(0, 0).feature.size // f
     val numClasses = 24
     val numRegions = xMat.rows * xMat.cols // r
 
-    val unaryMat = DenseMatrix.zeros[Double](numFeatures, numRegions)
+    val unaryMat = DenseMatrix.zeros[Double](numDims, numRegions)
 
     /**
      * Populate unary features
@@ -110,12 +115,10 @@ object ImageSegmentationDemo {
      */
 
     xMat.keysIterator
-      .map {
-        case (r, c) => (xMat(r, c), columnMajorIdx(r, c, xMat.rows))
-      }
-      .map {
-        case (roiFeature, idx) =>
-          unaryMat(::, idx) := roiFeature.feature
+      .foreach {
+        case (r, c) =>
+          val idx = columnMajorIdx(r, c, xMat.rows)
+          unaryMat(::, idx) := xMat(r, c).feature
       }
 
     unaryMat
@@ -169,19 +172,33 @@ object ImageSegmentationDemo {
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
 
-    val unaryMat = getUnaryFeatureMap(yMat, xMat)
-    val pairwiseMat = getPairwiseFeatureMap(yMat, xMat)
+    // val unaryMat = getUnaryFeatureMap(yMat, xMat)
+    // val pairwiseMat = getPairwiseFeatureMap(yMat, xMat)
 
-    // Collapse feature function of each x_i by addition
-    val unarySumVec = sum(unaryMat, Axis._1)
-
-    // Double-check dimensions
+    val numDims = xMat(0, 0).feature.size
     val numClasses = yMat(0, 0).numClasses
-    val numFeatures = xMat(0, 0).feature.size
-    assert(unarySumVec.size == numClasses * numFeatures)
-    assert(pairwiseMat.size == numClasses * numClasses)
 
-    DenseVector.vertcat(unarySumVec, pairwiseMat.toDenseVector)
+    val phi = DenseVector.zeros[Double](numDims * numClasses + numClasses * numClasses)
+
+    // Unaries
+    val unary = DenseVector.zeros[Double](numDims * numClasses)
+    yMat.keysIterator.foreach {
+      case (r, c) =>
+        val i = columnMajorIdx(r, c, yMat.rows)
+        val label = yMat(r, c).label
+        val startIdx = label * numClasses
+        val endIdx = startIdx + numDims
+        unary(startIdx until endIdx) := xMat(r, c).feature
+    }
+
+    val pairwise = getPairwiseFeatureMap(yMat, xMat).toDenseVector
+
+    phi(0 until (numDims * numClasses)) := unary
+    phi((numDims * numClasses) until phi.size) := pairwise
+
+    // println("numDims = %d\tnumClasses = %d\tphi.size = %d".format(numDims, numClasses, phi.size))
+
+    phi
   }
 
   /**
@@ -194,13 +211,13 @@ object ImageSegmentationDemo {
 
     val loss =
       for (
-        x <- 0 until yTruth.cols;
-        y <- 0 until yTruth.rows
+        y <- 0 until yTruth.cols;
+        x <- 0 until yTruth.rows
       ) yield {
-        if (x == y) 0.0 else 1.0
+        if (yTruth(x, y).label == yPredict(x, y).label) 0.0 else 1.0
       }
 
-    loss.sum
+    loss.sum / (yTruth.cols * yTruth.rows)
   }
 
   /**
@@ -289,7 +306,7 @@ object ImageSegmentationDemo {
         val img = v.image
         val factors = new ArrayBuffer[FactorType]
         if (v.x < img.length - 1) factors += Factor(v, img(v.x + 1)(v.y))
-        if (v.y < img.length - 1) factors += Factor(v, img(v.x)(v.y + 1))
+        if (v.y < img(0).length - 1) factors += Factor(v, img(v.x)(v.y + 1))
         if (v.x > 0) factors += Factor(img(v.x - 1)(v.y), v)
         if (v.y > 0) factors += Factor(img(v.x)(v.y - 1), v)
         factors
@@ -349,7 +366,7 @@ object ImageSegmentationDemo {
     val numRows = xi.rows
     val numCols = xi.cols
     val numROI = numRows * numCols
-    val xFeatureSize = xi(0, 0).feature.size
+    val numDims = xi(0, 0).feature.size
 
     val weightVec = model.getWeights()
 
@@ -363,8 +380,8 @@ object ImageSegmentationDemo {
 
     // Unary is of size f x K, each column representing feature vector of class K
     // Pairwise if of size K * K
-    val (unary, pairwise) = unpackWeightVec(weightVec, xFeatureSize, numClasses = numClasses, padded = false)
-    assert(unary.rows == xFeatureSize)
+    val (unary, pairwise) = unpackWeightVec(weightVec, numDims, numClasses = numClasses, padded = false)
+    assert(unary.rows == numDims)
     assert(unary.cols == numClasses)
     assert(pairwise.rows == pairwise.cols)
     assert(pairwise.rows == numClasses)
@@ -372,6 +389,19 @@ object ImageSegmentationDemo {
     val phi_Y: DenseMatrix[Double] = getUnaryFeatureMap(xi) // Retrieves a f x r matrix
     val thetaUnary = phi_Y.t * unary // Returns a r x K matrix, where theta(r, k) is the unary potential of region i having label k
     val thetaPairwise = pairwise
+
+    // println(thetaUnary(0 until 5, 0 until 3).toDenseVector)
+    /*print("weightVec: ")
+    println(weightVec.toDenseVector.keysIterator.take(10).map(idx => (idx, weightVec(idx))).filter(_._2 > 0.0).map(x => "(%d, %f)".format(x._1, x._2)).toList)
+    print("xi(0, 0): ")
+    println(xi(0, 0).feature.keysIterator.take(10).map(idx => (idx, xi(0, 0).feature(idx))).filter(_._2 > 0.0).map(x => "(%d, %f)".format(x._1, x._2)).toList)
+    print("phi_Y: ")
+    println(phi_Y.activeKeysIterator.take(10).map { case (r, c) => (r, c, phi_Y(r, c)) }.filter(_._3 > 0.0).map(x => "(%d, %d, %f)".format(x._1, x._2, x._3)).toList)
+    print("unary: ")
+    println(unary.activeKeysIterator.take(10).map { case (r, c) => (r, c, unary(r, c)) }.filter(_._3 > 0.0).map(x => "(%d, %d, %f)".format(x._1, x._2, x._3)).toList)
+    print("thetaUnary: ")
+    println(thetaUnary.activeKeysIterator.take(10).map { case (r, c) => (r, c, thetaUnary(r, c)) }.filter(_._3 > 0.0).map(x => "(%d, %d, %f)".format(x._1, x._2, x._3)).toList)
+    println()*/
 
     // If yi is present, do loss-augmentation
     if (yi != null) {
@@ -444,11 +474,11 @@ object ImageSegmentationDemo {
      * Some local overrides
      */
     if (runLocally) {
-      solverOptions.sampleFrac = 1.0
+      solverOptions.sampleFrac = 0.5
       solverOptions.enableOracleCache = false
       solverOptions.oracleCacheSize = 10
       solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
-      solverOptions.roundLimit = 5
+      solverOptions.roundLimit = 10
       solverOptions.enableManualPartitionSize = true
       solverOptions.NUM_PART = 1
       solverOptions.doWeightedAveraging = false
@@ -460,7 +490,7 @@ object ImageSegmentationDemo {
     println(solverOptions.toString())
 
     val (trainData, testData) = ImageSegmentationUtils.loadMSRC("../data/generated/MSRC_ObjCategImageDatabase_v2",
-      trainLimit = 10, testLimit = 10)
+      trainLimit = 100, testLimit = 10)
 
     println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainData.size, trainData(0).pattern.rows, trainData(0).pattern.cols, trainData(0).label.size))
 
