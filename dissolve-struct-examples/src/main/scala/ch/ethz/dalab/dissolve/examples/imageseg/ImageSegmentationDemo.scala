@@ -33,7 +33,7 @@ import cc.factorie.infer.MaximizeByMPLP
 
 case class ROIFeature(feature: Vector[Double], name: String = "NA") // Represent each pixel/region by a feature vector
 
-case class ROILabel(label: Int, numClasses: Int = 24) {
+case class ROILabel(label: Int, numClasses: Int = 24, classFrequency: Double = 1.0) {
   override def equals(o: Any) = o match {
     case that: ROILabel => that.label == this.label
     case _              => false
@@ -169,7 +169,7 @@ object ImageSegmentationDemo {
     ) {
       val classA = yMat(x, y).label
 
-      val neighbours = List((-1, 0), (0, -1), (1, 0), (0, 1))
+      val neighbours = List((1, 0), (0, 1))
 
       for ((dx, dy) <- neighbours if (x + dx >= 0) && (y + dy >= 0) && (x + dx < xMat.rows) && (y + dy < xMat.cols)) {
         val classB = yMat(x + dx, y + dy).label
@@ -235,7 +235,7 @@ object ImageSegmentationDemo {
         y <- 0 until yTruth.cols;
         x <- 0 until yTruth.rows
       ) yield {
-        if (yTruth(x, y).label == yPredict(x, y).label) 0.0 else 1.0
+        if (yTruth(x, y).label == yPredict(x, y).label) 0.0 else 1.0 / yTruth(x, y).classFrequency
       }
 
     loss.sum / (yTruth.cols * yTruth.rows)
@@ -464,16 +464,16 @@ object ImageSegmentationDemo {
             factors ++= getPairwiseFactor(pix, image(x + 1)(y))
 
           // (x, y) and (x+1, y+1)
-          if ((y < imageWidth - 1) && (x < imageHeight - 1))
-            factors ++= getPairwiseFactor(pix, image(x + 1)(y + 1))
+          // if ((y < imageWidth - 1) && (x < imageHeight - 1))
+            // factors ++= getPairwiseFactor(pix, image(x + 1)(y + 1))
 
           // (x, y) and (x, y-1)
           // if (y > 0)
-          // factors ++= getPairwiseFactor(pix, image(x)(y - 1))
+          //  factors ++= getPairwiseFactor(pix, image(x)(y - 1))
 
           // (x, y) and (x-1, y)
           // if (x > 0)
-          // factors ++= getPairwiseFactor(pix, image(x - 1)(y))
+          //   factors ++= getPairwiseFactor(pix, image(x - 1)(y))
 
           factors
       }
@@ -620,11 +620,11 @@ object ImageSegmentationDemo {
      * Some local overrides
      */
     if (runLocally) {
-      solverOptions.sampleFrac = 1.0
+      solverOptions.sampleFrac = 0.2
       solverOptions.enableOracleCache = false
       solverOptions.oracleCacheSize = 10
       solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
-      solverOptions.roundLimit = 10
+      solverOptions.roundLimit = 50
       solverOptions.enableManualPartitionSize = true
       solverOptions.NUM_PART = 1
       solverOptions.doWeightedAveraging = false

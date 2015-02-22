@@ -31,6 +31,16 @@ object ImageSegmentationUtils {
     }
     .toMap
 
+  val labFreqFile = "/imageseg_lab_freq.txt"
+  val labFreqMap: Map[Int, Double] = Source.fromURL(getClass.getResource(labFreqFile))
+    .getLines()
+    .map { line => line.split(',') }
+    .map {
+      case Array(lab, labFreq) =>
+        lab.toInt -> labFreq.toDouble
+    }
+    .toMap
+
   val labelToRGB: Map[Int, Int] = Source.fromURL(getClass.getResource(colormapFile))
     .getLines()
     .map { line => line.split(" ") }
@@ -76,7 +86,7 @@ object ImageSegmentationUtils {
     // The intensities are split into these many bins.
     // For example, in case of 4 bins, Bin 0 corresponds to intensities 0-63, bin 1 is 64-127,
     // bin 2 is 128-191, and bin 3 is 192-255.
-    val NUM_BINS = 4
+    val NUM_BINS = 8
     // Store the histogram in 3 blocks of [ R | G | B ]
     // The index in the histogram feature vector is function of R,G,B intensity bins
     val histogramVector = DenseVector.zeros[Double](NUM_BINS * NUM_BINS * NUM_BINS)
@@ -387,8 +397,8 @@ object ImageSegmentationUtils {
         val j = elems(1).toInt
         val vec: DenseVector[Double] = DenseVector(elems.slice(2, elems.size).map(_.toDouble))
         img(i, j) = ROIFeature(vec, name = pathToFileName(inFile))
-     }
-    
+    }
+
     img
   }
 
@@ -413,7 +423,7 @@ object ImageSegmentationUtils {
    * Deserialize mask
    */
   def roiFileToLabelImage(inFile: String): DenseMatrix[ROILabel] = {
-
+    
     val lines = Source.fromFile(inFile).getLines().toArray
 
     // Find height and width of image by a full-scan on the lines
@@ -430,7 +440,7 @@ object ImageSegmentationUtils {
         val i = elems(0).toInt
         val j = elems(1).toInt
         val lab = elems(2).toInt
-        img(i, j) = ROILabel(lab, numClasses)
+        img(i, j) = ROILabel(lab, numClasses, labFreqMap(lab))
     }
 
     img
