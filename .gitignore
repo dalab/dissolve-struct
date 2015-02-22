@@ -33,6 +33,9 @@ build.log
 .CVS
 .hg*
 
+# Mac stuff
+.DS_Store
+
 # switch to regexp syntax.
 #  syntax: regexp
 #  ^\.pc/

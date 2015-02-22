@@ -328,8 +328,10 @@ object ImageSegmentationUtils {
     // (trainSetFilenames uses training and validation sets)
     // These files contains filenames of respective GT images
     // Source.fromURL(getClass.getResource(colormapFile))
-    val trainSetFileListPath: String = "/imageseg_train.txt"
-    val testSetFileListPath: String = "/imageseg_test.txt"
+    // val trainSetFileListPath: String = "/imageseg_train.txt"
+    // val testSetFileListPath: String = "/imageseg_test.txt"
+    val trainSetFileListPath: String = "/imageseg_cattle_train.txt"
+    val testSetFileListPath: String = "/imageseg_cattle_test.txt"
 
     val trainData = loadMSRCDataFromFile(msrcFolder, trainSetFileListPath, trainLimit)
     val testData = loadMSRCDataFromFile(msrcFolder, trainSetFileListPath, testLimit)
@@ -376,15 +378,17 @@ object ImageSegmentationUtils {
 
     val img = DenseMatrix.zeros[ROIFeature](numRows, numCols)
 
+    def pathToFileName(path: String): String = path.split('/').last
+
     lines.foreach {
       line =>
         val elems = line.split(',')
         val i = elems(0).toInt
         val j = elems(1).toInt
         val vec: DenseVector[Double] = DenseVector(elems.slice(2, elems.size).map(_.toDouble))
-        img(i, j) = ROIFeature(vec)
-    }
-
+        img(i, j) = ROIFeature(vec, name = pathToFileName(inFile))
+     }
+    
     img
   }
 
