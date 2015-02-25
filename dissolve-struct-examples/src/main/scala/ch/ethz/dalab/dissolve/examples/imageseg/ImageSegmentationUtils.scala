@@ -11,6 +11,9 @@ import java.awt.image.DataBufferInt
 import breeze.linalg.DenseVector
 import breeze.linalg.max
 import breeze.linalg.min
+import breeze.linalg.normalize
+import breeze.math._
+import breeze.numerics._
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import java.io.PrintWriter
 import java.awt.image.DataBufferByte
@@ -31,7 +34,12 @@ object ImageSegmentationUtils {
     }
     .toMap
 
-  val labFreqFile = "/imageseg_lab_freq.txt"
+  val labFreqFile =
+    if (ImageSegmentationDemo.RUN_SYNTH)
+      "/imageseg_synth_lab_freq.txt"
+    else
+      "/imageseg_cattle_lab_freq.txt"
+
   val labFreqMap: Map[Int, Double] = Source.fromURL(getClass.getResource(labFreqFile))
     .getLines()
     .map { line => line.split(',') }
@@ -63,7 +71,7 @@ object ImageSegmentationUtils {
     }
 
     // val img: BufferedImage = ImageIO.read(new File(imgPath))
-    ImageIO.write(out, "jpg", new File(outputFile))
+    ImageIO.write(out, "bmp", new File(outputFile))
 
   }
 
@@ -118,14 +126,14 @@ object ImageSegmentationUtils {
       // println("(%4d,%4d,%4d)".format(red, green, blue))
 
       // Calculate the index of this pixel in the histogramVector
-      val idx = ((red * (NUM_BINS - 1)) / 256.0).round +
-        4 * ((green * (NUM_BINS - 1)) / 256.0).round +
-        16 * ((blue * (NUM_BINS - 1)) / 256.0).round
+      val idx = math.pow(NUM_BINS, 0) * ((red * (NUM_BINS - 1)) / 256.0).round +
+        math.pow(NUM_BINS, 1) * ((green * (NUM_BINS - 1)) / 256.0).round +
+        math.pow(NUM_BINS, 2) * ((blue * (NUM_BINS - 1)) / 256.0).round
 
       histogramVector(idx.toInt) += 1
     }
 
-    ROIFeature(histogramVector)
+    ROIFeature(normalize(histogramVector))
   }
 
   /**
@@ -289,7 +297,7 @@ object ImageSegmentationUtils {
     println(gtPath)
     val gtPathArr = gtPath.split('/')
     val newfname = gtPathArr(gtPathArr.size - 1).split('.')(0)
-    val outname = "../debug/%s.jpg".format(newfname)
+    val outname = "../debug/%s.bmp".format(newfname)
     printLabeledImage(labelMask, outname)
      */
 
@@ -310,8 +318,10 @@ object ImageSegmentationUtils {
 
   def loadMSRCDataFromFile(msrcFolder: String, listFileName: String, limit: Int, loadPrecomputedFeatures: Boolean = true): Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]] = {
 
-    val imagesDir: String = if (loadPrecomputedFeatures) msrcFolder + "/ImagesFeatures" else msrcFolder + "/Images"
-    val gtDir: String = if (loadPrecomputedFeatures) msrcFolder + "/GroundTruthFeatures" else msrcFolder + "/GroundTruth"
+    val suffix = if (ImageSegmentationDemo.RUN_SYNTH) "Synth" else ""
+
+    val imagesDir: String = { if (loadPrecomputedFeatures) msrcFolder + "/ImagesFeatures" else msrcFolder + "/Images" } + suffix
+    val gtDir: String = { if (loadPrecomputedFeatures) msrcFolder + "/GroundTruthFeatures" else msrcFolder + "/GroundTruth" } + suffix
 
     val data =
       for (imgFilename <- Source.fromURL(getClass.getResource(listFileName)).getLines()) yield {
@@ -334,14 +344,16 @@ object ImageSegmentationUtils {
    */
   def loadMSRC(msrcFolder: String, trainLimit: Int = 334, testLimit: Int = 256): (Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]], Array[LabeledObject[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]]]) = {
 
+    val suffix = if (ImageSegmentationDemo.RUN_SYNTH) "_synth" else "_cattle"
+
     // Split obtained from: http://graphics.stanford.edu/projects/densecrf/unary/
     // (trainSetFilenames uses training and validation sets)
     // These files contains filenames of respective GT images
     // Source.fromURL(getClass.getResource(colormapFile))
     // val trainSetFileListPath: String = "/imageseg_train.txt"
     // val testSetFileListPath: String = "/imageseg_test.txt"
-    val trainSetFileListPath: String = "/imageseg_cattle_train.txt"
-    val testSetFileListPath: String = "/imageseg_cattle_test.txt"
+    val trainSetFileListPath: String = "/imageseg%s_train.txt".format(suffix)
+    val testSetFileListPath: String = "/imageseg%s_test.txt".format(suffix)
 
     val trainData = loadMSRCDataFromFile(msrcFolder, trainSetFileListPath, trainLimit)
     val testData = loadMSRCDataFromFile(msrcFolder, trainSetFileListPath, testLimit)
@@ -423,7 +435,7 @@ object ImageSegmentationUtils {
    * Deserialize mask
    */
   def roiFileToLabelImage(inFile: String): DenseMatrix[ROILabel] = {
-    
+
     val lines = Source.fromFile(inFile).getLines().toArray
 
     // Find height and width of image by a full-scan on the lines
@@ -451,19 +463,29 @@ object ImageSegmentationUtils {
 
     val msrcDir = "../data/generated/MSRC_ObjCategImageDatabase_v2"
 
-    val imagesPath = msrcDir + "/Images"
-    val gtPath = msrcDir + "/GroundTruth"
-    val imagesOpPath = msrcDir + "/ImagesFeatures"
-    val gtOpPath = msrcDir + "/GroundTruthFeatures"
+    val suffix = if (ImageSegmentationDemo.RUN_SYNTH) "Synth" else ""
 
-    for (file <- new File(imagesPath).listFiles.toIterator if file.isFile && file.getName().endsWith(".bmp")) {
+    val imagesPath = msrcDir + "/Images" + suffix
+    val gtPath = msrcDir + "/GroundTruth" + suffix
+    val imagesOpPath = msrcDir + "/ImagesFeatures" + suffix
+    val gtOpPath = msrcDir + "/GroundTruthFeatures" + suffix
+
+    for (
+      file <- new File(imagesPath).listFiles.toIterator if file.isFile
+        && file.getName().endsWith(".bmp")
+    // && file.getName().startsWith("1_")
+    ) {
       println("Processing " + file.getName())
       val imgMat = featurizeImage(file.getAbsolutePath, REGION_WIDTH, REGION_HEIGHT)
       val outFilePath = "%s/%s.csv".format(imagesOpPath, file.getName())
       roiFeatureImageToFile(imgMat, outFilePath)
     }
 
-    for (file <- new File(gtPath).listFiles.toIterator if file.isFile && file.getName().endsWith(".bmp")) {
+    for (
+      file <- new File(gtPath).listFiles.toIterator if file.isFile
+        && file.getName().endsWith(".bmp")
+    // && file.getName().startsWith("1_")
+    ) {
       println("Processing " + file.getName())
       val gtMat = featurizeGT(file.getAbsolutePath, REGION_WIDTH, REGION_HEIGHT)
       val outFilePath = "%s/%s.csv".format(gtOpPath, file.getName())
