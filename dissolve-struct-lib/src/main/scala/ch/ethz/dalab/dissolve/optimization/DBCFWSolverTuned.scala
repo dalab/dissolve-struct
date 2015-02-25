@@ -279,13 +279,18 @@ class DBCFWSolverTuned[X, Y](
            */
           val indexedJointData: RDD[(Index, InputDataShard[X, Y])] =
             indexedTrainDataRDD
-              .sample(solverOptions.sampleWithReplacement, sampleFrac, solverOptions.randSeed)
+              .sample(solverOptions.sampleWithReplacement, sampleFrac)
               .join(indexedPrimalsRDD)
               .leftOuterJoin(indexedCacheRDD)
               .mapValues { // Because mapValues preserves partitioning
                 case ((labeledObject, primalInfo), cache) =>
                   InputDataShard(labeledObject, primalInfo, cache)
               }
+          
+          /*println("indexedTrainDataRDD = " + indexedTrainDataRDD.count())
+          println("indexedJointData.count = " + indexedJointData.count())
+          println("indexedPrimalsRDD.count = " + indexedPrimalsRDD.count())
+          println("indexedCacheRDD.count = " + indexedCacheRDD.count())*/
 
           /**
            * Step 2 - Map each partition to produce: idx -> (newPrimals, newCache, optionalModel)
