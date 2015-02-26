@@ -19,8 +19,15 @@ import java.io.PrintWriter
 import java.awt.image.DataBufferByte
 
 object ImageSegmentationUtils {
+
+  // Size of super-pixels
   val REGION_WIDTH = 10
   val REGION_HEIGHT = 10
+
+  // The intensities are split into these many bins.
+  // For example, in case of 4 bins, Bin 0 corresponds to intensities 0-63, bin 1 is 64-127,
+  // bin 2 is 128-191, and bin 3 is 192-255.
+  val NUM_BINS = 8
 
   val featurizer_options: List[String] = List("HIST")
 
@@ -89,11 +96,6 @@ object ImageSegmentationUtils {
    * Constructs a histogram vector using pixel (i, j) and a surrounding region of size (width x height)
    */
   def histogramFeaturizer(patch: BufferedImage, patchWithContext: BufferedImage): ROIFeature = {
-
-    // The intensities are split into these many bins.
-    // For example, in case of 4 bins, Bin 0 corresponds to intensities 0-63, bin 1 is 64-127,
-    // bin 2 is 128-191, and bin 3 is 192-255.
-    val NUM_BINS = 8
     // Store the histogram in 3 blocks of [ R | G | B ]
     // The index in the histogram feature vector is function of R,G,B intensity bins
     val histogramVector = DenseVector.zeros[Double](NUM_BINS * NUM_BINS * NUM_BINS)
@@ -303,10 +305,28 @@ object ImageSegmentationUtils {
     // (trainSetFilenames uses training and validation sets)
     // These files contains filenames of respective GT images
     // Source.fromURL(getClass.getResource(colormapFile))
-    // val trainSetFileListPath: String = "/imageseg_train.txt"
-    // val testSetFileListPath: String = "/imageseg_test.txt"
     val trainSetFileListPath: String = "/imageseg%s_train.txt".format(suffix)
     val testSetFileListPath: String = "/imageseg%s_test.txt".format(suffix)
+
+    // Do the pre-computed features already exist?
+    val imgFeaturesDir = new java.io.File(msrcFolder + "/ImagesFeatures")
+    val gtFeaturesDir = new java.io.File(msrcFolder + "/GroundTruthFeatures")
+
+    if (!(imgFeaturesDir.exists() || gtFeaturesDir.exists())) {
+      println("Features for the dataset not found.")
+      println("Creating features with superpixels of size %d x %d with %d-binned histogram features.".format(REGION_HEIGHT, REGION_WIDTH, NUM_BINS))
+      println("Please be patient. This may take up to 10 minutes, depending on the size of features.")
+
+      val createDirsSuccess = imgFeaturesDir.mkdir() && gtFeaturesDir.mkdir()
+
+      if (!createDirsSuccess) println("Could not create directories: %s and %s. Proceeding anyway."
+        .format(imgFeaturesDir.getAbsolutePath, gtFeaturesDir.getAbsolutePath))
+
+      featurizeData()
+    } else {
+      println("Found pre-computed features at %s and %s"
+        .format(imgFeaturesDir.getAbsolutePath, gtFeaturesDir.getAbsolutePath))
+    }
 
     val trainData = loadMSRCDataFromFile(msrcFolder, trainSetFileListPath, trainLimit)
     val testData = loadMSRCDataFromFile(msrcFolder, trainSetFileListPath, testLimit)
