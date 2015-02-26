@@ -94,7 +94,7 @@ val conf = new SparkConf()
 {% endhighlight %}
 
 
-## Examples
+# Examples
 
 ### Binary classification
 Training a binary SVM locally from the command-line is done as follows, here for the Forest Cover (COV) dataset. Within `dissolve-struct-examples` directory, run
