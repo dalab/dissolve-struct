@@ -45,6 +45,7 @@ case class ROILabel(label: Int, numClasses: Int = 24, classFrequency: Double = 1
 object ImageSegmentationDemo {
 
   val RUN_SYNTH = false
+  var DISABLE_PAIRWISE = true
 
   /**
    * Given:
@@ -170,7 +171,9 @@ object ImageSegmentationDemo {
     val numDims = xMat(0, 0).feature.size
     val numClasses = yMat(0, 0).numClasses
 
-    val phi = DenseVector.zeros[Double](numDims * numClasses + numClasses * numClasses)
+    val unaryFeatureSize = numDims * numClasses
+    val pairwiseFeatureSize = numClasses * numClasses
+    val phi = DenseVector.zeros[Double](unaryFeatureSize + pairwiseFeatureSize)
 
     // Unaries vector, of size f * K. Each column corresponds to a feature vector
     val unary = DenseVector.zeros[Double](numDims * numClasses)
@@ -182,10 +185,13 @@ object ImageSegmentationDemo {
         unary(startIdx until endIdx) := xMat(r, c).feature + unary(startIdx until endIdx)
     }
 
-    val pairwise = normalize(getPairwiseFeatureMap(yMat, xMat).toDenseVector)
-
+    // Set Unary Features
     phi(0 until (numDims * numClasses)) := unary
-    phi((numDims * numClasses) until phi.size) := pairwise
+
+    if (!DISABLE_PAIRWISE) {
+      val pairwise = normalize(getPairwiseFeatureMap(yMat, xMat).toDenseVector)
+      phi((numDims * numClasses) until phi.size) := pairwise
+    }
 
     phi
   }
@@ -239,9 +245,14 @@ object ImageSegmentationDemo {
       }
 
     // Pairwise feature Vector
-    val pairwiseFeatureVec = weightVec(endIdx until weightVec.size).toDenseVector
-    assert(pairwiseFeatureVec.size == numClasses * numClasses)
-    val pairwisePot = pairwiseFeatureVec.toDenseMatrix.reshape(numClasses, numClasses)
+    val pairwisePot =
+      if (DISABLE_PAIRWISE) {
+        DenseMatrix.zeros[Double](0, 0)
+      } else {
+        val pairwiseFeatureVec = weightVec(endIdx until weightVec.size).toDenseVector
+        assert(pairwiseFeatureVec.size == numClasses * numClasses)
+        pairwiseFeatureVec.toDenseMatrix.reshape(numClasses, numClasses)
+      }
 
     (unaryPot, pairwisePot)
   }
@@ -255,7 +266,7 @@ object ImageSegmentationDemo {
     val numRegions: Int = thetaUnary.rows
     val numClasses: Int = thetaUnary.cols
 
-    assert(thetaPairwise.rows == numClasses)
+    assert(DISABLE_PAIRWISE || thetaPairwise.rows == numClasses)
 
     // Convert the image into a grid of Factorie variables
     val image: Buffer[Seq[Pixel]] = new ArrayBuffer
@@ -329,9 +340,10 @@ object ImageSegmentationDemo {
 
     val model = new ItemizedModel
     model ++= unaries
-    model ++= pairwise
+    if (!DISABLE_PAIRWISE) model ++= pairwise
 
-    val maximizer = new MaximizeByMPLP(1000)
+    val maxIterations = if (DISABLE_PAIRWISE) 100 else 1000
+    val maximizer = new MaximizeByMPLP(maxIterations)
     val assgn = maximizer.infer(pixels, model).mapAssignment
 
     // Retrieve assigned labels from these pixels
@@ -459,8 +471,8 @@ object ImageSegmentationDemo {
     val (unaryWeights, pairwiseWeights) = unpackWeightVec(weightVec, numDims, numClasses = numClasses, padded = false)
     assert(unaryWeights.rows == numDims)
     assert(unaryWeights.cols == numClasses)
-    assert(pairwiseWeights.rows == pairwiseWeights.cols)
-    assert(pairwiseWeights.rows == numClasses)
+    assert(DISABLE_PAIRWISE || pairwiseWeights.rows == pairwiseWeights.cols)
+    assert(DISABLE_PAIRWISE || pairwiseWeights.rows == numClasses)
 
     val phi_Y: DenseMatrix[Double] = getUnaryFeatureMap(xi) // Retrieves a f x r matrix representation of the original image, i.e, each column is the feature vector that region r
     val thetaUnary = phi_Y.t * unaryWeights // Returns a r x K matrix, where theta(r, k) is the unary potential of region i having label k
@@ -484,10 +496,6 @@ object ImageSegmentationDemo {
     /**
      * Parameter estimation
      */
-    val debugDir = "../debug"
-    val fname = xi(0, 0).name
-    val debugDecode = if (fname.contains("1_12_s")) true else false
-
     val startTime = System.currentTimeMillis()
     val decoded = decodeFn(thetaUnary, thetaPairwise, numCols, numRows, debug = false)
     val decodeTimeMillis = System.currentTimeMillis() - startTime
@@ -514,6 +522,8 @@ object ImageSegmentationDemo {
     val debugDir: String = options.getOrElse("debugdir", "../debug")
 
     val runLocally: Boolean = options.getOrElse("local", "true").toBoolean
+    
+    DISABLE_PAIRWISE = options.getOrElse("onlyunaries", "false").toBoolean
 
     val solverOptions: SolverOptions[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] = new SolverOptions()
     solverOptions.roundLimit = options.getOrElse("roundLimit", "5").toInt // After these many passes, each slice of the RDD returns a trained model
