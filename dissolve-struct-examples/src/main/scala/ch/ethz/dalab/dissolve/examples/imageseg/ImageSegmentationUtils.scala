@@ -70,7 +70,6 @@ object ImageSegmentationUtils {
         out.setRGB(c, r, labelToRGB(img(r, c).label))
     }
 
-    // val img: BufferedImage = ImageIO.read(new File(imgPath))
     ImageIO.write(out, "bmp", new File(outputFile))
 
   }
@@ -99,31 +98,12 @@ object ImageSegmentationUtils {
     // The index in the histogram feature vector is function of R,G,B intensity bins
     val histogramVector = DenseVector.zeros[Double](NUM_BINS * NUM_BINS * NUM_BINS)
 
-    // Convert patchWithContext region into an ARGB vector
-    /*val imageRGBVector: Array[Int] = patch.getRaster()
-      .getDataBuffer().asInstanceOf[DataBufferInt]
-      .getData()*/
-
     val imageRGBVector = patch.getRGB(0, 0, patch.getWidth, patch.getHeight, null, 0, patch.getWidth)
-
-    /*val rgb = patch.getRGB(0, 0)
-    val red = (rgb >> 16) & 0xFF
-    val green = (rgb >> 8) & 0xFF
-    val blue = (rgb) & 0xFF
-    println("(%4d,%4d,%4d)".format(red, green, blue))
-
-    val rgb2 = imageRGBVector(0)
-    val red2 = (rgb2 >> 16) & 0xFF
-    val green2 = (rgb2 >> 8) & 0xFF
-    val blue2 = (rgb2) & 0xFF
-    println("(%4d,%4d,%4d)".format(red2, green2, blue2))*/
 
     for (rgb <- imageRGBVector) {
       val red = (rgb >> 16) & 0xFF
       val green = (rgb >> 8) & 0xFF
       val blue = (rgb) & 0xFF
-
-      // println("(%4d,%4d,%4d)".format(red, green, blue))
 
       // Calculate the index of this pixel in the histogramVector
       val idx = math.pow(NUM_BINS, 0) * ((red * (NUM_BINS - 1)) / 256.0).round +
@@ -141,14 +121,10 @@ object ImageSegmentationUtils {
    */
   def featurizeImage(imgPath: String, regionWidth: Int, regionHeight: Int): DenseMatrix[ROIFeature] = {
 
-    // println("Converting original image to features")
-
     // Use an additional frame whose thickness is given by this size around the patch
     val PATCH_CONTEXT_SIZE = 0
 
     val img: BufferedImage = ImageIO.read(new File(imgPath))
-
-    // println("img.size = %d x %d".format(img.getHeight, img.getWidth))
 
     val xmin = PATCH_CONTEXT_SIZE
     val ymin = PATCH_CONTEXT_SIZE
@@ -159,10 +135,6 @@ object ImageSegmentationUtils {
     val xstep = regionWidth
     val ystep = regionHeight
 
-    // println("xmin, xmax = %d, %d".format(xmin, xmax))
-    // println("ymin, ymax = %d, %d".format(ymin, ymax))
-    // println("xstep, ystep = %d, %d".format(xstep, ystep))
-
     val featureMaskWidth = img.getWidth() / xstep
     val featureMaskHeight = img.getHeight() / ystep
     val featureMask = DenseMatrix.zeros[ROIFeature](featureMaskHeight, featureMaskWidth)
@@ -172,8 +144,6 @@ object ImageSegmentationUtils {
       y <- ymin to ymax by ystep;
       x <- xmin to xmax by xstep
     ) {
-
-      // println("Extracting feature at (%d, %d)".format(y, x))
 
       // Extract a region given by coordinates (x, y) and (x + PATCH_WIDTH, y + PATCH_HEIGHT)
       val patch = img.getSubimage(x, y, regionWidth, regionHeight)
@@ -208,8 +178,6 @@ object ImageSegmentationUtils {
       val yf = y / ystep
       featureMask(yf, xf) = patchFeature
     }
-
-    // println("Completed - Converting original image to features")
 
     featureMask
   }
@@ -252,8 +220,6 @@ object ImageSegmentationUtils {
    */
   def featurizeGT(gtPath: String, regionWidth: Int, regionHeight: Int): DenseMatrix[ROILabel] = {
 
-    // println("Converting GT image to features")
-
     val gtImage: BufferedImage = ImageIO.read(new File(gtPath))
 
     val xmin = 0
@@ -275,8 +241,6 @@ object ImageSegmentationUtils {
       x <- xmin to xmax by xstep
     ) {
 
-      // println("Extracting label at (%d, %d, %d, %d)".format(x, y, regionWidth, regionHeight))
-
       val patch = gtImage.getSubimage(x, y, regionWidth, regionHeight)
       val patchLabelMask = convertGtImageToLabels(patch)
 
@@ -292,16 +256,6 @@ object ImageSegmentationUtils {
       val yf = y / ystep
       labelMask(yf, xf) = ROILabel(majorityLabel)
     }
-
-    /*
-    println(gtPath)
-    val gtPathArr = gtPath.split('/')
-    val newfname = gtPathArr(gtPathArr.size - 1).split('.')(0)
-    val outname = "../debug/%s.bmp".format(newfname)
-    printLabeledImage(labelMask, outname)
-     */
-
-    // println("Completed - Converting GT image to features")
 
     labelMask
   }
@@ -331,7 +285,6 @@ object ImageSegmentationUtils {
         val gtFilename = imgFilename.replace("_s", "_s_GT")
         val gtPath = pat.format(gtDir, gtFilename)
 
-        // println("Training Image = %s\nMask = %s".format(imgPath, gtPath))
         getLabeledObject(imgPath, gtPath, true)
       }
 
@@ -473,7 +426,6 @@ object ImageSegmentationUtils {
     for (
       file <- new File(imagesPath).listFiles.toIterator if file.isFile
         && file.getName().endsWith(".bmp")
-    // && file.getName().startsWith("1_")
     ) {
       println("Processing " + file.getName())
       val imgMat = featurizeImage(file.getAbsolutePath, REGION_WIDTH, REGION_HEIGHT)
@@ -484,7 +436,6 @@ object ImageSegmentationUtils {
     for (
       file <- new File(gtPath).listFiles.toIterator if file.isFile
         && file.getName().endsWith(".bmp")
-    // && file.getName().startsWith("1_")
     ) {
       println("Processing " + file.getName())
       val gtMat = featurizeGT(file.getAbsolutePath, REGION_WIDTH, REGION_HEIGHT)
@@ -497,34 +448,6 @@ object ImageSegmentationUtils {
   def main(args: Array[String]): Unit = {
 
     featurizeData()
-
-    /*
-    val examples = loadMSRC("../data/generated/MSRC_ObjCategImageDatabase_v2")
-
-    val someExample = examples._1(0)
-    val x = someExample.pattern
-    val y = someExample.label
-
-    println("x.size = %d x %d".format(x.rows, x.cols))
-    println("y.size = %d x %d".format(y.rows, y.cols))
-    println("featureSize = %d".format(x(0, 0).feature.size))
-    println("numClasses = %d".format(y(0, 0).numClasses))
-
-    val phi = ImageSegmentationDemo.featureFn(x, y)
-    println("phi.size = %d".format(phi.size))
-
-    val w = DenseVector.zeros[Double](phi.size)
-    val ell = 0
-    val ellMat = DenseVector.zeros[Double](phi.size)
-    val dummy = new StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]](w, ell, ellMat,
-      ImageSegmentationDemo.featureFn,
-      ImageSegmentationDemo.lossFn,
-      ImageSegmentationDemo.oracleFn,
-      ImageSegmentationDemo.predictFn)
-    val dumy = ImageSegmentationDemo.oracleFn(dummy, x, y)
-    println("oracle_y.size = %d x %d".format(dumy.rows, dumy.cols))
-    * 
-    */
 
   }
 

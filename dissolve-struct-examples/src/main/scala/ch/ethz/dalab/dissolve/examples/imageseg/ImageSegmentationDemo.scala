@@ -167,9 +167,6 @@ object ImageSegmentationDemo {
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
 
-    // val unaryMat = getUnaryFeatureMap(yMat, xMat)
-    // val pairwiseMat = getPairwiseFeatureMap(yMat, xMat)
-
     val numDims = xMat(0, 0).feature.size
     val numClasses = yMat(0, 0).numClasses
 
@@ -186,17 +183,9 @@ object ImageSegmentationDemo {
     }
 
     val pairwise = normalize(getPairwiseFeatureMap(yMat, xMat).toDenseVector)
-    // val pairwise = DenseVector.zeros[Double](24 * 24)
-
-    if (xMat(0, 0).name.contains("1_0_s")) {
-      println("unary(1_0_s): " + unary.activeIterator.filter(_._2 > 0.0).map(x => "%d:%3f, ".format(x._1, x._2)).toList)
-      println("Pairwise: \n" + pairwise.toDenseMatrix.reshape(24, 24).activeIterator.filter(_._2 > 0.0).map(x => "(%d,%d):%3f, ".format(x._1._1, x._1._2, x._2)).toList)
-    }
 
     phi(0 until (numDims * numClasses)) := unary
     phi((numDims * numClasses) until phi.size) := pairwise
-
-    // println("numDims = %d\tnumClasses = %d\tphi.size = %d".format(numDims, numClasses, phi.size))
 
     phi
   }
@@ -263,122 +252,10 @@ object ImageSegmentationDemo {
    */
   def decodeFn(thetaUnary: DenseMatrix[Double], thetaPairwise: DenseMatrix[Double], imageWidth: Int, imageHeight: Int, debug: Boolean = false): DenseMatrix[ROILabel] = {
 
-    // println("thetaUnary(3, ::): \n" + thetaUnary(3, ::))
-    // println("thetaPairwise(2 to 4, 2 to 4): ): \n" + thetaPairwise(2 to 4, 2 to 4))
-
-    /**
-     *  Construct a model such that there exists 2 kinds of variables - Region and Pixel
-     *  Region encodes the fixed (x, y) position of the Pixel in the image
-     *  Pixel encodes the possible label
-     *
-     *  Factors are between a Region and Pixel, scores given by - thetaUnary
-     *  and between two Pixels, scores given by - thetaPairwise
-     */
-
     val numRegions: Int = thetaUnary.rows
     val numClasses: Int = thetaUnary.cols
 
     assert(thetaPairwise.rows == numClasses)
-
-    class RegionVar(val score: Int) extends IntegerVariable(score)
-
-    object PixelDomain extends DiscreteDomain(numClasses)
-
-    class Pixel(val x: Int, val y: Int, val image: Seq[Seq[Pixel]]) extends DiscreteVariable {
-
-      def domain = PixelDomain
-
-      val region: RegionVar = new RegionVar(columnMajorIdx(x, y, image.size))
-    }
-
-    object LocalTemplate extends TupleTemplateWithStatistics2[Pixel, RegionVar] {
-
-      val alpha = 1.0
-      def score(k: Pixel#Value, r: RegionVar#Value) = {
-        // if (r.intValue == 3) println("thetaUnary(%d, %d) = %f".format(r.intValue, k.intValue, thetaUnary(r.intValue, k.intValue)))
-        thetaUnary(r.intValue, k.intValue)
-      }
-      def unroll1(p: Pixel) = Factor(p, p.region)
-      def unroll2(r: RegionVar) = Nil
-    }
-
-    object PairwiseTemplate extends TupleTemplateWithStatistics2[Pixel, Pixel] {
-
-      def score(v1: Pixel#Value, v2: Pixel#Value) = if (v1.intValue == v2.intValue) 1.0 else -1.0
-
-      def unroll1(v: Pixel) = {
-        // println("v.x = %d, v.y = %d".format(v.x, v.y))
-        val img = v.image
-        val factors = new ArrayBuffer[FactorType]
-        // if (v.x < img.length - 1) factors += Factor(v, img(v.x + 1)(v.y))
-        // if (v.y < img(0).length - 1) factors += Factor(v, img(v.x)(v.y + 1))
-        // if (v.x > 0) factors += Factor(img(v.x - 1)(v.y), v)
-        // if (v.y > 0) factors += Factor(img(v.x)(v.y - 1), v)
-        factors
-      }
-
-      def unroll2(v2: Pixel) = Nil
-    }
-
-    // Convert the image into a grid of Factorie variables
-    val image: Buffer[Seq[Pixel]] = new ArrayBuffer
-    for (i <- 0 until imageHeight) {
-      val row = new ArrayBuffer[Pixel]
-
-      for (j <- 0 until imageWidth) {
-        row += new Pixel(i, j, image)
-      }
-
-      image += row
-    }
-
-    // println("image rows = %d, cols = %d".format(image.size, image(0).size))
-
-    // Run MAP inference
-    val pixels = image.flatMap(_.toSeq).toSeq
-    // val maxx = pixels.map { x => x.x }.reduce((x, y) => max(x, y))
-    // val maxy = pixels.map { y => y.y }.reduce((x, y) => max(x, y))
-    // val maxr = pixels.map { p => p.region.intValue }.reduce((x, y) => max(x, y))
-    // println("pixels: max x = %d, max y = %d, max r = %d".format(maxx, maxy, maxr))
-
-    val gridModel = new CombinedModel(LocalTemplate, PairwiseTemplate)
-    implicit val random = new scala.util.Random(0)
-    pixels.foreach(_.set(1)(null))
-
-    val sampler = new SamplingMaximizer[Pixel](new VariableSettingsSampler(gridModel))
-    val foo = sampler.maximize(pixels)
-
-    // pixels.foreach(_.set(1)(null))
-    // println(pixels.map { x => x.intValue })
-
-    // Retrieve assigned labels from these pixels
-    val imgMask: DenseMatrix[ROILabel] = new DenseMatrix[ROILabel](imageHeight, imageWidth)
-    for (i <- 0 until imageHeight) {
-      for (j <- 0 until imageWidth) {
-        imgMask(i, j) = ROILabel(image(i)(j).intValue)
-      }
-    }
-
-    ImageSegmentationUtils.printLabeledImage(imgMask)
-
-    imgMask
-  }
-
-  /**
-   * thetaUnary is of size r x K, where is the number of regions
-   * thetaPairwise is of size K x K
-   */
-  def decodeFnAlt(thetaUnary: DenseMatrix[Double], thetaPairwise: DenseMatrix[Double], imageWidth: Int, imageHeight: Int, debug: Boolean = false): DenseMatrix[ROILabel] = {
-
-    val numRegions: Int = thetaUnary.rows
-    val numClasses: Int = thetaUnary.cols
-
-    assert(thetaPairwise.rows == numClasses)
-
-    if (debug) {
-      println("thetaUnary: \n" + thetaUnary)
-      println("thetaPairwise: \n" + thetaPairwise)
-    }
 
     // Convert the image into a grid of Factorie variables
     val image: Buffer[Seq[Pixel]] = new ArrayBuffer
@@ -445,25 +322,10 @@ object ImageSegmentationDemo {
 
           // (x, y) and (x+1, y)
           if (x < imageHeight - 1)
-           factors ++= getPairwiseFactor(pix, image(x + 1)(y))
-
-          // (x, y) and (x+1, y+1)
-          // if ((y < imageWidth - 1) && (x < imageHeight - 1))
-          // factors ++= getPairwiseFactor(pix, image(x + 1)(y + 1))
-
-          // (x, y) and (x, y-1)
-          // if (y > 0)
-          // factors ++= getPairwiseFactor(image(x)(y - 1), pix)
-
-          // (x, y) and (x-1, y)
-          // if (x > 0)
-          // factors ++= getPairwiseFactor(image(x - 1)(y), pix)
+            factors ++= getPairwiseFactor(pix, image(x + 1)(y))
 
           factors
       }
-
-    // println("%d, %d".format(imageHeight, imageWidth))
-    // println("pairwise.length = " + pairwise.length)
 
     val model = new ItemizedModel
     model ++= unaries
@@ -480,7 +342,96 @@ object ImageSegmentationDemo {
       }
     }
 
-    // ImageSegmentationUtils.printLabeledImage(imgMask)
+    imgMask
+  }
+
+  /**
+   * thetaUnary is of size r x K, where is the number of regions
+   * thetaPairwise is of size K x K
+   */
+  def decodeFnAlt(thetaUnary: DenseMatrix[Double], thetaPairwise: DenseMatrix[Double], imageWidth: Int, imageHeight: Int, debug: Boolean = false): DenseMatrix[ROILabel] = {
+    /**
+     *  Construct a model such that there exists 2 kinds of variables - Region and Pixel
+     *  Region encodes the fixed (x, y) position of the Pixel in the image
+     *  Pixel encodes the possible label
+     *
+     *  Factors are between a Region and Pixel, scores given by - thetaUnary
+     *  and between two Pixels, scores given by - thetaPairwise
+     */
+
+    val numRegions: Int = thetaUnary.rows
+    val numClasses: Int = thetaUnary.cols
+
+    assert(thetaPairwise.rows == numClasses)
+
+    class RegionVar(val score: Int) extends IntegerVariable(score)
+
+    object PixelDomain extends DiscreteDomain(numClasses)
+
+    class Pixel(val x: Int, val y: Int, val image: Seq[Seq[Pixel]]) extends DiscreteVariable {
+
+      def domain = PixelDomain
+
+      val region: RegionVar = new RegionVar(columnMajorIdx(x, y, image.size))
+    }
+
+    object LocalTemplate extends TupleTemplateWithStatistics2[Pixel, RegionVar] {
+
+      val alpha = 1.0
+      def score(k: Pixel#Value, r: RegionVar#Value) = {
+        thetaUnary(r.intValue, k.intValue)
+      }
+      def unroll1(p: Pixel) = Factor(p, p.region)
+      def unroll2(r: RegionVar) = Nil
+    }
+
+    object PairwiseTemplate extends TupleTemplateWithStatistics2[Pixel, Pixel] {
+
+      def score(v1: Pixel#Value, v2: Pixel#Value) = if (v1.intValue == v2.intValue) 1.0 else -1.0
+
+      def unroll1(v: Pixel) = {
+        val img = v.image
+        val factors = new ArrayBuffer[FactorType]
+        if (v.x < img.length - 1) factors += Factor(v, img(v.x + 1)(v.y))
+        if (v.y < img(0).length - 1) factors += Factor(v, img(v.x)(v.y + 1))
+        if (v.x > 0) factors += Factor(img(v.x - 1)(v.y), v)
+        if (v.y > 0) factors += Factor(img(v.x)(v.y - 1), v)
+        factors
+      }
+
+      def unroll2(v2: Pixel) = Nil
+    }
+
+    // Convert the image into a grid of Factorie variables
+    val image: Buffer[Seq[Pixel]] = new ArrayBuffer
+    for (i <- 0 until imageHeight) {
+      val row = new ArrayBuffer[Pixel]
+
+      for (j <- 0 until imageWidth) {
+        row += new Pixel(i, j, image)
+      }
+
+      image += row
+    }
+
+    // Run MAP inference
+    val pixels = image.flatMap(_.toSeq).toSeq
+    val gridModel = new CombinedModel(LocalTemplate, PairwiseTemplate)
+    implicit val random = new scala.util.Random(0)
+    pixels.foreach(_.set(0)(null))
+
+    val sampler = new SamplingMaximizer[Pixel](new VariableSettingsSampler(gridModel))
+    val foo = sampler.maximize(pixels)
+
+    // Retrieve assigned labels from these pixels
+    val imgMask: DenseMatrix[ROILabel] = new DenseMatrix[ROILabel](imageHeight, imageWidth)
+    for (i <- 0 until imageHeight) {
+      for (j <- 0 until imageWidth) {
+        imgMask(i, j) = ROILabel(image(i)(j).intValue)
+      }
+    }
+
+    ImageSegmentationUtils.printLabeledImage(imgMask)
 
     imgMask
   }
@@ -490,10 +441,10 @@ object ImageSegmentationDemo {
    */
   def oracleFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature], yi: DenseMatrix[ROILabel]): DenseMatrix[ROILabel] = {
 
-    // assert(xi.rows == yi.rows)
-    // assert(xi.cols == yi.cols)
-
-    println(xi(0, 0).name)
+    if (yi != null) {
+      assert(xi.rows == yi.rows)
+      assert(xi.cols == yi.cols)
+    }
 
     val numClasses = 24
     val numRows = xi.rows
@@ -502,14 +453,6 @@ object ImageSegmentationDemo {
     val numDims = xi(0, 0).feature.size
 
     val weightVec = model.getWeights()
-
-    /*
-    // Unary is of size (f*K) x K
-    // Pairwise is of size K x K
-    val (unary, pairwise) = unpackWeightVec(weightVec, xFeatureSize, numClasses)
-    assert(unary.rows == numClasses * xFeatureSize)
-    assert(unary.cols == pairwise.cols)
-    */
 
     // Unary is of size f x K, each column representing feature vector of class K
     // Pairwise if of size K * K
@@ -523,8 +466,6 @@ object ImageSegmentationDemo {
     val thetaUnary = phi_Y.t * unaryWeights // Returns a r x K matrix, where theta(r, k) is the unary potential of region i having label k
 
     val thetaPairwise = pairwiseWeights
-    // val thetaPairwise = diag(DenseVector.fill[Double](24, 1e-10))
-    // val thetaPairwise = DenseMatrix.zeros[Double](24, 24)
 
     // If yi is present, do loss-augmentation
     if (yi != null) {
@@ -540,28 +481,6 @@ object ImageSegmentationDemo {
 
     }
 
-    // println(thetaUnary(0 until 5, 0 until 3).toDenseVector)
-    val eps = 0.000001
-    // println("Decoding: " + xi(0, 0).name)
-    /*print("weightVec: ")
-    println(weightVec.toDenseVector.keysIterator.map(idx => (idx, weightVec(idx))).filter(x => abs(x._2) > eps).map(x => "(%d, %f)".format(x._1, x._2)).toList.take(20))
-    print("xi(0, 0): ")
-    println(xi(0, 0).feature.keysIterator.map(idx => (idx, xi(0, 0).feature(idx))).filter(x => abs(x._2) > eps).map(x => "(%d, %f)".format(x._1, x._2)).toList.take(20))
-    print("phi_Y: ")
-    println(phi_Y.activeKeysIterator.map { case (r, c) => (r, c, phi_Y(r, c)) }.filter(x => abs(x._3) > eps).filter(_._2 == 3).map(x => "(%d, %d, %f)".format(x._1, x._2, x._3)).toList.take(20))
-    print("unaryWeights: ")
-    println(unaryWeights.activeKeysIterator.map { case (r, c) => (r, c, unaryWeights(r, c)) }.filter(x => abs(x._3) > eps).map(x => "(%d, %d, %f)".format(x._1, x._2, x._3)).toList.take(20))
-    print("thetaUnary: ")
-    println(thetaUnary.activeKeysIterator.map { case (r, c) => (r, c, thetaUnary(r, c)) }.filter(x => abs(x._3) > eps).map(x => "(%d, %d, %f)".format(x._1, x._2, x._3)).toList.take(20))
-    print("thetaPairwise: ")
-    println(thetaPairwise.activeKeysIterator.map { case (r, c) => (r, c, thetaPairwise(r, c)) }.filter(x => abs(x._3) > eps).map(x => "(%d, %d, %f)".format(x._1, x._2, x._3)).toList.take(20))
-    // println("thetaPairwise(2:4, 2:4): \n" + thetaPairwise(2 to 4, 2 to 4))
-    println()*/
-
-    // println("unary.size = %d x %d".format(unary.rows, unary.cols))
-    // println("theta_unary.size = %d x %d".format(thetaUnary.rows, thetaUnary.cols))
-    // println("theta_pairwise.size = %d x %d".format(thetaPairwise.rows, thetaPairwise.cols))
-
     /**
      * Parameter estimation
      */
@@ -570,17 +489,9 @@ object ImageSegmentationDemo {
     val debugDecode = if (fname.contains("1_12_s")) true else false
 
     val startTime = System.currentTimeMillis()
-    val decoded = decodeFnAlt(thetaUnary, thetaPairwise, numCols, numRows, debug = false)
-    println((System.currentTimeMillis() - startTime) / 1000.0)
+    val decoded = decodeFn(thetaUnary, thetaPairwise, numCols, numRows, debug = false)
+    val decodeTimeMillis = System.currentTimeMillis() - startTime
 
-    if (fname.contains("1_12_s")) {
-      val outname = fname.split('.')(0)
-      println(outname)
-      // ImageSegmentationUtils.printLabeledImage(decoded)
-      val curTime = System.currentTimeMillis() / 1000
-      ImageSegmentationUtils.printLabeledImage(decoded, "%s/%s_%d_d.bmp".format(debugDir, outname, curTime.toInt))
-      if (yi != null) ImageSegmentationUtils.printLabeledImage(yi, "%s/%s_gt.bmp".format(debugDir, outname))
-    }
     decoded
   }
 
@@ -636,8 +547,6 @@ object ImageSegmentationDemo {
       solverOptions.enableManualPartitionSize = true
       solverOptions.NUM_PART = 1
       solverOptions.doWeightedAveraging = false
-
-      // solverOptions.lambda = 0.1
 
       solverOptions.debug = false
       solverOptions.debugMultiplier = 1
