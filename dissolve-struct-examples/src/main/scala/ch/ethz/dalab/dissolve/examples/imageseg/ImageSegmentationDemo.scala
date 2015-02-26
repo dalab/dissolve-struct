@@ -57,8 +57,6 @@ object ImageSegmentationDemo {
     assert(xMat.rows == yMat.rows)
     assert(xMat.cols == yMat.cols)
 
-    // println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
-
     val numFeatures = xMat(0, 0).feature.size // f
     val numClasses = yMat(0, 0).numClasses // K
     val numRegions = xMat.rows * xMat.cols // r
@@ -75,7 +73,6 @@ object ImageSegmentationDemo {
       case (r, c) =>
         val i = columnMajorIdx(r, c, xMat.rows) // Column-major iteration
 
-        // println("(r, c) = (%d, %d)".format(r, c))
         val x_i = xMat(r, c).feature
         val y_i = yMat(r, c).label
 
@@ -83,12 +80,6 @@ object ImageSegmentationDemo {
 
         val startIdx = numFeatures * y_i
         val endIdx = startIdx + numFeatures
-
-        // For y_i'th position of phi_i, populate x_i's feature vector
-        /*println("x_i.size = " + x_i.size)
-        println("endIdx - startIdx = " + (endIdx - startIdx))
-        println("startIdx = %d\tendIdx = %d".format(startIdx, endIdx))
-        println("phi_i.size = " + phi_i.size)*/
 
         phi_i(startIdx until endIdx) := x_i
 
@@ -108,7 +99,6 @@ object ImageSegmentationDemo {
    * - a matrix of size f x r, each column corresponding to a (histogram) feature vector of region r
    */
   def getUnaryFeatureMap(xMat: DenseMatrix[ROIFeature]): DenseMatrix[Double] = {
-    // println("xMat.size = %d x %d".format(xMat.rows, xMat.cols))
 
     val numDims = xMat(0, 0).feature.size // f
     val numClasses = 24
@@ -149,24 +139,6 @@ object ImageSegmentationDemo {
 
     val pairwiseMat = DenseMatrix.zeros[Double](numClasses, numClasses)
 
-    /*for (
-      c <- 1 until xMat.cols - 1;
-      r <- 1 until xMat.rows - 1
-    ) {
-      val classA = yMat(r, c).label
-
-      // Iterate through all neighbours
-      for (
-        delx <- List(-1, 0, 1);
-        dely <- List(-1, 0, 1) if ((delx != 0) && (dely != 0))
-      ) {
-        val classB = yMat(r + delx, c + dely).label
-
-        pairwiseMat(classA, classB) += 1.0
-        pairwiseMat(classB, classA) += 1.0
-      }
-    }*/
-
     for (
       y <- 0 until xMat.cols;
       x <- 0 until xMat.rows
@@ -181,9 +153,6 @@ object ImageSegmentationDemo {
         pairwiseMat(classB, classA) += 1.0
       }
     }
-
-    /*println("Pairwise feature map - " + xMat(0, 0).name)
-    println(pairwiseMat(2 to 4, 2 to 4))*/
 
     pairwiseMat
   }
@@ -216,8 +185,8 @@ object ImageSegmentationDemo {
         unary(startIdx until endIdx) := xMat(r, c).feature + unary(startIdx until endIdx)
     }
 
-    // val pairwise = normalize(getPairwiseFeatureMap(yMat, xMat).toDenseVector)
-    val pairwise = DenseVector.zeros[Double](24 * 24)
+    val pairwise = normalize(getPairwiseFeatureMap(yMat, xMat).toDenseVector)
+    // val pairwise = DenseVector.zeros[Double](24 * 24)
 
     if (xMat(0, 0).name.contains("1_0_s")) {
       println("unary(1_0_s): " + unary.activeIterator.filter(_._2 > 0.0).map(x => "%d:%3f, ".format(x._1, x._2)).toList)
@@ -292,10 +261,10 @@ object ImageSegmentationDemo {
    * thetaUnary is of size r x K, where is the number of regions
    * thetaPairwise is of size K x K
    */
-  def decodeFn(thetaUnary: DenseMatrix[Double], thetaPairwise: DenseMatrix[Double], imageWidth: Int, imageHeight: Int): DenseMatrix[ROILabel] = {
+  def decodeFn(thetaUnary: DenseMatrix[Double], thetaPairwise: DenseMatrix[Double], imageWidth: Int, imageHeight: Int, debug: Boolean = false): DenseMatrix[ROILabel] = {
 
-    println("thetaUnary(3, ::): \n" + thetaUnary(3, ::))
-    println("thetaPairwise(2 to 4, 2 to 4): ): \n" + thetaPairwise(2 to 4, 2 to 4))
+    // println("thetaUnary(3, ::): \n" + thetaUnary(3, ::))
+    // println("thetaPairwise(2 to 4, 2 to 4): ): \n" + thetaPairwise(2 to 4, 2 to 4))
 
     /**
      *  Construct a model such that there exists 2 kinds of variables - Region and Pixel
@@ -315,7 +284,7 @@ object ImageSegmentationDemo {
 
     object PixelDomain extends DiscreteDomain(numClasses)
 
-    class Pixel(val x: Int, val y: Int, val image: Seq[Seq[Pixel]], val truth: Int) extends DiscreteVariable(truth) {
+    class Pixel(val x: Int, val y: Int, val image: Seq[Seq[Pixel]]) extends DiscreteVariable {
 
       def domain = PixelDomain
 
@@ -341,10 +310,10 @@ object ImageSegmentationDemo {
         // println("v.x = %d, v.y = %d".format(v.x, v.y))
         val img = v.image
         val factors = new ArrayBuffer[FactorType]
-        if (v.x < img.length - 1) factors += Factor(v, img(v.x + 1)(v.y))
-        if (v.y < img(0).length - 1) factors += Factor(v, img(v.x)(v.y + 1))
-        if (v.x > 0) factors += Factor(img(v.x - 1)(v.y), v)
-        if (v.y > 0) factors += Factor(img(v.x)(v.y - 1), v)
+        // if (v.x < img.length - 1) factors += Factor(v, img(v.x + 1)(v.y))
+        // if (v.y < img(0).length - 1) factors += Factor(v, img(v.x)(v.y + 1))
+        // if (v.x > 0) factors += Factor(img(v.x - 1)(v.y), v)
+        // if (v.y > 0) factors += Factor(img(v.x)(v.y - 1), v)
         factors
       }
 
@@ -357,7 +326,7 @@ object ImageSegmentationDemo {
       val row = new ArrayBuffer[Pixel]
 
       for (j <- 0 until imageWidth) {
-        row += new Pixel(i, j, image, 0)
+        row += new Pixel(i, j, image)
       }
 
       image += row
@@ -476,7 +445,7 @@ object ImageSegmentationDemo {
 
           // (x, y) and (x+1, y)
           if (x < imageHeight - 1)
-            factors ++= getPairwiseFactor(pix, image(x + 1)(y))
+           factors ++= getPairwiseFactor(pix, image(x + 1)(y))
 
           // (x, y) and (x+1, y+1)
           // if ((y < imageWidth - 1) && (x < imageHeight - 1))
@@ -484,20 +453,24 @@ object ImageSegmentationDemo {
 
           // (x, y) and (x, y-1)
           // if (y > 0)
-          //  factors ++= getPairwiseFactor(pix, image(x)(y - 1))
+          // factors ++= getPairwiseFactor(image(x)(y - 1), pix)
 
           // (x, y) and (x-1, y)
           // if (x > 0)
-          //   factors ++= getPairwiseFactor(pix, image(x - 1)(y))
+          // factors ++= getPairwiseFactor(image(x - 1)(y), pix)
 
           factors
       }
 
+    // println("%d, %d".format(imageHeight, imageWidth))
+    // println("pairwise.length = " + pairwise.length)
+
     val model = new ItemizedModel
     model ++= unaries
-    // model ++= pairwise
+    model ++= pairwise
 
-    val assgn = MaximizeByMPLP.infer(pixels, model).mapAssignment
+    val maximizer = new MaximizeByMPLP(1000)
+    val assgn = maximizer.infer(pixels, model).mapAssignment
 
     // Retrieve assigned labels from these pixels
     val imgMask: DenseMatrix[ROILabel] = new DenseMatrix[ROILabel](imageHeight, imageWidth)
@@ -594,11 +567,13 @@ object ImageSegmentationDemo {
      */
     val debugDir = "../debug"
     val fname = xi(0, 0).name
-    val debugDecode = if (fname.contains("1_0_s")) true else false
+    val debugDecode = if (fname.contains("1_12_s")) true else false
 
-    val decoded = decodeFnAlt(thetaUnary, thetaPairwise, numCols, numRows, debug = debugDecode)
+    val startTime = System.currentTimeMillis()
+    val decoded = decodeFnAlt(thetaUnary, thetaPairwise, numCols, numRows, debug = false)
+    println((System.currentTimeMillis() - startTime) / 1000.0)
 
-    if (fname.contains("1_0_")) {
+    if (fname.contains("1_12_s")) {
       val outname = fname.split('.')(0)
       println(outname)
       // ImageSegmentationUtils.printLabeledImage(decoded)
@@ -653,11 +628,11 @@ object ImageSegmentationDemo {
      * Some local overrides
      */
     if (runLocally) {
-      solverOptions.sampleFrac = 0.4
+      solverOptions.sampleFrac = 0.5
       solverOptions.enableOracleCache = false
-      solverOptions.oracleCacheSize = 10
+      solverOptions.oracleCacheSize = 100
       solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
-      solverOptions.roundLimit = 20
+      solverOptions.roundLimit = 5
       solverOptions.enableManualPartitionSize = true
       solverOptions.NUM_PART = 1
       solverOptions.doWeightedAveraging = false
