@@ -20,7 +20,7 @@ The interface to the user is the same as in the widely used SVM<sup>struct</sup>
 Checkout the project repository
 
 	git clone https://github.com/dalab/dissolve-struct.git
-	
+
 Build the solver package first:
 {% highlight bash %}
 cd dissolve-struct-lib
@@ -59,24 +59,29 @@ python convert-ocr-data.py
 
 Download the [pre-build binary package of Spark](http://spark.apache.org/downloads.html). Here for example we assume the Spark folder is named `spark-1.2.0`.
 
-### Binary classification Example
-Training a binary SVM locally from the command-line is done as follows, here for the Forest Cover (COV) dataset. Within `dissolve-struct-examples` directory, run
+Running the examples follows the format:
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.binaryclassification.COVBinary" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+spark-1.2.0/bin/spark-submit \
+	--jars <dissolve-struct-jar-path> \
+	--class <class> \
+	--master local \
+	--driver-memory 2G \
+	<example-jar-path>
+	<optional-arguments>
 {% endhighlight %}
 
-### Sequence Prediction with OCR data
-Training a chain structured SVM model on the [OCR dataset](http://www.seas.upenn.edu/~taskar/ocr/). This example uses the Viterbi algorithm for the decoding oracle:
+For examples, the Binary classification example can be run within the `dissolve-struct-examples` directory using:
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar --class "ch.ethz.dalab.dissolve.examples.chain.ChainDemo" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+spark-1.2.0/bin/spark-submit \
+	--jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar \
+	--class "ch.ethz.dalab.dissolve.examples.binaryclassification.COVBinary" \
+	--master local \
+	--driver-memory 2G \
+	target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
 {% endhighlight %}
 
-Here is the same example using more general Belief Propagation, by employing the [Factorie library](http://factorie.cs.umass.edu/) (Requires [Factorie 1.0 Jar](https://github.com/factorie/factorie/releases) to be placed within `dissolve-struct-examples/lib` directory):
-{% highlight bash %}
-spark-1.2.0/bin/spark-submit --jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar --class "ch.ethz.dalab.dissolve.examples.chain.ChainBPDemo" --master local --driver-memory 2G target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
-{% endhighlight %}
 
-**Executing within Eclipse**
+### Executing within Eclipse
 
 To ease debugging and development, all examples can also directly be run within Eclipse by `Run As | Scala Application`. This does not require Spark binaries. See the section below how to set up the environment.
 
@@ -87,6 +92,70 @@ val conf = new SparkConf()
 	       .setAppName("COV-example")
 	       .setMaster("local[4]")
 {% endhighlight %}
+
+
+## Examples
+
+### Binary classification
+Training a binary SVM locally from the command-line is done as follows, here for the Forest Cover (COV) dataset. Within `dissolve-struct-examples` directory, run
+{% highlight bash %}
+spark-1.2.0/bin/spark-submit \
+	--jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar \
+	--class "ch.ethz.dalab.dissolve.examples.binaryclassification.COVBinary" \
+	--master local \
+	--driver-memory 2G \
+	target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+{% endhighlight %}
+
+
+### Sequence Prediction with OCR data
+![OCR]({{ site.baseurl }}/assets/ocr2.png)
+
+Training a chain structured SVM model on the [OCR dataset](http://www.seas.upenn.edu/~taskar/ocr/). This example uses the Viterbi algorithm for the decoding oracle:
+{% highlight bash %}
+spark-1.2.0/bin/spark-submit \
+	--jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar \
+	--class "ch.ethz.dalab.dissolve.examples.chain.ChainDemo" \
+	--master local \
+	--driver-memory 2G \
+	target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+{% endhighlight %}
+
+Here is the same example using more general Belief Propagation, by employing the [Factorie library](http://factorie.cs.umass.edu/) (Requires [Factorie 1.0 Jar](https://github.com/factorie/factorie/releases) to be placed within `dissolve-struct-examples/lib` directory):
+{% highlight bash %}
+spark-1.2.0/bin/spark-submit \
+	--jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar \
+	--class "ch.ethz.dalab.dissolve.examples.chain.ChainBPDemo" \
+	--master local \
+	--driver-memory 2G \
+	target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar
+{% endhighlight %}
+
+### Image Segmentation using CRFs
+![CRF]({{ site.baseurl }}/assets/imageseg.jpg)
+
+Image Segmentation is performed on the [MSRC](http://research.microsoft.com/en-us/projects/objectclassrecognition/).
+This is done by dividing the image into a fixed number of regions and extracting histogram features for each region.
+Decoding is performed on a CRF modeled using Factorie, using belief propagation on unary and pairwise features.
+
+This examples requires the dataset (Pixel-wise labelled image v2 dataset) folder downloaded from the MSRC [webpage](http://research.microsoft.com/en-us/projects/objectclassrecognition/) to be placed within the `data/generated` folder.
+
+{% highlight bash %}
+spark-1.2.0/bin/spark-submit \
+	--jars \ ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar \
+	--class "ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationDemo" \
+	--master local \
+	--driver-memory 2G \
+	target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar \
+{% endhighlight %}
+
+The first time the command is executed, the features from the images are pre-computed and stored within the MSRC folder to speed up subsequent executions.
+This however make take around 10 minutes, depending on the machine.
+
+Training the model over pairwise factors can be extremely slow, since the maximum a posteriori needs to be computed over thousands of factors, each which can take a combination of 24<sup>2</sup> labels.
+The training can be done quickly with only unary features using the `-onlyunaries` flag.
+
+
 
 # Setting up a development environment
 We recommend using [Eclipse for Scala](http://scala-ide.org/download/sdk.html), though a similar setup can also be done in Intellij IDEA.
@@ -117,6 +186,3 @@ The CoCoA algorithmic framework is described in the following paper:
 The (single machine) BCFW algorithm for structured prediction is described in the following paper:
 
  * _Lacoste-Julien, S., Jaggi, M., Schmidt, M., & Pletscher, P. (2013) [Block-Coordinate Frank-Wolfe Optimization for Structural SVMs](http://jmlr.org/proceedings/papers/v28/lacoste-julien13). ICML 2013 - Proceedings of the 30th International Conference on Machine Learning._
-
-
-
