@@ -458,7 +458,7 @@ class DBCFWSolverTuned[X, Y](
       val optionalCache_i: Option[BoundedCacheList[Y]] = shard.cache
       val bestCachedCandidateForI: Option[Y] =
         if (solverOptions.enableOracleCache && optionalCache_i.isDefined) {
-          val naive_gamma: Double = (2.0 * n) / (k + 2.0 * n)
+          val fixedGamma: Double = (2.0 * n) / (k + 2.0 * n)
 
           val candidates: Seq[(Double, Int)] =
             optionalCache_i.get
@@ -472,7 +472,7 @@ class DBCFWSolverTuned[X, Y](
               .zipWithIndex // We'll need the index later to retrieve the respective approx. ystar_i
               .filter { case (gamma, idx) => gamma > 0.0 }
               .map { case (gamma, idx) => (min(1.0, gamma), idx) } // Clip to [0,1] interval
-              .filter { case (gamma, idx) => gamma >= 0.5 * naive_gamma } // Further narrow down cache contenders
+              .filter { case (gamma, idx) => gamma >= 0.5 * fixedGamma } // Further narrow down cache contenders
               .sortBy { case (gamma, idx) => gamma }
 
           // If there is a good contender among the cached datapoints, return it

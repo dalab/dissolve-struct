@@ -437,16 +437,17 @@ object ChainDemo {
      * Some local overrides
      */
     if(runLocally) {
-      solverOptions.sampleFrac = 1.0
+      solverOptions.sampleFrac = 0.5
       solverOptions.enableOracleCache = false
       solverOptions.oracleCacheSize = 10
       solverOptions.enableManualPartitionSize = true
-      solverOptions.NUM_PART = 1
+      solverOptions.NUM_PART = 3
       solverOptions.doWeightedAveraging = false
       
-      solverOptions.stoppingCriterion = solverOptions.GapThresholdCriterion
-      solverOptions.gapThreshold = 0.1
+      solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
+      solverOptions.roundLimit = 5
       
+      solverOptions.debug = false
       solverOptions.debugMultiplier = 10
       solverOptions.gapCheck = 10
     }
@@ -473,8 +474,8 @@ object ChainDemo {
     println(SolverUtils.getSparkConfString(sc.getConf))
 
     // Read order from the file and permute the Vector accordingly
-    val trainOrder: String = dataDir + "/perm_train.csv"
-    val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
+    val trainOrder: String = "/chain_train.csv"
+    val permLine: Array[String] = scala.io.Source.fromURL(getClass.getResource(trainOrder)).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray

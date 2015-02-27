@@ -459,8 +459,8 @@ object ChainBPDemo {
     println(SolverUtils.getSparkConfString(sc.getConf))
 
     // Read order from the file and permute the Vector accordingly
-    val trainOrder: String = "../data/perm_train.csv"
-    val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
+    val trainOrder: String = "/chain_train.csv"
+    val permLine: Array[String] = scala.io.Source.fromURL(getClass.getResource(trainOrder)).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
