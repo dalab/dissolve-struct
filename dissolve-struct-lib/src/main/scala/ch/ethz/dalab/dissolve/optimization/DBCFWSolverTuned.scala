@@ -1,25 +1,22 @@
 package ch.ethz.dalab.dissolve.optimization
 
-import org.apache.spark.rdd.RDD
-
-import breeze.linalg._
-import breeze.numerics._
-import ch.ethz.dalab.dissolve.optimization.SolverUtils;
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-
-import org.apache.spark.SparkContext
-
-import ch.ethz.dalab.dissolve.classification.Types._
-
-import org.apache.spark.SparkContext._
-
-import scala.collection.mutable
 import scala.collection.mutable.MutableList
-import ch.ethz.dalab.dissolve.utils.LinAlgOps._
 import scala.reflect.ClassTag
 
 import org.apache.spark.HashPartitioner
+import org.apache.spark.SparkContext.rddToPairRDDFunctions
+import org.apache.spark.rdd.RDD
+
+import breeze.linalg.DenseVector
+import breeze.linalg.SparseVector
+import breeze.linalg.Vector
+import breeze.linalg.max
+import breeze.linalg.min
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.Types.BoundedCacheList
+import ch.ethz.dalab.dissolve.classification.Types.Index
+import ch.ethz.dalab.dissolve.classification.Types.PrimalInfo
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 /**
  * Train a structured SVM using the actual distributed dissolve^struct solver.
@@ -31,12 +28,9 @@ import org.apache.spark.HashPartitioner
  */
 class DBCFWSolverTuned[X, Y](
   val data: RDD[LabeledObject[X, Y]],
-  val featureFn: (X, Y) => Vector[Double], // (y, x) => FeatureVect, 
-  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
-  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label, 
-  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val dissolveFunctions: DissolveFunctions[X, Y],
   val solverOptions: SolverOptions[X, Y],
-  val miniBatchEnabled: Boolean) extends Serializable {
+  val miniBatchEnabled: Boolean = false) extends Serializable {
 
   /**
    * Some case classes to make code more readable
@@ -89,17 +83,21 @@ class DBCFWSolverTuned[X, Y](
 
     val verboseDebug: Boolean = false
 
-    val d: Int = featureFn(samplePoint.pattern, samplePoint.label).size
+    val d: Int = dissolveFunctions.featureFn(samplePoint.pattern, samplePoint.label).size
     // Let the initial model contain zeros for all weights
     // Global model uses Dense Vectors by default
-    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn, solverOptions.numClasses)
+    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
+      DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
 
     val numPartitions: Int =
       data.partitions.size
 
     val beta: Double = 1.0
 
-    val helperFunctions: HelperFunctions[X, Y] = HelperFunctions(featureFn, lossFn, oracleFn, predictFn)
+    val helperFunctions: HelperFunctions[X, Y] = HelperFunctions(dissolveFunctions.featureFn,
+      dissolveFunctions.lossFn,
+      dissolveFunctions.oracleFn,
+      dissolveFunctions.predictFn)
 
     /**
      *  Create four RDDs:
@@ -220,19 +218,19 @@ class DBCFWSolverTuned[X, Y](
 
     def getLatestGap(): Double = {
       val debugModel: StructSVMModel[X, Y] = getLatestModel()
-      val gap = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, debugModel, solverOptions.lambda, dataSize)
+      val gap = SolverUtils.dualityGap(data, dissolveFunctions, debugModel, solverOptions.lambda, dataSize)
       gap._1
     }
 
     def evaluateModel(model: StructSVMModel[X, Y], roundNum: Int = 0): RoundEvaluation = {
       val dual = -SolverUtils.objectiveFunction(model.getWeights(), model.getEll(), solverOptions.lambda)
-      val dualityGap = SolverUtils.dualityGap(data, featureFn, lossFn, oracleFn, model, solverOptions.lambda, dataSize)._1
+      val dualityGap = SolverUtils.dualityGap(data, dissolveFunctions, model, solverOptions.lambda, dataSize)._1
       val primal = dual + dualityGap
 
-      val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, model, dataSize)
+      val trainError = SolverUtils.averageLoss(data, dissolveFunctions, model, dataSize)
       val testError =
         if (solverOptions.testDataRDD.isDefined)
-          SolverUtils.averageLoss(solverOptions.testDataRDD.get, lossFn, predictFn, model, testDataSize)
+          SolverUtils.averageLoss(solverOptions.testDataRDD.get, dissolveFunctions, model, testDataSize)
         else
           0.00
 
@@ -431,6 +429,7 @@ class DBCFWSolverTuned[X, Y](
 
     val maxOracle = helperFunctions.oracleFn
     val phi = helperFunctions.featureFn
+    val lossFn = helperFunctions.lossFn
 
     val lambda = solverOptions.lambda
 

@@ -1,20 +1,25 @@
 package ch.ethz.dalab.dissolve.test.bcfw
 
-import ch.ethz.dalab.dissolve.examples.chain.ChainDemo.{ loadData, featureFn, lossFn, oracleFn, predictFn }
 import org.scalatest.FunSpec
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import breeze.linalg._
-import breeze.numerics._
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
+
+import breeze.linalg.DenseVector
+import breeze.linalg.Matrix
+import breeze.linalg.Vector
+import breeze.numerics.abs
+import breeze.numerics.sqrt
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
+import ch.ethz.dalab.dissolve.examples.chain.ChainDemo
+import ch.ethz.dalab.dissolve.examples.chain.ChainDemoFunctions
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 class BCFWRegression extends FunSpec {
 
   describe("BCFW-SSVM-OCR") {
 
-    val train_data_unord: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
-    val test_data: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+    val train_data_unord: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = ChainDemo.loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val test_data: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = ChainDemo.loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
 
     // Read order from the file and permute the Vector accordingly
     val trainOrder: String = "data/perm_train.csv"
@@ -45,10 +50,7 @@ class BCFWRegression extends FunSpec {
       solverOptions.debug = true
 
       val trainer: StructSVMWithBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithBCFW(train_data,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        ChainDemoFunctions,
         solverOptions)
 
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()

@@ -14,14 +14,13 @@ object SolverUtils {
    * Average loss
    */
   def averageLoss[X, Y](data: Seq[LabeledObject[X, Y]],
-                        lossFn: (Y, Y) => Double,
-                        predictFn: (StructSVMModel[X, Y], X) => Y,
+                        dissolveFunctions: DissolveFunctions[X, Y],
                         model: StructSVMModel[X, Y]): Double = {
 
     var lossTerm: Double = 0.0
     for (i <- 0 until data.size) {
-      val ystar_i = predictFn(model, data(i).pattern)
-      lossTerm += lossFn(data(i).label, ystar_i)
+      val ystar_i = dissolveFunctions.predictFn(model, data(i).pattern)
+      lossTerm += dissolveFunctions.lossFn(data(i).label, ystar_i)
     }
 
     // Return average of loss terms
@@ -29,16 +28,15 @@ object SolverUtils {
   }
 
   def averageLoss[X, Y](data: RDD[LabeledObject[X, Y]],
-                        lossFn: (Y, Y) => Double,
-                        predictFn: (StructSVMModel[X, Y], X) => Y,
+                        dissolveFunctions: DissolveFunctions[X, Y],
                         model: StructSVMModel[X, Y],
                         dataSize: Int): Double = {
 
     val loss =
       data.map {
         case datapoint =>
-          val ystar_i = predictFn(model, datapoint.pattern)
-          lossFn(datapoint.label, ystar_i)
+          val ystar_i = dissolveFunctions.predictFn(model, datapoint.pattern)
+          dissolveFunctions.lossFn(datapoint.label, ystar_i)
       }.fold(0.0)((acc, ele) => acc + ele)
 
     loss / dataSize
@@ -99,15 +97,14 @@ object SolverUtils {
    * Requires one full pass of decoding over all data examples.
    */
   def dualityGap[X, Y](data: RDD[LabeledObject[X, Y]],
-                       featureFn: (X, Y) => Vector[Double],
-                       lossFn: (Y, Y) => Double,
-                       oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
+                       dissolveFunctions: DissolveFunctions[X, Y],
                        model: StructSVMModel[X, Y],
                        lambda: Double,
                        dataSize: Int)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
 
-    val phi = featureFn
-    val maxOracle = oracleFn
+    val phi = dissolveFunctions.featureFn _
+    val maxOracle = dissolveFunctions.oracleFn _
+    val lossFn = dissolveFunctions.lossFn _
 
     val w: Vector[Double] = model.getWeights()
     val ell: Double = model.getEll()
@@ -140,11 +137,13 @@ object SolverUtils {
    * Requires one full pass of decoding over all data examples.
    */
   def primalObjective[X, Y](data: Vector[LabeledObject[X, Y]],
-                       		featureFn: (X, Y) => Vector[Double],
-                       		lossFn: (Y, Y) => Double,
-                       		oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
+                            dissolveFunctions: DissolveFunctions[X, Y],
                             model: StructSVMModel[X, Y],
                             lambda: Double): Double = {
+
+    val featureFn = dissolveFunctions.featureFn _
+    val oracleFn = dissolveFunctions.oracleFn _
+    val lossFn = dissolveFunctions.lossFn _
 
     var hingeLosses: Double = 0.0
     for (i <- 0 until data.size) {

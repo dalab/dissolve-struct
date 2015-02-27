@@ -2,16 +2,17 @@ package ch.ethz.dalab.dissolve.classification
 
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import org.apache.spark.rdd.RDD
-import ch.ethz.dalab.dissolve.optimization.DBCFWSolver
 import java.io.FileWriter
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import org.apache.spark.mllib.regression.LabeledPoint
 import breeze.linalg._
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
+import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
 
-object MultiClassSVMWithDBCFW {
+case class MultiClassLabel(label: Double, numClasses: Int)
 
-  case class MultiClassLabel(label: Double, numClasses: Int)
+object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiClassLabel] {
 
   /**
    * Feature function
@@ -126,12 +127,9 @@ object MultiClassSVMWithDBCFW {
 
     println(solverOptions)
 
-    val (trainedModel, debugInfo) = new DBCFWSolver[Vector[Double], MultiClassLabel](
+    val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
       repartData,
-      this.featureFn,
-      this.lossFn,
-      this.oracleFn,
-      this.predictFn,
+      this,
       solverOptions,
       miniBatchEnabled = false).optimize()
 
@@ -188,12 +186,9 @@ object MultiClassSVMWithDBCFW {
 
     println(solverOptions)
 
-    val (trainedModel, debugInfo) = new DBCFWSolver[Vector[Double], MultiClassLabel](
+    val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
       repartData,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      this,
       solverOptions,
       miniBatchEnabled = false).optimize()
 

@@ -4,22 +4,25 @@
  */
 package ch.ethz.dalab.dissolve.classification
 
-import scala.reflect.ClassTag
 import java.io.FileWriter
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.optimization.DBCFWSolver
-import ch.ethz.dalab.dissolve.optimization.SolverUtils
-import org.apache.spark.rdd.RDD
+
 import org.apache.spark.mllib.regression.LabeledPoint
-import breeze.linalg.{ Vector, SparseVector, DenseVector }
+import org.apache.spark.rdd.RDD
+
+import breeze.linalg.DenseVector
+import breeze.linalg.SparseVector
+import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.optimization.SolverUtils
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 /**
  * @author tribhu
  *
  */
-object BinarySVMWithDBCFW {
+object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
 
   /**
    * Feature function
@@ -116,10 +119,7 @@ object BinarySVMWithDBCFW {
 
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
       repartData,
-      this.featureFn,
-      this.lossFn,
-      this.oracleFn,
-      this.predictFn,
+      this,
       solverOptions,
       miniBatchEnabled = false).optimize()
 
@@ -148,10 +148,7 @@ object BinarySVMWithDBCFW {
    */
   def train(
     data: RDD[LabeledPoint],
-    featureFn: (Vector[Double], Double) => Vector[Double], // (x, y) => FeatureVector
-    lossFn: (Double, Double) => Double, // (yTruth, yPredict) => LossValue
-    oracleFn: (StructSVMModel[Vector[Double], Double], Vector[Double], Double) => Double, // (model, x_i, y_i) => Label
-    predictFn: (StructSVMModel[Vector[Double], Double], Vector[Double]) => Double,
+    dissolveFunctions: DissolveFunctions[Vector[Double], Double],
     solverOptions: SolverOptions[Vector[Double], Double]): StructSVMModel[Vector[Double], Double] = {
 
     // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
@@ -176,10 +173,7 @@ object BinarySVMWithDBCFW {
 
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
       repartData,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      this,
       solverOptions,
       miniBatchEnabled = false).optimize()
 

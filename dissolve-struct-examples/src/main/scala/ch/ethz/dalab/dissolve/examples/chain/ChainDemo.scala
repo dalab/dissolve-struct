@@ -3,6 +3,7 @@ package ch.ethz.dalab.dissolve.examples.chain
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Matrix
@@ -13,10 +14,11 @@ import breeze.linalg.sum
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
+import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
-import ch.ethz.dalab.dissolve.regression.LabeledObject;
-import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 
 /**
@@ -25,7 +27,7 @@ import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
  * python convert-ocr-data.py
  *
  */
-object ChainDemo {
+object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
   val debugOn = true
 
@@ -75,7 +77,7 @@ object ChainDemo {
 
     data
   }
-
+  
   /**
    * Returns a vector, capturing unary, bias and pairwise features of the word
    *
@@ -116,36 +118,6 @@ object ChainDemo {
    */
   def lossFn(yTruth: Vector[Double], yPredict: Vector[Double]): Double =
     sum((yTruth :== yPredict).map(x => if (x) 0 else 1)) / yTruth.size.toDouble
-
-  /**
-   * Readable representation of the weight vector
-   */
-  class Weight(
-    val unary: DenseMatrix[Double],
-    val firstBias: DenseVector[Double],
-    val lastBias: DenseVector[Double],
-    val pairwise: DenseMatrix[Double]) {
-  }
-
-  /**
-   * Converts weight vector into Weight object, by partitioning it into unary, bias and pairwise terms
-   */
-  def weightVecToObj(weightVec: Vector[Double], numStates: Int, numDims: Int): Weight = {
-    val idx: Int = numStates * numDims
-
-    val unary: DenseMatrix[Double] = weightVec(0 until idx)
-      .toDenseVector
-      .toDenseMatrix
-      .reshape(numDims, numStates)
-    val firstBias: Vector[Double] = weightVec(idx until (idx + numStates))
-    val lastBias: Vector[Double] = weightVec((idx + numStates) until (idx + 2 * numStates))
-    val pairwise: DenseMatrix[Double] = weightVec((idx + 2 * numStates) until weightVec.size)
-      .toDenseVector
-      .toDenseMatrix
-      .reshape(numStates, numStates)
-
-    new Weight(unary, firstBias.toDenseVector, lastBias.toDenseVector, pairwise)
-  }
 
   /**
    * Replicate the functionality of Matlab's max function
@@ -209,15 +181,15 @@ object ChainDemo {
 
   /**
    * The Maximization Oracle
-   * 
-   * Performs loss-augmented decoding on a given example xi and label yi 
+   *
+   * Performs loss-augmented decoding on a given example xi and label yi
    * using model.getWeights() as parameter. The loss is normalized Hamming loss.
-   * 
+   *
    * If yi is not given, then standard prediction is done (i.e. MAP decoding),
    * without any loss term.
    */
   def oracleFnWithDecode(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double],
-    decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
+                         decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
@@ -240,12 +212,12 @@ object ChainDemo {
 
     // Add loss-augmentation to the score (normalized Hamming distances used for loss)
     if (yi != null) { // loss augmentation is only done if a label yi is given. 
-    	val l: Int = yi.size
-    	for (i <- 0 until numVars) {
-    		thetaUnary(::, i) := thetaUnary(::, i) + 1.0 / l
-    		val idx = yi(i).toInt // Loss augmentation
-    		thetaUnary(idx, i) = thetaUnary(idx, i) - 1.0 / l
-    	}
+      val l: Int = yi.size
+      for (i <- 0 until numVars) {
+        thetaUnary(::, i) := thetaUnary(::, i) + 1.0 / l
+        val idx = yi(i).toInt // Loss augmentation
+        thetaUnary(idx, i) = thetaUnary(idx, i) - 1.0 / l
+      }
     }
 
     // Solve inference problem
@@ -254,9 +226,39 @@ object ChainDemo {
     label
   }
 
+  /**
+   * Readable representation of the weight vector
+   */
+  class Weight(
+    val unary: DenseMatrix[Double],
+    val firstBias: DenseVector[Double],
+    val lastBias: DenseVector[Double],
+    val pairwise: DenseMatrix[Double]) {
+  }
+
+  /**
+   * Converts weight vector into Weight object, by partitioning it into unary, bias and pairwise terms
+   */
+  def weightVecToObj(weightVec: Vector[Double], numStates: Int, numDims: Int): Weight = {
+    val idx: Int = numStates * numDims
+
+    val unary: DenseMatrix[Double] = weightVec(0 until idx)
+      .toDenseVector
+      .toDenseMatrix
+      .reshape(numDims, numStates)
+    val firstBias: Vector[Double] = weightVec(idx until (idx + numStates))
+    val lastBias: Vector[Double] = weightVec((idx + numStates) until (idx + 2 * numStates))
+    val pairwise: DenseMatrix[Double] = weightVec((idx + 2 * numStates) until weightVec.size)
+      .toDenseVector
+      .toDenseMatrix
+      .reshape(numStates, numStates)
+
+    new Weight(unary, firstBias.toDenseVector, lastBias.toDenseVector, pairwise)
+  }
+
   def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] =
     oracleFnWithDecode(model, xi, yi, logDecode)
-    
+
   /**
    * Predict function.
    * This is (non-loss-augmented) decoding
@@ -342,18 +344,15 @@ object ChainDemo {
       solverOptions)*/
 
     val trainer: StructSVMWithBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithBCFW[Matrix[Double], Vector[Double]](train_data,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      ChainDemo,
       solverOptions)
 
     val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
     var avgTrainLoss: Double = 0.0
     for (item <- train_data) {
-      val prediction = model.predictFn(model, item.pattern)
-      avgTrainLoss += lossFn(item.label, prediction)
+      val prediction = model.predict(item.pattern)
+      avgTrainLoss += ChainDemo.lossFn(item.label, prediction)
       // if (debugOn)
       // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
     }
@@ -361,8 +360,8 @@ object ChainDemo {
 
     var avgTestLoss: Double = 0.0
     for (item <- test_data) {
-      val prediction = model.predictFn(model, item.pattern)
-      avgTestLoss += lossFn(item.label, prediction)
+      val prediction = model.predict(item.pattern)
+      avgTestLoss += ChainDemo.lossFn(item.label, prediction)
       // if (debugOn)
       // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
     }
@@ -494,24 +493,21 @@ object ChainDemo {
 
     val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
       trainDataRDD,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      ChainDemo,
       solverOptions)
 
     val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
     var avgTrainLoss: Double = 0.0
     for (item <- train_data) {
-      val prediction = model.predictFn(model, item.pattern)
+      val prediction = model.predict(item.pattern)
       avgTrainLoss += lossFn(item.label, prediction)
     }
     println("Average loss on training set = %f".format(avgTrainLoss / train_data.size))
 
     var avgTestLoss: Double = 0.0
     for (item <- testDataUnord) {
-      val prediction = model.predictFn(model, item.pattern)
+      val prediction = model.predict(item.pattern)
       avgTestLoss += lossFn(item.label, prediction)
     }
     println("Average loss on test set = %f".format(avgTestLoss / testDataUnord.size))

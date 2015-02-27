@@ -11,12 +11,13 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.examples.chain.ChainDemo.{ loadData, featureFn, lossFn, oracleFn, predictFn }
+import ch.ethz.dalab.dissolve.examples.chain.ChainDemoFunctions
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import org.apache.log4j.PropertyConfigurator
 import org.apache.log4j.Level
 import org.apache.log4j.Logger
+import ch.ethz.dalab.dissolve.examples.chain.ChainDemo
 
 /**
  * @author tribhu
@@ -91,8 +92,8 @@ class ChainRegression extends FunSpec with GivenWhenThen {
      */
     val PERC_TRAIN: Double = 0.05
 
-    val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
-    val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
+    val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = ChainDemo.loadData("data/patterns_train.csv", "data/labels_train.csv", "data/folds_train.csv")
+    val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = ChainDemo.loadData("data/patterns_test.csv", "data/labels_test.csv", "data/folds_test.csv")
 
     println("Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
@@ -148,10 +149,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        ChainDemoFunctions,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -182,10 +180,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        ChainDemoFunctions,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -218,10 +213,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        ChainDemoFunctions,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -254,10 +246,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        ChainDemoFunctions,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -291,10 +280,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        ChainDemoFunctions,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -330,10 +316,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        ChainDemoFunctions,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -371,10 +354,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        ChainDemoFunctions,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 

@@ -109,7 +109,7 @@ object COVBinary {
     // Fix seed for reproducibility
     util.Random.setSeed(1)
 
-    val conf = new SparkConf().setAppName("COV-example")
+    val conf = new SparkConf().setAppName("COV-example").setMaster("local")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir(dataDir + "/checkpoint-files")
 

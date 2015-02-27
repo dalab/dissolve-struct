@@ -1,16 +1,18 @@
 package ch.ethz.dalab.dissolve.optimization
 
-import breeze.linalg._
-import breeze.numerics._
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import ch.ethz.dalab.dissolve.regression.LabeledObject
 import java.io.File
 import java.io.PrintWriter
+
+import breeze.linalg.DenseVector
+import breeze.linalg.Vector
+import breeze.linalg.csvwrite
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 /**
  * Train a structured SVM using standard Stochastic (Sub)Gradient Descent (SGD).
  * The implementation here is single machine, not distributed.
- * 
+ *
  * Input:
  * Each data point (x_i, y_i) is composed of:
  * x_i, the data example
@@ -21,18 +23,15 @@ import java.io.PrintWriter
  */
 class SSGSolver[X, Y](
   val data: Seq[LabeledObject[X, Y]],
-  val featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVector
-  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label
-  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val dissolveFunctions: DissolveFunctions[X, Y],
   val solverOptions: SolverOptions[X, Y]) {
 
   val roundLimit = solverOptions.roundLimit
   val lambda = solverOptions.lambda
   val debugOn: Boolean = solverOptions.debug
 
-  val maxOracle = oracleFn
-  val phi = featureFn
+  val maxOracle = dissolveFunctions.oracleFn _
+  val phi = dissolveFunctions.featureFn _
   // Number of dimensions of \phi(x, y)
   val ndims: Int = phi(data(0).pattern, data(0).label).size
 
@@ -46,15 +45,12 @@ class SSGSolver[X, Y](
 
     var k: Integer = 0
     val n: Int = data.length
-    val d: Int = featureFn(data(0).pattern, data(0).label).size
+    val d: Int = phi(data(0).pattern, data(0).label).size
     // Use first example to determine dimension of w
-    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(featureFn(data(0).pattern, data(0).label).size),
+    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(phi(data(0).pattern, data(0).label).size),
       0.0,
       DenseVector.zeros(ndims),
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn)
+      dissolveFunctions)
 
     // Initialization in case of Weighted Averaging
     var wAvg: DenseVector[Double] =
@@ -68,7 +64,7 @@ class SSGSolver[X, Y](
     } else {
       1
     }
-    val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
+    val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), dissolveFunctions)
 
     val lossWriter = if (solverOptions.debug) new PrintWriter(new File(lossWriterFileName)) else null
     if (solverOptions.debug) {

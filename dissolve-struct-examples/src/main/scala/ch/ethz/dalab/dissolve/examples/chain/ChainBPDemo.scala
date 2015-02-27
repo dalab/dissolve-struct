@@ -10,19 +10,20 @@ import breeze.linalg.Vector
 import breeze.linalg.argmax
 import breeze.linalg.max
 import breeze.linalg.sum
+import cc.factorie.infer.MaximizeByMPLP
+import cc.factorie.model.Factor
+import cc.factorie.model.ItemizedModel
+import cc.factorie.variable.DiscreteDomain
+import cc.factorie.variable.DiscreteVariable
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import cc.factorie.model.Factor1
 import cc.factorie.model.Factor2
-import cc.factorie.model.ItemizedModel
-import cc.factorie.infer.MaximizeByMPLP
-import cc.factorie.variable.DiscreteVariable
-import cc.factorie.variable.DiscreteDomain
-import cc.factorie.model.Factor
+import cc.factorie.model.Factor1
 
 
 /**
@@ -34,7 +35,7 @@ import cc.factorie.model.Factor
  * Download at: https://github.com/factorie/factorie/releases/download/factorie-1.0/factorie-1.0.jar
  *
  */
-object ChainBPDemo {
+object ChainBPDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
   val debugOn = true
 
@@ -352,17 +353,14 @@ object ChainBPDemo {
       solverOptions)*/
 
     val trainer: StructSVMWithBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithBCFW[Matrix[Double], Vector[Double]](train_data,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      this,
       solverOptions)
 
     val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
     var avgTrainLoss: Double = 0.0
     for (item <- train_data) {
-      val prediction = model.predictFn(model, item.pattern)
+      val prediction = model.predict(item.pattern)
       avgTrainLoss += lossFn(item.label, prediction)
       // if (debugOn)
       // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
@@ -371,7 +369,7 @@ object ChainBPDemo {
 
     var avgTestLoss: Double = 0.0
     for (item <- test_data) {
-      val prediction = model.predictFn(model, item.pattern)
+      val prediction = model.predict(item.pattern)
       avgTestLoss += lossFn(item.label, prediction)
       // if (debugOn)
       // println("Truth = %-10s\tPrediction = %-10s".format(labelVectorToString(item.label), labelVectorToString(prediction)))
@@ -479,24 +477,21 @@ object ChainBPDemo {
 
     val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
       trainDataRDD,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      this,
       solverOptions)
 
     val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
     var avgTrainLoss: Double = 0.0
     for (item <- train_data) {
-      val prediction = model.predictFn(model, item.pattern)
+      val prediction = model.predict(item.pattern)
       avgTrainLoss += lossFn(item.label, prediction)
     }
     println("Average loss on training set = %f".format(avgTrainLoss / train_data.size))
 
     var avgTestLoss: Double = 0.0
     for (item <- testDataUnord) {
-      val prediction = model.predictFn(model, item.pattern)
+      val prediction = model.predict(item.pattern)
       avgTestLoss += lossFn(item.label, prediction)
     }
     println("Average loss on test set = %f".format(avgTestLoss / testDataUnord.size))

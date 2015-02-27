@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 /**
  * Train a structured SVM using the primal dual Block-Coordinate Frank-Wolfe solver (BCFW).
- * 
+ *
  * The implementation here is single machine, not distributed. See DBCFWSolver... for the
  * distributed version.
  *
@@ -30,21 +30,15 @@ import scala.reflect.ClassTag
  */
 class BCFWSolver[X, Y] /*extends Optimizer*/ (
   val data: Seq[LabeledObject[X, Y]],
-  val featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVect, 
-  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
-  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Lab, 
-  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val dissolveFunctions: DissolveFunctions[X, Y],
   val solverOptions: SolverOptions[X, Y],
   val testData: Seq[LabeledObject[X, Y]]) {
 
   // Constructor without test data
   def this(
     data: Seq[LabeledObject[X, Y]],
-    featureFn: (X, Y) => Vector[Double], // (y, x) => FeatureVect, 
-    lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossVal, 
-    oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Lab, 
-    predictFn: (StructSVMModel[X, Y], X) => Y,
-    solverOptions: SolverOptions[X, Y]) = this(data, featureFn, lossFn, oracleFn, predictFn, solverOptions, null)
+    dissolveFunctions: DissolveFunctions[X, Y],
+    solverOptions: SolverOptions[X, Y]) = this(data, dissolveFunctions, solverOptions, null)
 
   val roundLimit = solverOptions.roundLimit
   val lambda = solverOptions.lambda
@@ -52,8 +46,9 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
 
   val debugSb: StringBuilder = new StringBuilder()
 
-  val maxOracle = oracleFn
-  val phi = featureFn
+  val maxOracle = dissolveFunctions.oracleFn _
+  val phi = dissolveFunctions.featureFn _
+  val lossFn = dissolveFunctions.lossFn _
   // Number of dimensions of \phi(x, y)
   val ndims: Int = phi(data(0).pattern, data(0).label).size
 
@@ -70,9 +65,9 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     /* Initialization */
     var k: Integer = 0
     val n: Int = data.length
-    val d: Int = featureFn(data(0).pattern, data(0).label).size
+    val d: Int = phi(data(0).pattern, data(0).label).size
     // Use first example to determine dimension of w
-    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), featureFn, lossFn, oracleFn, predictFn)
+    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), dissolveFunctions)
     val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
     var ell: Double = 0.0
     val ellMat: DenseVector[Double] = DenseVector.zeros[Double](n)
@@ -90,7 +85,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     } else {
       1
     }
-    val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), featureFn, lossFn, oracleFn, predictFn)
+    val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), dissolveFunctions)
 
     if (solverOptions.debug) {
       if (solverOptions.testData != null)
@@ -226,7 +221,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
           val gapTup = SolverUtils.dualityGap(data, phi, lossFn, maxOracle, debugModel, lambda)
           val gap = gapTup._1
           val primal = f + gap
-          val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
+          val trainError = SolverUtils.averageLoss(data, dissolveFunctions, debugModel)
 
           if (verboseDebug) {
             println("wMat after pass: " + model.getWeights()(0 to 10).toDenseVector)
@@ -241,7 +236,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
           if (solverOptions.testData != null) {
             val testError =
               if (solverOptions.testData.isDefined)
-                SolverUtils.averageLoss(solverOptions.testData.get, lossFn, predictFn, debugModel)
+                SolverUtils.averageLoss(solverOptions.testData.get, dissolveFunctions, debugModel)
               else
                 0.00
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"

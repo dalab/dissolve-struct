@@ -3,14 +3,14 @@
  */
 package ch.ethz.dalab.dissolve.classification
 
-import org.apache.spark.SparkContext
-import breeze.linalg._
-import org.apache.spark.rdd.RDD
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.optimization.BCFWSolver
-import scala.reflect.ClassTag
 import java.io.FileWriter
+
+import scala.reflect.ClassTag
+
+import ch.ethz.dalab.dissolve.optimization.BCFWSolver
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 /**
  * Analogous to BCFWSolver
@@ -19,18 +19,12 @@ import java.io.FileWriter
  */
 class StructSVMWithBCFW[X, Y](
   val data: Seq[LabeledObject[X, Y]],
-  val featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVector
-  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label
-  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val dissolveFunctions: DissolveFunctions[X, Y],
   val solverOptions: SolverOptions[X, Y]) {
 
   def trainModel()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
     val (trainedModel, debugInfo) = new BCFWSolver(data,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      dissolveFunctions,
       solverOptions).optimize()
 
     // Dump debug information into a file

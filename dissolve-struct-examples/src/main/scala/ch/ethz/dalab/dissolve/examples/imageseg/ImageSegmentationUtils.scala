@@ -45,7 +45,7 @@ object ImageSegmentationUtils {
     if (ImageSegmentationDemo.RUN_SYNTH)
       "/imageseg_synth_lab_freq.txt"
     else
-      "/imageseg_cattle_lab_freq.txt"
+      "/imageseg_lab_freq.txt"
 
   val labFreqMap: Map[Int, Double] = Source.fromURL(getClass.getResource(labFreqFile))
     .getLines()

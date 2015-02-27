@@ -32,6 +32,7 @@ import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import scala.io.Source
 import cc.factorie.infer.MaximizeByMPLP
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 
 case class ROIFeature(feature: Vector[Double], name: String = "NA") // Represent each pixel/region by a feature vector
 
@@ -42,7 +43,7 @@ case class ROILabel(label: Int, numClasses: Int = 24, classFrequency: Double = 1
   }
 }
 
-object ImageSegmentationDemo {
+object ImageSegmentationDemo extends DissolveFunctions[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] with Serializable {
 
   val RUN_SYNTH = false
   var DISABLE_PAIRWISE = true
@@ -594,10 +595,7 @@ object ImageSegmentationDemo {
     val trainer: StructSVMWithDBCFW[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] =
       new StructSVMWithDBCFW[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]](
         trainDataRDD,
-        featureFn,
-        lossFn,
-        oracleFn,
-        predictFn,
+        this,
         solverOptions)
 
     val model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]] = trainer.trainModel()
@@ -607,7 +605,7 @@ object ImageSegmentationDemo {
     val trainingFileNames = Source.fromURL(getClass.getResource(trainingFileNamePath)).getLines().toArray
     trainData.zip(trainingFileNames).foreach {
       case (item, fname) =>
-        val prediction = model.predictFn(model, item.pattern)
+        val prediction = model.predict(item.pattern)
         avgTrainLoss += lossFn(item.label, prediction)
 
         val outname = fname.split('.')(0)
@@ -619,7 +617,7 @@ object ImageSegmentationDemo {
 
     var avgTestLoss: Double = 0.0
     for (item <- testData) {
-      val prediction = model.predictFn(model, item.pattern)
+      val prediction = model.predict(item.pattern)
       avgTestLoss += lossFn(item.label, prediction)
     }
     println("Average loss on test set = %f".format(avgTestLoss / testData.size))

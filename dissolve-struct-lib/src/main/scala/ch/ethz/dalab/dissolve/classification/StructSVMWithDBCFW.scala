@@ -5,27 +5,21 @@ import breeze.linalg._
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import ch.ethz.dalab.dissolve.optimization.DBCFWSolver
 import java.io.FileWriter
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import scala.reflect.ClassTag
 import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 
 class StructSVMWithDBCFW[X, Y](
   val data: RDD[LabeledObject[X, Y]],
-  val featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVector
-  val lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
-  val oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label
-  val predictFn: (StructSVMModel[X, Y], X) => Y,
+  val dissolveFunctions: DissolveFunctions[X, Y],
   val solverOptions: SolverOptions[X, Y]) {
 
   def trainModel()(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[X, Y](
       data,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      dissolveFunctions,
       solverOptions,
       miniBatchEnabled = false).optimize()
 
@@ -52,17 +46,11 @@ class StructSVMWithDBCFW[X, Y](
 
 object StructSVMWithDBCFW {
   def train[X, Y](data: RDD[LabeledObject[X, Y]],
-                  featureFn: (X, Y) => Vector[Double], // (x, y) => FeatureVector
-                  lossFn: (Y, Y) => Double, // (yTruth, yPredict) => LossValue
-                  oracleFn: (StructSVMModel[X, Y], X, Y) => Y, // (model, x_i, y_i) => Label
-                  predictFn: (StructSVMModel[X, Y], X) => Y,
+                  dissolveFunctions: DissolveFunctions[X, Y],
                   solverOptions: SolverOptions[X, Y])(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[X, Y](
       data,
-      featureFn,
-      lossFn,
-      oracleFn,
-      predictFn,
+      dissolveFunctions,
       solverOptions,
       miniBatchEnabled = false).optimize()
 
