@@ -138,7 +138,7 @@ Image Segmentation is performed on the [MSRC](http://research.microsoft.com/en-u
 This is done by dividing the image into a fixed number of regions and extracting histogram features for each region.
 Decoding is performed on a CRF modeled using Factorie, using belief propagation on unary and pairwise features.
 
-This examples requires the dataset (Pixel-wise labelled image v2 dataset) folder downloaded from the MSRC [webpage](http://research.microsoft.com/en-us/projects/objectclassrecognition/) to be placed within the `data/generated` folder.
+This examples requires the dataset (Pixel-wise labelled image v2 dataset) downloaded from the MSRC [webpage](http://research.microsoft.com/en-us/projects/objectclassrecognition/) to be placed within the `data/generated` directory.
 
 {% highlight bash %}
 spark-1.2.0/bin/spark-submit \
@@ -149,10 +149,10 @@ spark-1.2.0/bin/spark-submit \
 	target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar \
 {% endhighlight %}
 
-The first time the command is executed, the features from the images are pre-computed and stored within the MSRC folder to speed up subsequent executions.
+The first time the command is executed, the features from the images are pre-computed and stored within the MSRC directory to speed up subsequent executions.
 This however make take around 10 minutes, depending on the machine.
 
-Training the model over pairwise factors can be extremely slow, since the maximum a posteriori needs to be computed over thousands of factors, each which can take a combination of 24<sup>2</sup> labels.
+Training the model over pairwise factors can be extremely slow, since the MAP assignment needs to be computed over thousands of factors, each which can take a combination of 24<sup>2</sup> labels.
 The training can be done quickly with only unary features using the `-onlyunaries` flag.
 
 
