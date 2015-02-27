@@ -10,7 +10,6 @@ import breeze.numerics.sqrt
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
 import ch.ethz.dalab.dissolve.examples.chain.ChainDemo
-import ch.ethz.dalab.dissolve.examples.chain.ChainDemoFunctions
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 
@@ -50,7 +49,7 @@ class BCFWRegression extends FunSpec {
       solverOptions.debug = true
 
       val trainer: StructSVMWithBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithBCFW(train_data,
-        ChainDemoFunctions,
+        ChainDemo,
         solverOptions)
 
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()

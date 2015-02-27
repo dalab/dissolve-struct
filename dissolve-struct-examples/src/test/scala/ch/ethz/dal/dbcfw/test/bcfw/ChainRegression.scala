@@ -3,21 +3,21 @@
  */
 package ch.ethz.dalab.dissolve.test.bcfw
 
-import org.scalatest.FunSpec
-import org.scalatest.GivenWhenThen
-import org.scalatest.BeforeAndAfter
-import breeze.linalg._
-import org.apache.spark.SparkConf
-import org.apache.spark.SparkContext
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.examples.chain.ChainDemoFunctions
-import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import org.apache.log4j.PropertyConfigurator
 import org.apache.log4j.Level
 import org.apache.log4j.Logger
+import org.apache.log4j.PropertyConfigurator
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkContext
+import org.scalatest.FunSpec
+import org.scalatest.GivenWhenThen
+
+import breeze.linalg.Matrix
+import breeze.linalg.Vector
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import ch.ethz.dalab.dissolve.examples.chain.ChainDemo
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 /**
  * @author tribhu
@@ -149,7 +149,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        ChainDemoFunctions,
+        ChainDemo,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -180,7 +180,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        ChainDemoFunctions,
+        ChainDemo,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -213,7 +213,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        ChainDemoFunctions,
+        ChainDemo,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -246,7 +246,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        ChainDemoFunctions,
+        ChainDemo,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -280,7 +280,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        ChainDemoFunctions,
+        ChainDemo,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -316,7 +316,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        ChainDemoFunctions,
+        ChainDemo,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
@@ -354,7 +354,7 @@ class ChainRegression extends FunSpec with GivenWhenThen {
       When("Model is trained")
       val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
         trainDataRDD,
-        ChainDemoFunctions,
+        ChainDemo,
         solverOptions)
       val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
 
