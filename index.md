@@ -156,7 +156,6 @@ Training the model over pairwise factors can be extremely slow, since the MAP as
 The training can be done quickly with only unary features using the `-onlyunaries` flag.
 
 
-
 # Setting up a development environment
 We recommend using [Eclipse for Scala](http://scala-ide.org/download/sdk.html), though a similar setup can also be done in Intellij IDEA.
 To create an Eclipse Scala project for our purposes, the following simple `sbt` command can be used. This generates the respective .classpath files needed.
@@ -175,6 +174,48 @@ Currently Scala 2.10.4 is required by Spark. If Eclipse defaults to Scala 2.11 i
 The correct version needs to be set for both the projects by:
 `Project Properties | Scala Compiler | Setting "Scala Installation" to "Latest 2.10 bundle"`.
 Alternatively, we recommend directly working with Eclipse IDE for Scala 2.10.4 from <http://scala-ide.org/download/sdk.html>.
+
+
+# Implementing Structured Prediction using dissolve<sup>struct</sup>
+Similar to [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/svm_struct.html), you can implement your own structured prediction by providing 4 functions:
+
+1. **Feature Function**
+2. **Maximization Oracle**
+3. **Loss function**
+4. **Prediction function**
+
+These four functions need to be provided by mixing in the trait `DissolveFunctions`.
+
+For example, in the case of Image Segmentation, it can be done like so
+
+{% highlight scala %}
+case class SLICGraph(..) // Represents the features of Superpixels in an image
+case class LabelGraph(..) // Represents the labels for each superpixel in the above class
+
+object ImageSegmentation extends DissolveFunctions[SLICGraph, LabelGraph] {
+  def featureFn(xM: SLICGraph, y: LabelGraph): Vector[Double] = {...}
+
+  def lossFn(yTruth: LabelGraph, yPredict: LabelGraph): Double = {...}
+
+  def oracleFn(model: StructSVMModel[SLICGraph, Vector[Double]], xi: SLICGraph, yi: LabelGraph): LabelGraph = {...}
+
+  def predictFn(model: StructSVMModel[SLICGraph, LabelGraph], xi: SLICGraph): LabelGraph = {...}
+
+}
+{% endhighlight %}
+
+Using these definitions, the Structured SVM can be trained like so:
+
+{% highlight scala %}
+val trainer: StructSVMWithDBCFW[SLICGraph, LabelGraph] = new StructSVMWithDBCFW[SLICGraph, LabelGraph](
+      trainDataRDD,
+			ImageSegmentation,
+      solverOptions)
+
+val model: StructSVMModel[SLICGraph, LabelGraph] = trainer.trainModel()
+
+{% endhighlight %}
+
 
 # References
 The CoCoA algorithmic framework is described in the following paper:
