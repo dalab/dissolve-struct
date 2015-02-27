@@ -177,42 +177,78 @@ Alternatively, we recommend directly working with Eclipse IDE for Scala 2.10.4 f
 
 
 # Implementing Structured Prediction using dissolve<sup>struct</sup>
-Similar to [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/svm_struct.html), you can implement your own structured prediction by providing 4 functions:
+
+To implement a custom Structured Prediction solver, using dissolve<sup>struct</sup>, three items are required.
+These items are designed to work around any kind of structured objects.
+The input and output are represented using Scala generics and are tied to types `X` and `Y` respectively.
+
+## Functions
+
+Similar to [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/svm_struct.html), 4 functions need to be provided:
 
 1. **Feature Function**
-2. **Maximization Oracle**
-3. **Loss function**
+
+   The feature map \\[ \psi: \mathcal{X} \times \mathcal{Y} \rightarrow \mathbb{R}^d \\] which encodes the input/output pairs.
+
+2. **Loss function**
+
+	The loss function \\( L(Y_i, Y) \\)
+
+3. **Maximization Oracle**
+
+   An oracle which computes the most violating constraint by solving:
+
+	\\[ \hat{Y} = \argmax_{Y \in \mathcal{Y}_i} L(Y_i, Y) - E_w(Y) \\]
+
+	where \\( E_w(Y) \\) is the energy/cost function.
+
 4. **Prediction function**
 
-These four functions need to be provided by mixing in the trait `DissolveFunctions`.
+   A prediction function that computes:
 
-For example, in the case of Image Segmentation, it can be done like so
+	\\[ \hat{Y} = \argmin_{Y \in \mathcal{Y}_i} E_w(Y) \\]
+
+
+These four functions need to be implemented by using a class/object which mixes-in the trait `DissolveFunctions`.
 
 {% highlight scala %}
-case class SLICGraph(..) // Represents the features of Superpixels in an image
-case class LabelGraph(..) // Represents the labels for each superpixel in the above class
+trait DissolveFunctions[X, Y] extends Serializable {
 
-object ImageSegmentation extends DissolveFunctions[SLICGraph, LabelGraph] {
-  def featureFn(xM: SLICGraph, y: LabelGraph): Vector[Double] = {...}
+  def featureFn(x: X, y: Y): Vector[Double]
 
-  def lossFn(yTruth: LabelGraph, yPredict: LabelGraph): Double = {...}
+  def lossFn(yPredicted: Y, yTruth: Y): Double
 
-  def oracleFn(model: StructSVMModel[SLICGraph, Vector[Double]], xi: SLICGraph, yi: LabelGraph): LabelGraph = {...}
+  def oracleFn(model: StructSVMModel[X, Y], x: X, y: Y): Y
 
-  def predictFn(model: StructSVMModel[SLICGraph, LabelGraph], xi: SLICGraph): LabelGraph = {...}
+  def predictFn(model: StructSVMModel[X, Y], x: X): Y
 
 }
 {% endhighlight %}
 
-Using these definitions, the Structured SVM can be trained like so:
+
+## Data
+
+The data need to be in the form of an RDD consisting of `LabeledObject[X,Y]` objects.
+
+## Solver Parameters
+
+The parameters for the solver can be set using `SolverOptions`:
+{% highlight scala %}
+val solverOptions: SolverOptions[X, Y] = new SolverOptions()
+solverOptions.lambda = 0.01
+{% endhighlight %}
+
+
+
+With these three items, the solver can be trained like so:
 
 {% highlight scala %}
-val trainer: StructSVMWithDBCFW[SLICGraph, LabelGraph] = new StructSVMWithDBCFW[SLICGraph, LabelGraph](
-      trainDataRDD,
-			ImageSegmentation,
-      solverOptions)
+val trainer: StructSVMWithDBCFW[X, Y] =
+	new StructSVMWithDBCFW[X, Y](trainDataRDD,
+				ImageSegmentation,
+				solverOptions)
 
-val model: StructSVMModel[SLICGraph, LabelGraph] = trainer.trainModel()
+val model: StructSVMModel[X, Y] = trainer.trainModel()
 
 {% endhighlight %}
 
