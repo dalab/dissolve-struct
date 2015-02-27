@@ -55,7 +55,10 @@ class DBCFWSolverTuned[X, Y](
   // Output of the mapper: idx -> ProcessedDataShard
   case class ProcessedDataShard[X, Y](primalInfo: PrimalInfo,
                                       cache: Option[BoundedCacheList[Y]],
-                                      deltaLocalModel: Option[StructSVMModel[X, Y]])
+                                      localSummary: Option[LocalSummary[X, Y]])
+
+  case class LocalSummary[X, Y](deltaLocalModel: StructSVMModel[X, Y],
+                                deltaLocalK: Vector[Int])
 
   // Experimental data
   case class RoundEvaluation(roundNum: Int,
@@ -167,6 +170,8 @@ class DBCFWSolverTuned[X, Y](
         .cache()
 
     var indexedLocalProcessedData: RDD[(Index, ProcessedDataShard[X, Y])] = null
+
+    val kAccum = DenseVector.zeros[Int](numPartitions)
 
     debugSb ++= "# indexedTrainDataRDD.partitions.size=%d\n".format(indexedTrainDataRDD.partitions.size)
     debugSb ++= "# indexedPrimalsRDD.partitions.size=%d\n".format(indexedPrimalsRDD.partitions.size)
@@ -286,7 +291,7 @@ class DBCFWSolverTuned[X, Y](
                 case ((labeledObject, primalInfo), cache) =>
                   InputDataShard(labeledObject, primalInfo, cache)
               }
-          
+
           /*println("indexedTrainDataRDD = " + indexedTrainDataRDD.count())
           println("indexedJointData.count = " + indexedJointData.count())
           println("indexedPrimalsRDD.count = " + indexedPrimalsRDD.count())
@@ -303,13 +308,13 @@ class DBCFWSolverTuned[X, Y](
           indexedLocalProcessedData =
             indexedJointData.mapPartitionsWithIndex(
               (idx, dataIterator) =>
-                mapper(idx,
+                mapper((idx, numPartitions),
                   dataIterator,
                   helperFunctions,
                   solverOptions,
                   globalModel,
                   dataSize,
-                  roundNum),
+                  kAccum),
               preservesPartitioning = true)
               .cache()
 
@@ -328,20 +333,26 @@ class DBCFWSolverTuned[X, Y](
            * Collect models from all partitions and compute the new model locally on master
            */
 
-          val newGlobalModelList =
+          val localSummaryList =
             indexedLocalProcessedData
-              .flatMapValues(_.deltaLocalModel)
+              .flatMapValues(_.localSummary)
               .values
               .collect()
 
           val sumDeltaWeightsAndEll =
-            newGlobalModelList
+            localSummaryList
               .map {
-                case model =>
+                case summary =>
+                  val model = summary.deltaLocalModel
                   (model.getWeights(), model.getEll())
               }.reduce(
                 (model1, model2) =>
                   (model1._1 + model2._1, model1._2 + model2._2))
+
+          val deltaK: Vector[Int] = localSummaryList
+            .map(_.deltaLocalK)
+            .reduce((x, y) => x + y)
+          kAccum += deltaK
 
           val newGlobalModel = globalModel.clone()
           newGlobalModel.updateWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
@@ -406,13 +417,13 @@ class DBCFWSolverTuned[X, Y](
     (globalModel, debugSb.toString())
   }
 
-  def mapper(partitionNum: Int,
+  def mapper(partitionInfo: (Int, Int), // (partitionIdx, numPartitions)
              dataIterator: Iterator[(Index, InputDataShard[X, Y])],
              helperFunctions: HelperFunctions[X, Y],
              solverOptions: SolverOptions[X, Y],
              localModel: StructSVMModel[X, Y],
              n: Int,
-             roundNum: Int): Iterator[(Index, ProcessedDataShard[X, Y])] = {
+             kAccum: Vector[Int]): Iterator[(Index, ProcessedDataShard[X, Y])] = {
 
     // println("[Round %d] Beginning mapper at partition %d".format(roundNum, partitionNum))
 
@@ -423,7 +434,9 @@ class DBCFWSolverTuned[X, Y](
 
     val lambda = solverOptions.lambda
 
-    var k = 0
+    val (partitionIdx, numPartitions) = partitionInfo
+    var k = kAccum(partitionIdx)
+
     var ell = localModel.getEll()
 
     val prevModel = localModel.clone()
@@ -525,18 +538,18 @@ class DBCFWSolverTuned[X, Y](
       k += 1
 
       if (!dataIterator.hasNext) {
-        /*println("Partition = " + partitionNum)
-        println("k = " + k)
-        println("w = " + localModel.getWeights()(0 until 5).toDenseVector)
-        println("ell = " + ell)
-        println()*/
 
         localModel.updateEll(ell)
 
         val deltaLocalModel = localModel.clone()
         deltaLocalModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
         deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
-        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), updatedCache, Some(deltaLocalModel)))
+
+        val deltaK = k - kAccum(partitionIdx)
+        val kAccumLocalDelta = DenseVector.zeros[Int](numPartitions)
+        kAccumLocalDelta(partitionIdx) = deltaK
+
+        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), updatedCache, Some(LocalSummary(deltaLocalModel, kAccumLocalDelta))))
       } else
         (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), updatedCache, None))
     }
