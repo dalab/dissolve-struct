@@ -36,6 +36,10 @@ build.log
 # Mac stuff
 .DS_Store
 
+.metadata/
+_site/
+Gemfile.lock
+
 # switch to regexp syntax.
 #  syntax: regexp
 #  ^\.pc/
