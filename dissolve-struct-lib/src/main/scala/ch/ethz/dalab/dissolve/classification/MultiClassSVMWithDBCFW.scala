@@ -22,16 +22,18 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
    *
    */
   def featureFn(x: Vector[Double], y: MultiClassLabel): Vector[Double] = {
-    val featureVector = DenseVector.zeros[Double](x.size * y.numClasses)
+    assert(y.label.toInt < y.numClasses,
+      "numClasses = %d. Found y_i.label = %d"
+        .format(y.numClasses, y.label.toInt))
+
+    val featureVector = Vector.zeros[Double](x.size * y.numClasses)
+    val numDims = x.size
 
     // Populate the featureVector in blocks [<class-0 features> <class-1 features> ...].
-    val (startIdx, endIdx) =
-      (x.size * y.label.toInt, x.size * (y.label.toInt + 1))
+    val startIdx = y.label.toInt * numDims
+    val endIdx = startIdx + numDims
 
-    (startIdx until endIdx).zipWithIndex.map {
-      case (newIdx, idx) =>
-        featureVector(newIdx) = x(idx)
-    }
+    featureVector(startIdx until endIdx) := x
 
     featureVector
   }
@@ -51,7 +53,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
   /**
    * Maximization Oracle
    *
-   * Want: max L(y_i, y) - <w, psi_i(y)>
+   * Want: argmax L(y_i, y) - <w, psi_i(y)>
    * This returns the most violating (Loss-augmented) label.
    */
   def oracleFn(model: StructSVMModel[Vector[Double], MultiClassLabel], xi: Vector[Double], yi: MultiClassLabel): MultiClassLabel = {
@@ -61,7 +63,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
 
     // Obtain a list of scores for each class
     val mostViolatedContraint: (Double, Double) =
-      (0 to numClasses).map {
+      (0 until numClasses).map {
         case cl =>
           (cl, weights dot featureFn(xi, MultiClassLabel(cl, numClasses)))
       }.map {
@@ -91,7 +93,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
     assert(numClasses > 1)
 
     val prediction =
-      (0 to numClasses).map {
+      (0 until numClasses).map {
         case cl =>
           (cl.toDouble, weights dot featureFn(xi, MultiClassLabel(cl, numClasses)))
       }.maxBy { // Obtain the class with the maximum value
@@ -104,13 +106,15 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
 
   /**
    * Classifying with in-built functions
+   *
+   * data needs to be 0-indexed
    */
   def train(
     data: RDD[LabeledPoint],
+    numClasses: Int,
     solverOptions: SolverOptions[Vector[Double], MultiClassLabel]): StructSVMModel[Vector[Double], MultiClassLabel] = {
 
-    val numClasses = solverOptions.numClasses
-    assert(numClasses < 1)
+    solverOptions.numClasses = numClasses
 
     // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
     val objectifiedData: RDD[LabeledObject[Vector[Double], MultiClassLabel]] =
@@ -167,6 +171,12 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
     val numClasses = solverOptions.numClasses
     assert(numClasses < 1)
 
+    val minlabel = data.map(_.label).min()
+    val maxlabel = data.map(_.label).max()
+    assert(minlabel == 0, "Label classes need to be 0-indexed")
+    assert(maxlabel - minlabel + 1 == numClasses,
+      "Number of classes in data do not tally with passed argument")
+
     // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
     val objectifiedData: RDD[LabeledObject[Vector[Double], MultiClassLabel]] =
       data.map {
@@ -175,7 +185,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
             if (solverOptions.sparse)
               SparseVector(x.features.toArray)
             else
-              DenseVector(x.features.toArray))
+              Vector(x.features.toArray))
       }
 
     val repartData =
