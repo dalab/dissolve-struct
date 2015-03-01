@@ -256,9 +256,9 @@ class DBCFWSolverTuned[X, Y](
         roundNum =>
           val continueExecution =
             solverOptions.stoppingCriterion match {
-              case solverOptions.RoundLimitCriterion => roundNum <= solverOptions.roundLimit
-              case solverOptions.TimeLimitCriterion  => getElapsedTimeSecs() < solverOptions.timeLimit
-              case solverOptions.GapThresholdCriterion =>
+              case RoundLimitCriterion => roundNum <= solverOptions.roundLimit
+              case TimeLimitCriterion  => getElapsedTimeSecs() < solverOptions.timeLimit
+              case GapThresholdCriterion =>
                 // Calculating duality gap is really expensive. So, check ever gapCheck rounds
                 if (roundNum % solverOptions.gapCheck == 0)
                   getLatestGap() > solverOptions.gapThreshold
@@ -452,6 +452,8 @@ class DBCFWSolverTuned[X, Y](
       // shard.primalInfo: (w_i, ell_i)
       val w_i = shard.primalInfo._1
       val ell_i = shard.primalInfo._2
+
+      println("w_i is sparse - " + w_i.isInstanceOf[SparseVector[Double]])
 
       // 2.a) Search for candidates
       val optionalCache_i: Option[BoundedCacheList[Y]] = shard.cache

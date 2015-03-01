@@ -5,8 +5,25 @@ import breeze.linalg.Vector
 import org.apache.spark.rdd.RDD
 import java.io.File
 
+sealed trait StoppingCriterion
+
+// Option A - Limit number of communication rounds
+case object RoundLimitCriterion extends StoppingCriterion {
+  override def toString(): String = { "RoundLimitCriterion" }
+}
+
+// Option B - Check gap
+case object GapThresholdCriterion extends StoppingCriterion {
+  override def toString(): String = { "GapThresholdCriterion" }
+}
+
+// Option C - Run for this amount of time (in secs)
+case object TimeLimitCriterion extends StoppingCriterion {
+  override def toString(): String = { "TimeLimitCriterion" }
+}
+
 class SolverOptions[X, Y] extends Serializable {
-  var doWeightedAveraging: Boolean = true
+  var doWeightedAveraging: Boolean = false
 
   var randSeed: Int = 42
   /**
@@ -23,7 +40,7 @@ class SolverOptions[X, Y] extends Serializable {
 
   // Checkpoint once in these many rounds
   var checkpointFreq: Int = 50
-  
+
   // In case of multi-class
   var numClasses = -1
 
@@ -46,26 +63,14 @@ class SolverOptions[X, Y] extends Serializable {
   // If 1, obtains statistics in each round
   var debugMultiplier: Int = 1
 
-  // Define stopping criterion
-  sealed trait StoppingCriterion
-
   // Option A - Limit number of communication rounds
-  case object RoundLimitCriterion extends StoppingCriterion {
-    override def toString(): String = { "RoundLimitCriterion" }
-  }
   var roundLimit: Int = 25
 
   // Option B - Check gap
-  case object GapThresholdCriterion extends StoppingCriterion {
-    override def toString(): String = { "GapThresholdCriterion" }
-  }
   var gapThreshold: Double = 0.1
   var gapCheck: Int = 1 // Check for once these many rounds
 
   // Option C - Run for this amount of time (in secs)
-  case object TimeLimitCriterion extends StoppingCriterion {
-    override def toString(): String = { "TimeLimitCriterion" }
-  }
   var timeLimit: Int = 300
 
   var stoppingCriterion: StoppingCriterion = RoundLimitCriterion
@@ -75,7 +80,7 @@ class SolverOptions[X, Y] extends Serializable {
 
   // Path to write the CSVs
   var debugInfoPath: String = new File(".").getCanonicalPath() + "/debugInfo-%d.csv".format(System.currentTimeMillis())
-  
+
   override def toString(): String = {
     val sb: StringBuilder = new StringBuilder()
 
@@ -99,7 +104,7 @@ class SolverOptions[X, Y] extends Serializable {
     sb ++= "# sampleWithReplacement=%s\n".format(sampleWithReplacement)
 
     sb ++= "# debugInfoPath=%s\n".format(debugInfoPath)
-    
+
     sb ++= "# checkpointFreq=%d\n".format(checkpointFreq)
 
     sb ++= "# stoppingCriterion=%s\n".format(stoppingCriterion)
