@@ -198,7 +198,7 @@ Similar to [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/
 
    An oracle which computes the most violating constraint by solving:
 
-	\\[ \hat{Y} = \argmax_{Y \in \mathcal{Y}_i} L(Y_i, Y) - E_w(Y) \\]
+	\\[ \hat{Y} = \arg \max_{Y \in \mathcal{Y}_i} L(Y_i, Y) - E_w(Y) \\]
 
 	where \\( E_w(Y) \\) is the energy/cost function.
 
@@ -206,7 +206,7 @@ Similar to [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/
 
    A prediction function that computes:
 
-	\\[ \hat{Y} = \argmin_{Y \in \mathcal{Y}_i} E_w(Y) \\]
+	\\[ \hat{Y} = \arg \min_{Y \in \mathcal{Y}_i} E_w(Y) \\]
 
 
 These four functions need to be implemented by using a class/object which mixes-in the trait `DissolveFunctions`.
