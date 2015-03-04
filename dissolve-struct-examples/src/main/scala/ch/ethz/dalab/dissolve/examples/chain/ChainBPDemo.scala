@@ -3,6 +3,7 @@ package ch.ethz.dalab.dissolve.examples.chain
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Matrix
@@ -12,6 +13,8 @@ import breeze.linalg.max
 import breeze.linalg.sum
 import cc.factorie.infer.MaximizeByMPLP
 import cc.factorie.model.Factor
+import cc.factorie.model.Factor1
+import cc.factorie.model.Factor2
 import cc.factorie.model.ItemizedModel
 import cc.factorie.variable.DiscreteDomain
 import cc.factorie.variable.DiscreteVariable
@@ -22,8 +25,6 @@ import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import cc.factorie.model.Factor2
-import cc.factorie.model.Factor1
 
 
 /**

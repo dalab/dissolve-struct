@@ -1,24 +1,24 @@
 package ch.ethz.dalab.dissolve.examples.imageseg
 
-import scala.annotation.elidable
-import scala.annotation.elidable.ASSERTION
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.Buffer
+import scala.io.Source
+
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
-import breeze.linalg.Axis
+import org.apache.spark.SparkContext
+
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Vector
-import breeze.linalg.max
-import breeze.linalg.sum
 import breeze.linalg.normalize
-import breeze.linalg.diag
-import breeze.numerics.abs
+import cc.factorie.infer.MaximizeByMPLP
 import cc.factorie.infer.SamplingMaximizer
 import cc.factorie.infer.VariableSettingsSampler
-import cc.factorie.model.{ Factor, Factor1, Factor2 }
 import cc.factorie.model.CombinedModel
+import cc.factorie.model.Factor
+import cc.factorie.model.Factor1
+import cc.factorie.model.Factor2
 import cc.factorie.model.ItemizedModel
 import cc.factorie.model.TupleTemplateWithStatistics2
 import cc.factorie.singleFactorIterable
@@ -26,13 +26,11 @@ import cc.factorie.variable.DiscreteDomain
 import cc.factorie.variable.DiscreteVariable
 import cc.factorie.variable.IntegerVariable
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import org.apache.spark.SparkContext
-import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
-import scala.io.Source
-import cc.factorie.infer.MaximizeByMPLP
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
+import ch.ethz.dalab.dissolve.optimization.RoundLimitCriterion
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.optimization.SolverUtils
 
 case class ROIFeature(feature: Vector[Double], name: String = "NA") // Represent each pixel/region by a feature vector
 
@@ -553,7 +551,7 @@ object ImageSegmentationDemo extends DissolveFunctions[DenseMatrix[ROIFeature], 
       solverOptions.sampleFrac = 0.5
       solverOptions.enableOracleCache = false
       solverOptions.oracleCacheSize = 100
-      solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
+      solverOptions.stoppingCriterion = RoundLimitCriterion
       solverOptions.roundLimit = 5
       solverOptions.enableManualPartitionSize = true
       solverOptions.NUM_PART = 1

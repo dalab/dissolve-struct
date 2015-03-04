@@ -1,20 +1,21 @@
 package ch.ethz.dalab.dissolve.examples.binaryclassification
 
-import ch.ethz.dalab.dissolve.utils.DissolveUtils
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import ch.ethz.dalab.dissolve.optimization.SolverUtils
-import org.apache.spark.mllib.util.MLUtils
+import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import breeze.linalg._
-import breeze.numerics.abs
-import org.apache.log4j.PropertyConfigurator
+import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
+
+import breeze.linalg.SparseVector
+import breeze.linalg.Vector
+import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
 import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
+import ch.ethz.dalab.dissolve.optimization.GapThresholdCriterion
+import ch.ethz.dalab.dissolve.optimization.RoundLimitCriterion
+import ch.ethz.dalab.dissolve.optimization.SolverOptions
+import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 object RCV1Binary {
 
@@ -48,14 +49,14 @@ object RCV1Binary {
 
     options.getOrElse("stoppingcriterion", "round") match {
       case "round" =>
-        solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
+        solverOptions.stoppingCriterion = RoundLimitCriterion
         solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
       case "gap" =>
-        solverOptions.stoppingCriterion = solverOptions.GapThresholdCriterion
+        solverOptions.stoppingCriterion = GapThresholdCriterion
         solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
         solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
       case "time" =>
-        solverOptions.stoppingCriterion = solverOptions.TimeLimitCriterion
+        solverOptions.stoppingCriterion = TimeLimitCriterion
         solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
       case _ =>
         println("Unrecognized Stopping Criterion. Moving to default criterion.")

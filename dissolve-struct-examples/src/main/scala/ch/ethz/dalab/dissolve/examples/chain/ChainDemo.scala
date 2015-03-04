@@ -16,8 +16,11 @@ import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
+import ch.ethz.dalab.dissolve.optimization.GapThresholdCriterion
+import ch.ethz.dalab.dissolve.optimization.RoundLimitCriterion
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
+import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 
@@ -417,14 +420,14 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
     options.getOrElse("stoppingcriterion", "round") match {
       case "round" =>
-        solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
+        solverOptions.stoppingCriterion = RoundLimitCriterion
         solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
       case "gap" => 
-        solverOptions.stoppingCriterion = solverOptions.GapThresholdCriterion
+        solverOptions.stoppingCriterion = GapThresholdCriterion
         solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
         solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
       case "time" => 
-        solverOptions.stoppingCriterion = solverOptions.TimeLimitCriterion
+        solverOptions.stoppingCriterion = TimeLimitCriterion
         solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
       case _ =>
         println("Unrecognized Stopping Criterion. Moving to default criterion.")
@@ -443,7 +446,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
       solverOptions.NUM_PART = 3
       solverOptions.doWeightedAveraging = false
       
-      solverOptions.stoppingCriterion = solverOptions.RoundLimitCriterion
+      solverOptions.stoppingCriterion = RoundLimitCriterion
       solverOptions.roundLimit = 5
       
       solverOptions.debug = false

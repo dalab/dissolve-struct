@@ -1,6 +1,5 @@
 package ch.ethz.dalab.dissolve.examples.binaryclassification
 
-import ch.ethz.dalab.dissolve.utils.DissolveUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
