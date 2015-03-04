@@ -32,7 +32,7 @@ cd dissolve-struct-examples
 sbt package
 {% endhighlight %}
 
-(you might have to install `sbt` first, which can be done by`brew install sbt` if on a mac.)
+(you might have to install `sbt` first, which can be done by running `brew install sbt` on a mac or `sudo apt-get install sbt` on Ubuntu.)
 
 **Option 2 - Obtain packaged binaries**
 
