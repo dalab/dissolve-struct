@@ -2,23 +2,27 @@ import numpy as np
 import scipy.io
 import sys
 import os
+from paths import *
 
 FILTER_FOLD = True
 TST_FOLD_NUMS = [0,] # Datapoints from these folds will be treated as test dataset
 
 def main():
-
-    cwd = os.getcwd().split('/')[-1]
-    if cwd != 'data':
-        sys.exit("usage (within data directory):   python convert-ocr-data.py")
-
     idx_trn = 0
     idx_tst = 0
 
-    mat = scipy.io.loadmat('ocr.mat', struct_as_record=False, squeeze_me=True)
+    ocr_mat_path = os.path.join(DATA_DIR, 'ocr.mat')
+    patterns_train_path = os.path.join(GEN_DATA_DIR, 'patterns_train.csv')
+    patterns_test_path = os.path.join(GEN_DATA_DIR, 'patterns_test.csv')
+    labels_train_path = os.path.join(GEN_DATA_DIR, 'labels_train.csv')
+    labels_test_path = os.path.join(GEN_DATA_DIR, 'labels_test.csv')
+    folds_train_path = os.path.join(GEN_DATA_DIR, 'folds_train.csv')
+    folds_test_path = os.path.join(GEN_DATA_DIR, 'folds_test.csv')
+
+    mat = scipy.io.loadmat(ocr_mat_path, struct_as_record=False, squeeze_me=True)
     n = np.shape(mat['dataset'])[0]
-    with open('generated/patterns_train.csv', 'w') as fpat_trn, open('generated/labels_train.csv', 'w') as flab_trn, open('generated/folds_train.csv', 'w') as ffold_trn, \
-         open('generated/patterns_test.csv', 'w')  as fpat_tst, open('generated/labels_test.csv', 'w')  as flab_tst, open('generated/folds_test.csv', 'w') as ffold_tst:
+    with open(patterns_train_path, 'w') as fpat_trn, open(labels_train_path, 'w') as flab_trn, open(folds_train_path, 'w') as ffold_trn, \
+         open(patterns_test_path, 'w')  as fpat_tst, open(labels_test_path, 'w')  as flab_tst, open(folds_test_path, 'w') as ffold_tst:
         for i in range(n):
             ### Write folds
             fold = mat['dataset'][i].__dict__['fold']
