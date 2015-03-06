@@ -93,26 +93,53 @@ object CLAParser {
       } text ("other arguments")
     }
 
-  def argsToOptions[X, Y](args: Array[String]): Unit = {
+  def argsToOptions[X, Y](args: Array[String]): (SolverOptions[X, Y], Map[String, String]) = {
     val solverOptions: SolverOptions[X, Y] = new SolverOptions[X, Y]()
+    val kwargs: Map[String, String] = Map[String, String]()
 
     getParser().parse(args, Config()) match {
       case Some(config) =>
-        println(config)
+        // Copy all config parameters to a Solver Options instance
+        solverOptions.lambda = config.lambda
+        solverOptions.randSeed = config.randSeed
+        solverOptions.doLineSearch = config.lineSearch
+        solverOptions.doWeightedAveraging = config.wavg
+
+        solverOptions.sampleFrac = config.sampleFrac
+        if (config.minPartitions > 0) {
+          solverOptions.enableManualPartitionSize = true
+          solverOptions.NUM_PART = config.minPartitions
+        }
+        solverOptions.sparse = config.sparse
+
+        if (config.oracleSize > 0) {
+          solverOptions.enableOracleCache = true
+          solverOptions.oracleCacheSize = config.oracleSize
+        }
+
+        solverOptions.checkpointFreq = config.checkpointFreq
+
+        solverOptions.stoppingCriterion = config.stoppingCriterion
+        solverOptions.roundLimit = config.roundLimit
+        solverOptions.gapCheck = config.gapCheck
+        solverOptions.gapThreshold = config.gapThreshold
+        solverOptions.timeLimit = config.timeLimit
+
+        solverOptions.debug = config.debug
+        solverOptions.debugMultiplier = config.debugMultiplier
+        solverOptions.debugInfoPath = config.debugPath
 
       case None =>
-        println("None")
+      // No options passed. Do nothing.
     }
+
+    (solverOptions, kwargs)
   }
 
   def main(args: Array[String]): Unit = {
-    val foo = getParser().parse(args, Config()) match {
-      case Some(config) =>
-        println(config)
-
-      case None =>
-        println("None")
-    }
+    val foo = argsToOptions(args)
+    println(foo._1.toString())
+    println(foo._2)
   }
 
 }
