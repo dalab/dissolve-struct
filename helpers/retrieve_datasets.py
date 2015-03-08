@@ -5,8 +5,6 @@ import subprocess
 from paths import *
 import argparse
 
-from ocr_helpers import convert_ocr_data
-
 
 def decompress(filename):
     print "Decompressing: ", filename
@@ -48,7 +46,8 @@ def retrieve(download_all=False):
         for url in CHAIN_URLS:
             download_to_gen_dir(url)
     else:
-        convert_ocr_data()
+        import ocr_helpers
+        ocr_helpers.convert_ocr_data()
 
 
 def main():
