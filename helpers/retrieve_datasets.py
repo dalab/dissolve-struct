@@ -3,6 +3,9 @@
 import urllib
 import subprocess
 from paths import *
+import argparse
+
+from ocr_helpers import convert_ocr_data
 
 
 def decompress(filename):
@@ -25,7 +28,8 @@ def download_and_decompress(url):
     destname = download_to_gen_dir(url)
     decompress(destname)
 
-def main():
+
+def retrieve(download_all=False):
     # Retrieve the files
     print "=== A1A ==="
     download_to_gen_dir(A1A_URL)
@@ -40,8 +44,20 @@ def main():
     download_and_decompress(RCV1_URL)
 
     print "=== CHAIN ==="
-    for url in CHAIN_URLS:
-        download_to_gen_dir(url)
+    if download_all:
+        for url in CHAIN_URLS:
+            download_to_gen_dir(url)
+    else:
+        convert_ocr_data()
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Retrieve datasets for dissolve^struct')
+    parser.add_argument("-d", "--download", action="store_true",
+                        help="Download files instead of processing when possible")
+    args = parser.parse_args()
+
+    retrieve(args.download)
 
 
 if __name__ == '__main__':

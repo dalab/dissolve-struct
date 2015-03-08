@@ -1,13 +1,12 @@
 import numpy as np
 import scipy.io
-import sys
 import os
 from paths import *
 
 FILTER_FOLD = True
 TST_FOLD_NUMS = [0,] # Datapoints from these folds will be treated as test dataset
 
-def main():
+def convert_ocr_data():
     idx_trn = 0
     idx_tst = 0
 
@@ -18,6 +17,8 @@ def main():
     labels_test_path = os.path.join(GEN_DATA_DIR, 'labels_test.csv')
     folds_train_path = os.path.join(GEN_DATA_DIR, 'folds_train.csv')
     folds_test_path = os.path.join(GEN_DATA_DIR, 'folds_test.csv')
+
+    print "Processing features available in %s" % ocr_mat_path
 
     mat = scipy.io.loadmat(ocr_mat_path, struct_as_record=False, squeeze_me=True)
     n = np.shape(mat['dataset'])[0]
@@ -57,6 +58,10 @@ def main():
             labels_str = ','.join([`a` for a in labels])
             # FORMAT: id,#letters,letter_0,letter_1,...letter_n
             flab.write('%d,%d,%s\n' % (idx, np.shape(labels)[0], labels_str))
+
+
+def main():
+    convert_ocr_data()
 
 if __name__ == '__main__':
     main()

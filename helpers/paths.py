@@ -8,6 +8,8 @@ PROJECT_DIR = os.path.join(os.path.dirname(current_file_path), os.pardir)
 DATA_DIR = os.path.join(PROJECT_DIR, 'data')
 GEN_DATA_DIR = os.path.join(DATA_DIR, 'generated')
 
+CHAIN_OCR_FILE = os.path.join(DATA_DIR, "ocr.mat")
+
 
 
 # URLS for DATASETS
