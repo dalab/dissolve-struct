@@ -68,11 +68,12 @@ object CLAParser {
       opt[Double]("gapthresh") action { (x, c) =>
         c.copy(gapThreshold = x)
       } text ("Gap Threshold. Default = 0.1")
+      
       opt[Int]("gapcheck") action { (x, c) =>
         c.copy(gapCheck = x)
       } text ("Checks for gap every these many rounds. Default = 25")
 
-      opt[Int]("gapcheck") action { (x, c) =>
+      opt[Int]("timelimit") action { (x, c) =>
         c.copy(timeLimit = x)
       } text ("Time Limit (in secs). Default = 300 secs")
 

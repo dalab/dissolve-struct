@@ -64,6 +64,9 @@ def main():
     data_dir = os.path.join(dissolve_dir, "data")
     ssh_spark("/root/ephemeral-hdfs/bin/hadoop fs -put %s data" % data_dir)
 
+    # === Create a file to mark everything is setup ===
+    ssh_spark("touch onesmallstep", cwd=WDIR)
+
 
 if __name__ == '__main__':
     main()
