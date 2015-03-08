@@ -5,10 +5,14 @@ import ConfigParser
 import datetime
 import os
 
+from benchmark_utils import *
+
 VALID_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize"}
 VAL_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize", "stopcrit", "roundlimit", "gaplimit", "gapcheck",
               "timelimit", "debugmult"}
 BOOL_PARAMS = {"sparse", "debug", "linesearch"}
+
+WDIR = "/home/ec2-user"  # Working directory
 
 
 def main():
@@ -17,6 +21,13 @@ def main():
     parser.add_argument("master_uri", help="URI of master node")
     parser.add_argument("expt_config", help="Experimental config file")
     args = parser.parse_args()
+
+    master_host = args.master_uri
+    identity_file = args.identity_file
+
+    def ssh_spark(command, user="root", cwd=WDIR):
+        command = "source /root/.bash_profile; cd %s; %s" % (cwd, command)
+        ssh(master_host, user, identity_file, command)
 
     config = ConfigParser.ConfigParser()
     config.read(args.expt_config)
@@ -82,9 +93,13 @@ def main():
                  pivot_param_arg])
 
             # == Construct App-specific arguments ===
+            debug_filename = "%s.csv" % appname
+            debug_file_path = os.path.join(WDIR, debug_filename)
             default_app_args = ("appname={appname},"
-                                "input_path={input_path}").format(appname=appname,
-                                                                  input_path=hdfs_input_path)
+                                "input_path={input_path},"
+                                "debug_file={debug_file_path}").format(appname=appname,
+                                                                       input_path=hdfs_input_path,
+                                                                       debug_file_path=debug_file_path)
             extra_app_args = ','.join(["%s=%s" % (k, v) for k, v in config.items("app_args")])
 
             app_args = ','.join([default_app_args, extra_app_args])
@@ -97,16 +112,16 @@ def main():
                                                               solver_options_args=solver_options_args,
                                                               app_args=app_args)
 
-            print spark_submit_cmd
-            print
-
             '''
             Execute Command
             '''
+            print "Executing on %s:\n%s" % (master_host, spark_submit_cmd)
+            ssh_spark(spark_submit_cmd)
 
             '''
             Obtain required files
             '''
+            scp_from(master_host, identity_file, "root", debug_file_path, local_output_dir)
 
             '''
             Perform clean-up
