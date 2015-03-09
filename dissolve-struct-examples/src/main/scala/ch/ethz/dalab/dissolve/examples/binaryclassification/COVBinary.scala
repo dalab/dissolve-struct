@@ -119,16 +119,7 @@ object COVBinary {
 
     PropertyConfigurator.configure("conf/log4j.properties")
 
-    val options: Map[String, String] = args.map { arg =>
-      arg.dropWhile(_ == '-').split('=') match {
-        case Array(opt, v) => (opt -> v)
-        case Array(opt)    => (opt -> "true")
-        case _             => throw new IllegalArgumentException("Invalid argument: " + arg)
-      }
-    }.toMap
-
     System.setProperty("spark.akka.frameSize", "512")
-    println(options)
 
     dbcfwCov(args)
   }
