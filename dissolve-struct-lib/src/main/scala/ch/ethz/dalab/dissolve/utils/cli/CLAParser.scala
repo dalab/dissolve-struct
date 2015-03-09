@@ -68,7 +68,7 @@ object CLAParser {
       opt[Double]("gapthresh") action { (x, c) =>
         c.copy(gapThreshold = x)
       } text ("Gap Threshold. Default = 0.1")
-      
+
       opt[Int]("gapcheck") action { (x, c) =>
         c.copy(gapCheck = x)
       } text ("Checks for gap every these many rounds. Default = 25")
@@ -94,12 +94,11 @@ object CLAParser {
       } text ("other arguments")
     }
 
-  def argsToOptions[X, Y](args: Array[String]): (SolverOptions[X, Y], Map[String, String]) = {
-    val solverOptions: SolverOptions[X, Y] = new SolverOptions[X, Y]()
-    val kwargs: Map[String, String] = Map[String, String]()
+  def argsToOptions[X, Y](args: Array[String]): (SolverOptions[X, Y], Map[String, String]) =
 
     getParser().parse(args, Config()) match {
       case Some(config) =>
+        val solverOptions: SolverOptions[X, Y] = new SolverOptions[X, Y]()
         // Copy all config parameters to a Solver Options instance
         solverOptions.lambda = config.lambda
         solverOptions.randSeed = config.randSeed
@@ -130,12 +129,15 @@ object CLAParser {
         solverOptions.debugMultiplier = config.debugMultiplier
         solverOptions.debugInfoPath = config.debugPath
 
-      case None =>
-      // No options passed. Do nothing.
-    }
+        (solverOptions, config.kwargs)
 
-    (solverOptions, kwargs)
-  }
+      case None =>
+        // No options passed. Do nothing.
+        val solverOptions: SolverOptions[X, Y] = new SolverOptions[X, Y]()
+        val kwargs = Map[String, String]()
+
+        (solverOptions, kwargs)
+    }
 
   def main(args: Array[String]): Unit = {
     val foo = argsToOptions(args)
