@@ -87,6 +87,9 @@ object COVMulticlass {
   def main(args: Array[String]): Unit = {
 
     PropertyConfigurator.configure("conf/log4j.properties")
+    
+    System.setProperty("spark.akka.frameSize", "512")
+    
     dissoveCovMulti(args)
   }
 

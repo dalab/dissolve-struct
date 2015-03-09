@@ -459,6 +459,8 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
   def main(args: Array[String]): Unit = {
     PropertyConfigurator.configure("conf/log4j.properties")
     
+    System.setProperty("spark.akka.frameSize", "512")
+    
     chainDBCFWCoCoA(args)
     
     // chainBCFW()
