@@ -64,6 +64,9 @@ object COVBinary {
     val appname = kwargs.getOrElse("appname", "cov_binary")
     val debugPath = kwargs.getOrElse("debug_file", "cov_binary-%d.csv".format(System.currentTimeMillis() / 1000))
     solverOptions.debugInfoPath = debugPath
+    
+    println(covPath)
+    println(kwargs)
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)

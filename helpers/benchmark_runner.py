@@ -29,6 +29,10 @@ def main():
         command = "source /root/.bash_profile; cd %s; %s" % (cwd, command)
         ssh(master_host, user, identity_file, command)
 
+    # Check if setup has been executed
+    ssh_spark("if [ ! -f /home/ec2-user/onesmallstep ]; then echo \"Run benchmark_setup and try again\"; exit 1; fi",
+              cwd=WDIR)
+
     dtf = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
     appname_format = "{dtf}-{expt_name}-R{rep_num}-{param}-{paramval}"
     spark_submit_cmd_format = ("{spark_submit} "

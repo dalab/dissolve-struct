@@ -3,7 +3,6 @@ package ch.ethz.dalab.dissolve.examples.chain
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
-
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Matrix
@@ -22,6 +21,7 @@ import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.utils.cli.CLAParser
 
 
 /**
@@ -382,80 +382,22 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
    * (CoCoA)
    * ****************************************************************
    */
-  def chainDBCFWCoCoA(options: Map[String, String]): Unit = {
+  def chainDBCFWCoCoA(args: Array[String]): Unit = {
+    
+    val PERC_TRAIN = 1.0
 
     /**
      * Load all options
      */
-    val PERC_TRAIN: Double = options.getOrElse("perctrain", "0.05").toDouble // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
+    val (solverOptions, kwargs) = CLAParser.argsToOptions[Matrix[Double], Vector[Double]](args)
+    val dataDir = kwargs.getOrElse("input_path", "../data/generated")
+    val appname = kwargs.getOrElse("appname", "chain")
+    val debugPath = kwargs.getOrElse("debug_file", "chain-%d.csv".format(System.currentTimeMillis() / 1000))
+    solverOptions.debugInfoPath = debugPath
     
-    val prefix: String = "chain"
-    val appName: String = options.getOrElse("appname", ExampleUtils
-        .generateExperimentName(prefix = List(prefix, "%d".format(System.currentTimeMillis() / 1000))))
+    println(dataDir)
+    println(kwargs)
     
-    val dataDir: String = options.getOrElse("datadir", "../data/generated")
-    val debugDir: String = options.getOrElse("debugdir", "../debug")
-    
-    val runLocally: Boolean = options.getOrElse("local", "false").toBoolean
-
-    val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
-    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
-    solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
-    solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
-    solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
-
-    solverOptions.sample = options.getOrElse("sample", "frac")
-    solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
-    solverOptions.sampleWithReplacement = options.getOrElse("samplewithreplacement", "false").toBoolean
-    
-    solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
-    solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
-    
-    solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
-    solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
-    
-    solverOptions.debugMultiplier = options.getOrElse("debugmultiplier", "5").toInt
-
-    solverOptions.checkpointFreq = options.getOrElse("checkpointfreq", "50").toInt
-
-    options.getOrElse("stoppingcriterion", "round") match {
-      case "round" =>
-        solverOptions.stoppingCriterion = RoundLimitCriterion
-        solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
-      case "gap" => 
-        solverOptions.stoppingCriterion = GapThresholdCriterion
-        solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
-        solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
-      case "time" => 
-        solverOptions.stoppingCriterion = TimeLimitCriterion
-        solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
-      case _ =>
-        println("Unrecognized Stopping Criterion. Moving to default criterion.")
-    }
-    
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/%s.csv".format(appName))
-    
-    /**
-     * Some local overrides
-     */
-    if(runLocally) {
-      solverOptions.sampleFrac = 0.5
-      solverOptions.enableOracleCache = false
-      solverOptions.oracleCacheSize = 10
-      solverOptions.enableManualPartitionSize = true
-      solverOptions.NUM_PART = 3
-      solverOptions.doWeightedAveraging = false
-      
-      solverOptions.stoppingCriterion = RoundLimitCriterion
-      solverOptions.roundLimit = 5
-      
-      solverOptions.debug = false
-      solverOptions.debugMultiplier = 10
-      solverOptions.gapCheck = 10
-    }
-    
-    println(solverOptions.toString())
-
     /**
      * Begin execution
      */
@@ -464,14 +406,10 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
     println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
-    val conf = 
-      if(runLocally)
-        new SparkConf().setAppName(appName).setMaster("local")
-      else
-        new SparkConf().setAppName(appName)
+    val conf = new SparkConf().setAppName(appname)
         
     val sc = new SparkContext(conf)
-    sc.setCheckpointDir(debugDir + "/checkpoint-files")
+    sc.setCheckpointDir("checkpoint-files")
     
     println(SolverUtils.getSparkConfString(sc.getConf))
 
@@ -520,19 +458,8 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
   
   def main(args: Array[String]): Unit = {
     PropertyConfigurator.configure("conf/log4j.properties")
-
-    val options: Map[String, String] = args.map { arg =>
-      arg.dropWhile(_ == '-').split('=') match {
-        case Array(opt, v) => (opt -> v)
-        case Array(opt) => (opt -> "true")
-        case _ => throw new IllegalArgumentException("Invalid argument: " + arg)
-      }
-    }.toMap
     
-    System.setProperty("spark.akka.frameSize","512");
-    println(options)
-
-    chainDBCFWCoCoA(options)
+    chainDBCFWCoCoA(args)
     
     // chainBCFW()
   }

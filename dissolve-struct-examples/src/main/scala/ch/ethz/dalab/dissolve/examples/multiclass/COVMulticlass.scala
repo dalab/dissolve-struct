@@ -10,102 +10,32 @@ import org.apache.spark.rdd.RDD
 import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.classification.MultiClassLabel
 import ch.ethz.dalab.dissolve.classification.MultiClassSVMWithDBCFW
-import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
-import ch.ethz.dalab.dissolve.optimization.GapThresholdCriterion
-import ch.ethz.dalab.dissolve.optimization.RoundLimitCriterion
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.utils.cli.CLAParser
 
 object COVMulticlass {
 
-  def dissoveCovMulti(options: Map[String, String]) {
+  def dissoveCovMulti(args: Array[String]) {
 
     /**
      * Load all options
      */
-    val prefix: String = "cov-multi"
-    val appName: String = options.getOrElse("appname", ExampleUtils
-      .generateExperimentName(prefix = List(prefix, "%d".format(System.currentTimeMillis() / 1000))))
-
-    val dataDir: String = options.getOrElse("datadir", "../data/generated")
-    val debugDir: String = options.getOrElse("debugdir", "../debug")
-
-    val runLocally: Boolean = options.getOrElse("local", "false").toBoolean
-
-    val solverOptions: SolverOptions[Vector[Double], MultiClassLabel] = new SolverOptions()
-    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
-    solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
-    solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
-    solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
-
-    solverOptions.sample = options.getOrElse("sample", "frac")
-    solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
-    solverOptions.sampleWithReplacement = options.getOrElse("samplewithreplacement", "false").toBoolean
-
-    solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
-    solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
-
-    solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
-    solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
-
-    solverOptions.debugMultiplier = options.getOrElse("debugmultiplier", "5").toInt
-
-    solverOptions.checkpointFreq = options.getOrElse("checkpointfreq", "50").toInt
-
-    solverOptions.sparse = options.getOrElse("sparse", "false").toBoolean
-
-    options.getOrElse("stoppingcriterion", "round") match {
-      case "round" =>
-        solverOptions.stoppingCriterion = RoundLimitCriterion
-        solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
-      case "gap" =>
-        solverOptions.stoppingCriterion = GapThresholdCriterion
-        solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
-        solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
-      case "time" =>
-        solverOptions.stoppingCriterion = TimeLimitCriterion
-        solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
-      case _ =>
-        println("Unrecognized Stopping Criterion. Moving to default criterion.")
-    }
-
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/%s.csv".format(appName))
-
-    val defaultCovPath = dataDir + "/covtype.scale.head"
-    val covPath = options.getOrElse("traindata", defaultCovPath)
-
-    /**
-     * Some local overrides
-     */
-    if (runLocally) {
-      solverOptions.sampleFrac = 0.2
-      solverOptions.enableOracleCache = false
-      solverOptions.oracleCacheSize = 10
-      solverOptions.enableManualPartitionSize = true
-      solverOptions.NUM_PART = 1
-      solverOptions.doWeightedAveraging = false
-
-      solverOptions.stoppingCriterion = RoundLimitCriterion
-      solverOptions.roundLimit = 5
-
-      solverOptions.debug = true
-      solverOptions.debugMultiplier = 1
-    }
-
-    println(solverOptions.toString())
+    val (solverOptions, kwargs) = CLAParser.argsToOptions[Vector[Double], MultiClassLabel](args)
+    val covPath = kwargs.getOrElse("input_path", "../data/generated/covtype.scale")
+    val appname = kwargs.getOrElse("appname", "cov_multi")
+    val debugPath = kwargs.getOrElse("debug_file", "cov_multi-%d.csv".format(System.currentTimeMillis() / 1000))
+    solverOptions.debugInfoPath = debugPath
+    
+    println(covPath)
+    println(kwargs)
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)
 
-    val conf =
-      if (runLocally)
-        new SparkConf().setAppName(appName).setMaster("local")
-      else
-        new SparkConf().setAppName(appName)
+    val conf = new SparkConf().setAppName(appname)
 
     val sc = new SparkContext(conf)
-    sc.setCheckpointDir(dataDir + "/checkpoint-files")
+    sc.setCheckpointDir("checkpoint-files")
 
     // Needs labels \in [0, numClasses)
     val data: RDD[LabeledPoint] = MLUtils
@@ -157,19 +87,7 @@ object COVMulticlass {
   def main(args: Array[String]): Unit = {
 
     PropertyConfigurator.configure("conf/log4j.properties")
-
-    val options: Map[String, String] = args.map { arg =>
-      arg.dropWhile(_ == '-').split('=') match {
-        case Array(opt, v) => (opt -> v)
-        case Array(opt)    => (opt -> "true")
-        case _             => throw new IllegalArgumentException("Invalid argument: " + arg)
-      }
-    }.toMap
-
-    System.setProperty("spark.akka.frameSize", "512")
-    println(options)
-
-    dissoveCovMulti(options)
+    dissoveCovMulti(args)
   }
 
 }

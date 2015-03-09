@@ -60,6 +60,10 @@ def main():
     # Execute data retrieval script
     ssh_spark("python helpers/retrieve_datasets.py -d", cwd=dissolve_dir)
 
+    # === Setup environment ===
+    conf_dir = os.path.join(dissolve_examples_dir, "conf")
+    ssh_spark("cp -r %s %s" % (conf_dir, WDIR))
+
     # === Move data to HDFS ===
     data_dir = os.path.join(dissolve_dir, "data")
     ssh_spark("/root/ephemeral-hdfs/bin/hadoop fs -put %s data" % data_dir)
