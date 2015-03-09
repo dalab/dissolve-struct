@@ -30,7 +30,7 @@ class SolverOptions[X, Y] extends Serializable {
    *  BCFW - "uniform", "perm" or "iter"
    *  DBCFW - "count", "frac"
    */
-  var sample: String = "perm"
+  var sample: String = "frac"
   var lambda: Double = 0.01 // FIXME This is 1/n in Matlab code
 
   var testData: Option[Seq[LabeledObject[X, Y]]] = Option.empty[Seq[LabeledObject[X, Y]]]

@@ -7,7 +7,6 @@ import org.apache.spark.mllib.classification.SVMWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-
 import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
 import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
@@ -16,6 +15,7 @@ import ch.ethz.dalab.dissolve.optimization.RoundLimitCriterion
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.utils.cli.CLAParser
 
 object COVBinary {
 
@@ -55,63 +55,22 @@ object COVBinary {
   /**
    * DBCFW classifier
    */
-  def dbcfwCov(options: Map[String, String]) {
+  def dbcfwCov(args: Array[String]) {
     /**
      * Load all options
      */
-    val prefix: String = "cov"
-    val appName: String = options.getOrElse("appname", ExampleUtils
-      .generateExperimentName(prefix = List(prefix, "%d".format(System.currentTimeMillis() / 1000))))
-
-    val dataDir: String = options.getOrElse("datadir", "../data/generated")
-    val debugDir: String = options.getOrElse("debugdir", "../debug")
-
-    val solverOptions: SolverOptions[Vector[Double], Double] = new SolverOptions()
-    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
-    solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
-    solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
-    solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
-
-    solverOptions.sample = options.getOrElse("sample", "frac")
-    solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
-    solverOptions.sampleWithReplacement = options.getOrElse("samplewithreplacement", "false").toBoolean
-
-    solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
-    solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
-
-    solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
-    solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
-
-    solverOptions.debugMultiplier = options.getOrElse("debugmultiplier", "5").toInt
-
-    solverOptions.checkpointFreq = options.getOrElse("checkpointfreq", "50").toInt
-
-    options.getOrElse("stoppingcriterion", "round") match {
-      case "round" =>
-        solverOptions.stoppingCriterion = RoundLimitCriterion
-        solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
-      case "gap" =>
-        solverOptions.stoppingCriterion = GapThresholdCriterion
-        solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
-        solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
-      case "time" =>
-        solverOptions.stoppingCriterion = TimeLimitCriterion
-        solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
-      case _ =>
-        println("Unrecognized Stopping Criterion. Moving to default criterion.")
-    }
-
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/%s.csv".format(appName))
-
-    val defaultCovPath = dataDir + "/covtype.libsvm.binary.scale"
-    val covPath = options.getOrElse("traindata", defaultCovPath)
+    val (solverOptions, kwargs) = CLAParser.argsToOptions[Vector[Double], Double](args)
+    val covPath = kwargs.getOrElse("input_path", "../data/generated/covtype.libsvm.binary.scale")
+    val appname = kwargs.getOrElse("appname", "cov_binary")
+    val debugPath = kwargs.getOrElse("debug_file", "cov_binary-%d.csv".format(System.currentTimeMillis() / 1000))
+    solverOptions.debugInfoPath = debugPath
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)
 
-    val conf = new SparkConf().setAppName("COV-example")
+    val conf = new SparkConf().setAppName(appname)
     val sc = new SparkContext(conf)
-    sc.setCheckpointDir(dataDir + "/checkpoint-files")
+    sc.setCheckpointDir("checkpoint-files")
 
     // Labels needs to be in a +1/-1 format
     val data = MLUtils
@@ -171,7 +130,7 @@ object COVBinary {
     System.setProperty("spark.akka.frameSize", "512")
     println(options)
 
-    dbcfwCov(options)
+    dbcfwCov(args)
   }
 
 }

@@ -29,6 +29,16 @@ def main():
         command = "source /root/.bash_profile; cd %s; %s" % (cwd, command)
         ssh(master_host, user, identity_file, command)
 
+    dtf = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
+    appname_format = "{dtf}-{expt_name}-R{rep_num}-{param}-{paramval}"
+    spark_submit_cmd_format = ("{spark_submit} "
+                               "--jars {lib_jar_path} "
+                               "--class \"{class_name}\" "
+                               "{spark_args} "
+                               "{examples_jar_path} "
+                               "{solver_options_args} "
+                               "--kwargs k1=v1,{app_args}")
+
     config = ConfigParser.ConfigParser()
     config.read(args.expt_config)
 
@@ -43,25 +53,26 @@ def main():
     pivot_values = map(lambda x: x.strip(), pivot_values_raw.split(","))
 
     # Paths
-    lib_jar_path = config.get("paths", "lib_jar_path")
     examples_jar_path = config.get("paths", "examples_jar_path")
     spark_dir = config.get("paths", "spark_dir")
     spark_submit_path = os.path.join(spark_dir, "bin", "spark-submit")
     hdfs_input_path = config.get("paths", "hdfs_input_path")
-    local_output_dir = config.get("paths", "local_output_dir")
 
-    dtf = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
-    appname_format = "{dtf}-{expt_name}-R{rep_num}-{param}-{paramval}"
-    spark_submit_cmd_format = ("{spark_submit} "
-                               "--jars {lib_jar_path} "
-                               "--class \"{class_name}\" "
-                               "{spark_args} "
-                               "{examples_jar_path} "
-                               "{solver_options_args} "
-                               "--kwargs k1=v1,{app_args}")
+    local_output_dir = config.get("paths", "local_output_dir")
+    local_output_expt_dir = os.path.join(local_output_dir, "%s %s" % (expt_name, dtf))
+    if not os.path.exists(local_output_expt_dir):
+        os.makedirs(local_output_expt_dir)
+
+    dissolve_lib_jar_path = config.get("paths", "lib_jar_path")
+    scopt_jar_path = "/root/.ivy2/cache/com.github.scopt/scopt_2.10/jars/scopt_2.10-3.3.0.jar"
+    lib_jar_path = ','.join([dissolve_lib_jar_path, scopt_jar_path])
 
     for rep_num in range(1, num_repetitions + 1):
+        print "==========================="
+        print "====== Repetition %d ======" % rep_num
+        print "==========================="
         for pivot_val in pivot_values:
+            print "=== %s = %s ===" % (pivot_param, pivot_val)
             '''
             Construct command to execute on spark cluster
             '''
@@ -121,7 +132,7 @@ def main():
             '''
             Obtain required files
             '''
-            scp_from(master_host, identity_file, "root", debug_file_path, local_output_dir)
+            scp_from(master_host, identity_file, "root", debug_file_path, local_output_expt_dir)
 
             '''
             Perform clean-up

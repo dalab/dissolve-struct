@@ -17,3 +17,9 @@ libraryDependencies += "org.apache.spark" %% "spark-mllib" % "1.2.1"
 resolvers += "IESL Release" at "http://dev-iesl.cs.umass.edu/nexus/content/groups/public"
 
 libraryDependencies += "cc.factorie" % "factorie" % "1.0"
+
+libraryDependencies += "com.github.scopt" %% "scopt" % "3.3.0"
+
+resolvers += Resolver.sonatypeRepo("public")
+
+test in assembly := {}

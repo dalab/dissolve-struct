@@ -186,7 +186,7 @@ class DBCFWSolverTuned[X, Y](
       else if (solverOptions.sample == "count")
         math.min(solverOptions.H / dataSize, 1.0)
       else {
-        println("[WARNING] %s is not a valid option. Reverting to sampling 50% of the dataset")
+        println("[WARNING] %s is not a valid option. Reverting to sampleFrac = 0.5".format(solverOptions.sample))
         0.5
       }
     }
@@ -453,7 +453,7 @@ class DBCFWSolverTuned[X, Y](
       val w_i = shard.primalInfo._1
       val ell_i = shard.primalInfo._2
 
-      println("w_i is sparse - " + w_i.isInstanceOf[SparseVector[Double]])
+      // println("w_i is sparse - " + w_i.isInstanceOf[SparseVector[Double]])
 
       // 2.a) Search for candidates
       val optionalCache_i: Option[BoundedCacheList[Y]] = shard.cache
