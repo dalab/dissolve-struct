@@ -3,6 +3,12 @@
 import subprocess
 
 
+def ssh(host, username, command):
+    subprocess.check_call(
+        "ssh -t -o StrictHostKeyChecking=no %s@%s '%s'" %
+        (username, host, command), shell=True)
+
+
 def ssh(host, username, identity_file, command):
     subprocess.check_call(
         "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %

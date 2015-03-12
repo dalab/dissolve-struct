@@ -14,10 +14,10 @@ def decompress(filename):
         pass
 
 
-def download_to_gen_dir(url):
+def download_to_gen_dir(url, dir=GEN_DATA_DIR):
     print "Downloading: ", url
     basename = os.path.basename(url)
-    destname = os.path.join(GEN_DATA_DIR, basename)
+    destname = os.path.join(dir, basename)
     urllib.urlretrieve(url, destname)
     return destname
 
