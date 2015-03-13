@@ -9,13 +9,15 @@ import os
 from benchmark_utils import *
 from paths import *
 
-VALID_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize"}
+VALID_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize", "num-executors"}
 VAL_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize", "stopcrit", "roundlimit", "gaplimit", "gapcheck",
               "timelimit", "debugmult"}
 BOOL_PARAMS = {"sparse", "debug", "linesearch"}
 
 HOME_DIR = os.getenv("HOME")
 PROJ_DIR = os.path.join(HOME_DIR, "dissolve-struct")
+
+DEFAULT_CORES = 4
 
 
 def execute(command, cwd=PROJ_DIR):
@@ -37,7 +39,7 @@ def main():
     args = parser.parse_args()
 
     # Check if setup has been executed
-    touchfile_path = os.path.join(HOME_DIR, 'onesmallsetup')
+    touchfile_path = os.path.join(HOME_DIR, 'onesmallstep')
     execute("if [ ! -f %s ]; then echo \"Run benchmark_setup and try again\"; exit 1; fi" % touchfile_path,
             cwd=HOME_DIR)
 
@@ -90,12 +92,21 @@ def main():
                                         param=pivot_param,
                                         paramval=pivot_val)
 
-        # === Construct Spark arguments ===
-        spark_args = ','.join(["--%s %s" % (k, v) for k, v in config.items("spark_args")])
-
         # === Construct Solver Options arguments ===
         valued_parameter_args = ' '.join(
-            ["--%s %s" % (k, v) for k, v in config.items("parameters") if k in VAL_PARAMS])
+            ["--%s %s" % (k, v) for k, v in config.items("parameters") if k in VAL_PARAMS and k not in ['minpart']])
+        # Treat 'minpart' as a special case. If minpart = 'auto', set minpart = num_cores * num_executors
+        if 'minpart' in config.options('parameters'):
+            if config.get('parameters', 'minpart') == 'auto':
+                if pivot_param == 'num-executors':
+                    num_executors = int(pivot_val)
+                else:
+                    num_executors = config.getint('spark_args', 'num-executors')
+                minpart = DEFAULT_CORES * num_executors
+            else:
+                minpart = config.getint('parameters', 'minpart')
+            minpart_arg = '--minpart %d' % minpart
+            valued_parameter_args = ' '.join([valued_parameter_args, minpart_arg])
         boolean_parameter_args = ' '.join(
             ["--%s" % k for k, v in config.items("parameters") if k in BOOL_PARAMS and str_to_bool(v)])
         valued_dissolve_args = ' '.join(
@@ -103,13 +114,22 @@ def main():
         boolean_dissolve_args = ' '.join(
             ["--%s" % k for k, v in config.items("dissolve_args") if k in BOOL_PARAMS and str_to_bool(v)])
 
+        solver_options_args = ' '.join(
+            [valued_parameter_args, boolean_parameter_args, valued_dissolve_args, boolean_dissolve_args])
+
+        # === Construct Spark arguments ===
+        spark_args = ','.join(["--%s %s" % (k, v) for k, v in config.items("spark_args")])
+
         # === Add the pivotal parameter ===
         assert (pivot_param not in config.options("parameters"))
+        assert (pivot_param not in config.options("spark_args"))
         pivot_param_arg = "--%s %s" % (pivot_param, pivot_val)
 
-        solver_options_args = ' '.join(
-            [valued_parameter_args, boolean_parameter_args, valued_dissolve_args, boolean_dissolve_args,
-             pivot_param_arg])
+        # Is this pivotal parameters a spark argument or a dissolve argument?
+        if pivot_param in ['num-executors', ]:
+            spark_args = ' '.join([spark_args, pivot_param_arg])
+        else:
+            solver_options_args = ' '.join([solver_options_args, pivot_param_arg])
 
         # == Construct App-specific arguments ===
         debug_filename = "%s.csv" % appname
