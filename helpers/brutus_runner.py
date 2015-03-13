@@ -125,7 +125,7 @@ def main():
             [valued_parameter_args, boolean_parameter_args, valued_dissolve_args, boolean_dissolve_args])
 
         # === Construct Spark arguments ===
-        spark_args = ','.join(["--%s %s" % (k, v) for k, v in config.items("spark_args")])
+        spark_args = ' '.join(["--%s %s" % (k, v) for k, v in config.items("spark_args")])
 
         # === Add the pivotal parameter ===
         assert (pivot_param not in config.options("parameters"))
