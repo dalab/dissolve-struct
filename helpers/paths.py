@@ -10,6 +10,15 @@ GEN_DATA_DIR = os.path.join(DATA_DIR, 'generated')
 
 CHAIN_OCR_FILE = os.path.join(DATA_DIR, "ocr.mat")
 
+# If an sbt build cannot be performed, jars can be accessed here
+JARS_DIR = os.path.join(PROJECT_DIR, 'jars')
+LIB_JAR_PATH = os.path.join(JARS_DIR, 'dissolvestruct_2.10.jar')
+EXAMPLES_JAR_PATH = os.path.join(JARS_DIR, 'dissolvestructexample_2.10-0.1-SNAPSHOT.jar')
+SCOPT_JAR_PATH = os.path.join(JARS_DIR, 'scopt_2.10-3.3.0.jar')
+
+# Output dir. Any output produced in a subdirectory within this folder.
+EXPT_OUTPUT_DIR = os.path.join(PROJECT_DIR, 'benchmark-data')
+
 
 
 # URLS for DATASETS
