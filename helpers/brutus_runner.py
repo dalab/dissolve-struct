@@ -4,7 +4,7 @@ To be executed on the Hadoop main node.
 import argparse
 import ConfigParser
 import datetime
-import os
+import re
 
 from benchmark_utils import *
 from paths import *
@@ -36,6 +36,8 @@ def str_to_bool(s):
 def main():
     parser = argparse.ArgumentParser(description='Run benchmark')
     parser.add_argument("expt_config", help="Experimental config file")
+    parser.add_argument("--ds", help="Run with debugging separately. Forces execution of two spark jobs",
+                        action='store_true')
     args = parser.parse_args()
 
     # Check if setup has been executed
@@ -58,6 +60,11 @@ def main():
 
     expt_name = config.get("general", "experiment_name")
     class_name = config.get("general", "class_name")
+
+    if args.ds:
+        assert ('debug' in config.options('dissolve_args'))
+        # Want debug set to true, in case of double-debugging
+        assert (str_to_bool(config.get('dissolve_args', 'debug')))
 
     # Pivot values
     pivot_param = config.get("pivot", "param")
@@ -133,7 +140,7 @@ def main():
 
         # == Construct App-specific arguments ===
         debug_filename = "%s.csv" % appname
-        debug_file_path = os.path.join(HOME_DIR, debug_filename)
+        debug_file_path = os.path.join(local_output_expt_dir, debug_filename)
         default_app_args = ("appname={appname},"
                             "input_path={input_path},"
                             "debug_file={debug_file_path}").format(appname=appname,
@@ -156,6 +163,37 @@ def main():
         '''
         print "Executing:\n%s" % spark_submit_cmd
         execute(spark_submit_cmd)
+
+        '''
+        If enabled, execute command again, but without the debug flag
+        '''
+        if args.ds:
+            no_debug_appname = appname + '.no_debug'
+            debug_filename = "%s.csv" % no_debug_appname
+            debug_file_path = os.path.join(local_output_expt_dir, debug_filename)
+            default_app_args = ("appname={appname},"
+                                "input_path={input_path},"
+                                "debug_file={debug_file_path}").format(appname=no_debug_appname,
+                                                                       input_path=input_path,
+                                                                       debug_file_path=debug_file_path)
+
+            extra_app_args = ','.join(["%s=%s" % (k, v) for k, v in config.items("app_args")])
+
+            app_args = ','.join([default_app_args, extra_app_args])
+
+            # Get rid of the debugging flag
+            solver_options_args = re.sub(' --debug$', ' ', solver_options_args)
+            solver_options_args = re.sub(' --debug ', ' ', solver_options_args)
+
+            no_debug_spark_submit_cmd = spark_submit_cmd_format.format(spark_submit=spark_submit_path,
+                                                                      lib_jar_path=lib_jar_path,
+                                                                      class_name=class_name,
+                                                                      examples_jar_path=examples_jar_path,
+                                                                      spark_args=spark_args,
+                                                                      solver_options_args=solver_options_args,
+                                                                      app_args=app_args)
+            print "Executing WITHOUT debugging:\n%s" % no_debug_spark_submit_cmd
+            execute(no_debug_spark_submit_cmd)
 
 
 if __name__ == '__main__':
