@@ -8,7 +8,7 @@ import argparse
 from benchmark_utils import *
 
 from retrieve_datasets import retrieve, download_to_gen_dir
-from paths import PROJECT_DIR, JARS_DIR
+from paths import PROJECT_DIR, JARS_DIR, DATA_DIR
 
 LIB_JAR_URL = 'https://dl.dropboxusercontent.com/u/12851272/dissolvestruct_2.10.jar'
 EXAMPLES_JAR_PATH = 'https://dl.dropboxusercontent.com/u/12851272/dissolvestructexample_2.10-0.1-SNAPSHOT.jar'
@@ -43,7 +43,7 @@ def main():
 
     # === Move data to HDFS ===
     print "=== Moving data to HDFS ==="
-    put_data_cmd = "hadoop fs -put dissolve-struct/data /user/%s/data" % username
+    put_data_cmd = "hadoop fs -put %s /user/%s/data" % (DATA_DIR, username)
     ssh_brutus(put_data_cmd)
 
     # === Create a file to mark everything is setup ===
