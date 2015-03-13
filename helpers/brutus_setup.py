@@ -43,11 +43,12 @@ def main():
 
     # === Move data to HDFS ===
     print "=== Moving data to HDFS ==="
-    put_data_cmd = "hadoop fs -put %s /user/%s/data" % (DATA_DIR, username)
+    put_data_cmd = "hadoop fs -put -f %s /user/%s/data" % (DATA_DIR, username)
     ssh_brutus(put_data_cmd)
 
     # === Create a file to mark everything is setup ===
-    ssh_brutus("touch onesmallstep", cwd=HOME_DIR)
+    touch_file_path = os.path.join(HOME_DIR, 'onesmallstep')
+    ssh_brutus("touch %s" % touch_file_path)
 
 
 if __name__ == '__main__':
