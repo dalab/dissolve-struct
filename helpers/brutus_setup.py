@@ -5,7 +5,7 @@ __author__ = 'tribhu'
 import os
 import argparse
 
-from benchmark_utils import ssh
+from benchmark_utils import *
 
 from retrieve_datasets import retrieve, download_to_gen_dir
 from paths import PROJECT_DIR, JARS_DIR

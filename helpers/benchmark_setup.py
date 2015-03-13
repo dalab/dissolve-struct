@@ -30,7 +30,7 @@ def main():
 
     def ssh_spark(command, user="root", cwd=WDIR):
         command = "source /root/.bash_profile; cd %s; %s" % (cwd, command)
-        ssh(master_host, user, identity_file, command)
+        ssh(master_host, user, command, identity_file)
 
     # === Install all required dependencies ===
     # sbt

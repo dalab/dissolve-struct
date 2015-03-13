@@ -27,7 +27,7 @@ def main():
 
     def ssh_spark(command, user="root", cwd=WDIR):
         command = "source /root/.bash_profile; cd %s; %s" % (cwd, command)
-        ssh(master_host, user, identity_file, command)
+        ssh(master_host, user, command, identity_file)
 
     # Check if setup has been executed
     ssh_spark("if [ ! -f /home/ec2-user/onesmallstep ]; then echo \"Run benchmark_setup and try again\"; exit 1; fi",

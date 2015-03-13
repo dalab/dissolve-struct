@@ -3,16 +3,15 @@
 import subprocess
 
 
-def ssh(host, username, command):
-    subprocess.check_call(
-        "ssh -t -o StrictHostKeyChecking=no %s@%s '%s'" %
-        (username, host, command), shell=True)
-
-
-def ssh(host, username, identity_file, command):
-    subprocess.check_call(
-        "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
-        (identity_file, username, host, command), shell=True)
+def ssh(host, username, command, identity_file=None):
+    if not identity_file:
+        subprocess.check_call(
+            "ssh -t -o StrictHostKeyChecking=no %s@%s '%s'" %
+            (username, host, command), shell=True)
+    else:
+        subprocess.check_call(
+            "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
+            (identity_file, username, host, command), shell=True)
 
 
 # Copy a file to a given host through scp, throwing an exception if scp fails
