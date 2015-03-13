@@ -15,6 +15,15 @@ BOOL_PARAMS = {"sparse", "debug", "linesearch"}
 WDIR = "/home/ec2-user"  # Working directory
 
 
+def str_to_bool(s):
+    if s in ['True', 'true']:
+        return True
+    elif s in ['False', 'false']:
+        return False
+    else:
+        raise ValueError("Boolean value in config '%s' unrecognized")
+
+
 def main():
     parser = argparse.ArgumentParser(description='Run benchmark')
     parser.add_argument("identity_file", help="SSH private key to log into spark nodes")
@@ -93,11 +102,11 @@ def main():
             valued_parameter_args = ' '.join(
                 ["--%s %s" % (k, v) for k, v in config.items("parameters") if k in VAL_PARAMS])
             boolean_parameter_args = ' '.join(
-                ["--%s" % k for k, v in config.items("parameters") if k in BOOL_PARAMS and bool(v)])
+                ["--%s" % k for k, v in config.items("parameters") if k in BOOL_PARAMS and str_to_bool(v)])
             valued_dissolve_args = ' '.join(
                 ["--%s %s" % (k, v) for k, v in config.items("dissolve_args") if k in VAL_PARAMS])
             boolean_dissolve_args = ' '.join(
-                ["--%s" % k for k, v in config.items("dissolve_args") if k in BOOL_PARAMS and bool(v)])
+                ["--%s" % k for k, v in config.items("dissolve_args") if k in BOOL_PARAMS and str_to_bool(v)])
 
             # === Add the pivotal parameter ===
             assert (pivot_param not in config.options("parameters"))

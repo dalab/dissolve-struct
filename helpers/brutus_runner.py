@@ -14,12 +14,21 @@ VAL_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize", "stopcrit", "roun
               "timelimit", "debugmult"}
 BOOL_PARAMS = {"sparse", "debug", "linesearch"}
 
-WDIR = os.getenv("HOME")
-PROJ_DIR = os.path.join(WDIR, "dissolve-struct")
+HOME_DIR = os.getenv("HOME")
+PROJ_DIR = os.path.join(HOME_DIR, "dissolve-struct")
 
 
 def execute(command, cwd=PROJ_DIR):
     subprocess.check_call(command, cwd=cwd, shell=True)
+
+
+def str_to_bool(s):
+    if s in ['True', 'true']:
+        return True
+    elif s in ['False', 'false']:
+        return False
+    else:
+        raise ValueError("Boolean value in config '%s' unrecognized")
 
 
 def main():
@@ -28,8 +37,9 @@ def main():
     args = parser.parse_args()
 
     # Check if setup has been executed
-    execute("if [ ! -f /home/ec2-user/onesmallstep ]; then echo \"Run benchmark_setup and try again\"; exit 1; fi",
-            cwd=WDIR)
+    touchfile_path = os.path.join(HOME_DIR, 'onesmallsetup')
+    execute("if [ ! -f %s ]; then echo \"Run benchmark_setup and try again\"; exit 1; fi" % touchfile_path,
+            cwd=HOME_DIR)
 
     dtf = datetime.datetime.now().strftime("%y-%m-%d-%H-%M-%S")
     appname_format = "{dtf}-{expt_name}-{param}-{paramval}"
@@ -87,11 +97,11 @@ def main():
         valued_parameter_args = ' '.join(
             ["--%s %s" % (k, v) for k, v in config.items("parameters") if k in VAL_PARAMS])
         boolean_parameter_args = ' '.join(
-            ["--%s" % k for k, v in config.items("parameters") if k in BOOL_PARAMS and bool(v)])
+            ["--%s" % k for k, v in config.items("parameters") if k in BOOL_PARAMS and str_to_bool(v)])
         valued_dissolve_args = ' '.join(
             ["--%s %s" % (k, v) for k, v in config.items("dissolve_args") if k in VAL_PARAMS])
         boolean_dissolve_args = ' '.join(
-            ["--%s" % k for k, v in config.items("dissolve_args") if k in BOOL_PARAMS and bool(v)])
+            ["--%s" % k for k, v in config.items("dissolve_args") if k in BOOL_PARAMS and str_to_bool(v)])
 
         # === Add the pivotal parameter ===
         assert (pivot_param not in config.options("parameters"))
@@ -103,7 +113,7 @@ def main():
 
         # == Construct App-specific arguments ===
         debug_filename = "%s.csv" % appname
-        debug_file_path = os.path.join(WDIR, debug_filename)
+        debug_file_path = os.path.join(HOME_DIR, debug_filename)
         default_app_args = ("appname={appname},"
                             "input_path={input_path},"
                             "debug_file={debug_file_path}").format(appname=appname,
