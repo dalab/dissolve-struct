@@ -10,7 +10,7 @@ from benchmark_utils import *
 from paths import *
 
 VALID_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize", "num-executors"}
-VAL_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize", "stopcrit", "roundlimit", "gaplimit", "gapcheck",
+VAL_PARAMS = {"lambda", "minpart", "samplefrac", "oraclesize", "stopcrit", "roundlimit", "gaplimit", "gapcheck", "gapthresh",
               "timelimit", "debugmult"}
 BOOL_PARAMS = {"sparse", "debug", "linesearch"}
 
@@ -125,7 +125,7 @@ def main():
             [valued_parameter_args, boolean_parameter_args, valued_dissolve_args, boolean_dissolve_args])
 
         # === Construct Spark arguments ===
-        spark_args = ','.join(["--%s %s" % (k, v) for k, v in config.items("spark_args")])
+        spark_args = ' '.join(["--%s %s" % (k, v) for k, v in config.items("spark_args")])
 
         # === Add the pivotal parameter ===
         assert (pivot_param not in config.options("parameters"))
