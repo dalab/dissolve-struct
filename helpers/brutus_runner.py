@@ -140,7 +140,7 @@ def main():
 
         # == Construct App-specific arguments ===
         debug_filename = "%s.csv" % appname
-        debug_file_path = os.path.join(local_output_expt_dir, debug_filename)
+        debug_file_path = os.path.join('', debug_filename)
         default_app_args = ("appname={appname},"
                             "input_path={input_path},"
                             "debug_file={debug_file_path}").format(appname=appname,
@@ -170,7 +170,7 @@ def main():
         if args.ds:
             no_debug_appname = appname + '.no_debug'
             debug_filename = "%s.csv" % no_debug_appname
-            debug_file_path = os.path.join(local_output_expt_dir, debug_filename)
+            debug_file_path = os.path.join('', debug_filename)
             default_app_args = ("appname={appname},"
                                 "input_path={input_path},"
                                 "debug_file={debug_file_path}").format(appname=no_debug_appname,
