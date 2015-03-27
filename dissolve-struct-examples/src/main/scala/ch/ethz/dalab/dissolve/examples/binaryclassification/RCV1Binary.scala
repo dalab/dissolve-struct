@@ -6,7 +6,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-
 import breeze.linalg.SparseVector
 import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
@@ -16,65 +15,29 @@ import ch.ethz.dalab.dissolve.optimization.RoundLimitCriterion
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.utils.cli.CLAParser
 
 object RCV1Binary {
 
-  def dbcfwRcv1(options: Map[String, String]) {
-    val prefix: String = "rcv1"
-    val appName: String = options.getOrElse("appname", ExampleUtils
-      .generateExperimentName(prefix = List(prefix, "%d".format(System.currentTimeMillis() / 1000))))
-
-    val dataDir: String = options.getOrElse("datadir", "../data/generated")
-    val debugDir: String = options.getOrElse("debugdir", "../debug")
-
-    val solverOptions: SolverOptions[Vector[Double], Double] = new SolverOptions()
-    solverOptions.debug = options.getOrElse("debug", "false").toBoolean
-    solverOptions.lambda = options.getOrElse("lambda", "0.01").toDouble
-    solverOptions.doWeightedAveraging = options.getOrElse("wavg", "false").toBoolean
-    solverOptions.doLineSearch = options.getOrElse("linesearch", "true").toBoolean
-
-    solverOptions.sample = options.getOrElse("sample", "frac")
-    solverOptions.sampleFrac = options.getOrElse("samplefrac", "0.5").toDouble
-    solverOptions.sampleWithReplacement = options.getOrElse("samplewithreplacement", "false").toBoolean
-
-    solverOptions.enableManualPartitionSize = options.getOrElse("manualrddpart", "false").toBoolean
-    solverOptions.NUM_PART = options.getOrElse("numpart", "2").toInt
-
-    solverOptions.enableOracleCache = options.getOrElse("enableoracle", "false").toBoolean
-    solverOptions.oracleCacheSize = options.getOrElse("oraclesize", "5").toInt
-
-    solverOptions.debugMultiplier = options.getOrElse("debugmultiplier", "5").toInt
-
-    solverOptions.checkpointFreq = options.getOrElse("checkpointfreq", "50").toInt
-
-    options.getOrElse("stoppingcriterion", "round") match {
-      case "round" =>
-        solverOptions.stoppingCriterion = RoundLimitCriterion
-        solverOptions.roundLimit = options.getOrElse("roundlimit", "25").toInt
-      case "gap" =>
-        solverOptions.stoppingCriterion = GapThresholdCriterion
-        solverOptions.gapThreshold = options.getOrElse("gapthreshold", "0.1").toDouble
-        solverOptions.gapCheck = options.getOrElse("gapcheck", "10").toInt
-      case "time" =>
-        solverOptions.stoppingCriterion = TimeLimitCriterion
-        solverOptions.timeLimit = options.getOrElse("timelimit", "300").toInt
-      case _ =>
-        println("Unrecognized Stopping Criterion. Moving to default criterion.")
-    }
-
-    solverOptions.debugInfoPath = options.getOrElse("debugpath", debugDir + "/%s.csv".format(appName))
-
-    solverOptions.sparse = true
-
-    val defaultRcv1Path = dataDir + "/rcv1_train.binary"
-    val rcv1Path = options.getOrElse("traindata", defaultRcv1Path)
+  def dbcfwRcv1(args: Array[String]) {
+    /**
+     * Load all options
+     */
+    val (solverOptions, kwargs) = CLAParser.argsToOptions[Vector[Double], Double](args)
+    val rcv1Path = kwargs.getOrElse("input_path", "../data/generated/rcv1_train.binary")
+    val appname = kwargs.getOrElse("appname", "rcv1_binary")
+    val debugPath = kwargs.getOrElse("debug_file", "rcv1_binary-%d.csv".format(System.currentTimeMillis() / 1000))
+    solverOptions.debugInfoPath = debugPath
+    
+    println(rcv1Path)
+    println(kwargs)
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)
 
     println(solverOptions.toString())
 
-    val conf = new SparkConf().setAppName("RCV1-example")
+    val conf = new SparkConf().setAppName(appname)
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
@@ -115,18 +78,9 @@ object RCV1Binary {
 
     PropertyConfigurator.configure("conf/log4j.properties")
 
-    val options: Map[String, String] = args.map { arg =>
-      arg.dropWhile(_ == '-').split('=') match {
-        case Array(opt, v) => (opt -> v)
-        case Array(opt)    => (opt -> "true")
-        case _             => throw new IllegalArgumentException("Invalid argument: " + arg)
-      }
-    }.toMap
-
     System.setProperty("spark.akka.frameSize", "512")
-    println(options)
 
-    dbcfwRcv1(options)
+    dbcfwRcv1(args)
 
   }
 

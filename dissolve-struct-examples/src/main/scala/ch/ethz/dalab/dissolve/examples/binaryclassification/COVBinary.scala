@@ -16,6 +16,7 @@ import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import ch.ethz.dalab.dissolve.utils.cli.CLAParser
+import java.io.File
 
 object COVBinary {
 
@@ -67,6 +68,8 @@ object COVBinary {
     
     println(covPath)
     println(kwargs)
+    
+    println("Current directory:" + new File(".").getAbsolutePath)
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)
