@@ -2,10 +2,10 @@
 layout: dis_template
 ---
 
-dissolve<sup>struct</sup> is a Distributed solver library for structured output prediction, based on Spark.
+dissolve<sup>struct</sup> is a distributed solver library for structured output prediction, based on [Apache Spark](http://spark.apache.org).
 
-The library is based on the primal-dual BCFW solver, allowing approximate inference oracles, and distributes this algorithm using the recent communication efficient CoCoA scheme.
-The interface to the user is the same as in the widely used SVM<sup>struct</sup> in the single machine case.
+The library is based on the primal-dual [BCFW solver](http://jmlr.org/proceedings/papers/v28/lacoste-julien13), allowing approximate inference oracles, and distributes this algorithm using the recent communication efficient [CoCoA](http://papers.nips.cc/paper/5599-communication-efficient-distributed-dual-coordinate-ascent) scheme.
+The interface to the user is the same as in the widely used [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/svm_struct.html) in the single machine case.
 
 <h1> Table of Contents </h1>
 * auto-gen TOC:
@@ -48,20 +48,18 @@ But be warned, these binaries might not be up-to-date since the project is still
 Obtain the datasets using:
 
 {% highlight bash %}
-cd data
-bash retrieve_datasets.sh
-python convert-ocr-data.py
+python helpers/retrieve_datasets.py
 {% endhighlight %}
 
 (you might have to `brew install wget` first if on a mac. Additionally, `pip -r requirements.txt` to obtain the python dependencies.)
 
 ### Executing through command line
 
-Download the [pre-build binary package of Spark](http://spark.apache.org/downloads.html). Here for example we assume the Spark folder is named `spark-1.2.0`.
+Download the [pre-build binary package of Spark](http://spark.apache.org/downloads.html). Here for example we assume the Spark folder is named `spark-1.X`.
 
 Running the examples follows the format:
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit \
+spark-1.X/bin/spark-submit \
 	--jars <dissolve-struct-jar-path> \
 	--class <class> \
 	--master local \
@@ -72,7 +70,7 @@ spark-1.2.0/bin/spark-submit \
 
 For examples, the Binary classification example can be run within the `dissolve-struct-examples` directory using:
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit \
+spark-1.X/bin/spark-submit \
 	--jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar \
 	--class "ch.ethz.dalab.dissolve.examples.binaryclassification.COVBinary" \
 	--master local \
@@ -99,7 +97,7 @@ val conf = new SparkConf()
 ### Binary classification
 Training a binary SVM locally from the command-line is done as follows, here for the Forest Cover (COV) dataset. Within `dissolve-struct-examples` directory, run
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit \
+spark-1.X/bin/spark-submit \
 	--jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar \
 	--class "ch.ethz.dalab.dissolve.examples.binaryclassification.COVBinary" \
 	--master local \
@@ -113,7 +111,7 @@ spark-1.2.0/bin/spark-submit \
 
 Training a chain structured SVM model on the [OCR dataset](http://www.seas.upenn.edu/~taskar/ocr/). This example uses the Viterbi algorithm for the decoding oracle:
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit \
+spark-1.X/bin/spark-submit \
 	--jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar \
 	--class "ch.ethz.dalab.dissolve.examples.chain.ChainDemo" \
 	--master local \
@@ -123,7 +121,7 @@ spark-1.2.0/bin/spark-submit \
 
 Here is the same example using more general Belief Propagation, by employing the [Factorie library](http://factorie.cs.umass.edu/) (Requires [Factorie 1.0 Jar](https://github.com/factorie/factorie/releases) to be placed within `dissolve-struct-examples/lib` directory):
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit \
+spark-1.X/bin/spark-submit \
 	--jars ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar \
 	--class "ch.ethz.dalab.dissolve.examples.chain.ChainBPDemo" \
 	--master local \
@@ -141,7 +139,7 @@ Decoding is performed on a CRF modeled using Factorie, using belief propagation 
 This examples requires the dataset (Pixel-wise labelled image v2 dataset) downloaded from the MSRC [webpage](http://research.microsoft.com/en-us/projects/objectclassrecognition/) to be placed within the `data/generated` directory.
 
 {% highlight bash %}
-spark-1.2.0/bin/spark-submit \
+spark-1.X/bin/spark-submit \
 	--jars \ ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar \
 	--class "ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationDemo" \
 	--master local \
@@ -158,7 +156,7 @@ The training can be done quickly with only unary features using the `-onlyunarie
 
 # Setting up a development environment
 We recommend using [Eclipse for Scala](http://scala-ide.org/download/sdk.html), though a similar setup can also be done in Intellij IDEA.
-To create an Eclipse Scala project for our purposes, the following simple `sbt` command can be used. This generates the respective .classpath files needed.
+To create an Eclipse Scala project for our purposes, the following simple `sbt` command can be used. This generates the respective `.classpath` files needed.
 {% highlight bash %}
 cd dissolve-struct-lib
 sbt eclipse
@@ -176,15 +174,15 @@ The correct version needs to be set for both the projects by:
 Alternatively, we recommend directly working with Eclipse IDE for Scala 2.10.4 from <http://scala-ide.org/download/sdk.html>.
 
 
-# Implementing Structured Prediction using dissolve<sup>struct</sup>
+# Implementing your own Application of Structured Prediction using dissolve<sup>struct</sup>
 
-To implement a custom Structured Prediction solver, using dissolve<sup>struct</sup>, three items are required.
+To implement a custom structured prediction application, using dissolve<sup>struct</sup>, three items are required.
 These items are designed to work around any kind of structured objects.
 The input and output are represented using Scala generics and are tied to types `X` and `Y` respectively.
 
 ## Functions
 
-Similar to [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/svm_struct.html), 4 functions need to be provided:
+Similar to [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/svm_struct.html), 3 functions need to be provided:
 
 1. **Feature Function**
 
@@ -192,24 +190,26 @@ Similar to [SVM<sup>struct</sup>](http://www.cs.cornell.edu/people/tj/svm_light/
 
 2. **Loss function**
 
-	The loss function \\( L(Y_i, Y) \\)
+	The loss function \\( \Delta(Y_i, Y) \\)
 
 3. **Maximization Oracle**
 
    An oracle which computes the most violating constraint by solving:
 
-	\\[ \hat{Y} = \arg \max_{Y \in \mathcal{Y}_i} L(Y_i, Y) - E_w(Y) \\]
+	\\[ \hat{Y} = \arg \min_{Y \in \mathcal{Y}_i}  E_w(Y) - \Delta(Y_i, Y) \\]
 
-	where \\( E_w(Y) \\) is the energy/cost function.
+	where \\( E_w(Y) \\) is the linear classifier function.
 
-4. **Prediction function**
+4. **Prediction function** (optional)
 
    A prediction function that computes:
 
 	\\[ \hat{Y} = \arg \min_{Y \in \mathcal{Y}_i} E_w(Y) \\]
 
+	If no prediction function is defined, the solver will call the maximization oracle with the \\(\Delta\\) term set to zero.
 
-These four functions need to be implemented by using a class/object which mixes-in the trait `DissolveFunctions`.
+
+These functions need to be implemented by using a class/object which mixes-in the trait `DissolveFunctions`.
 
 {% highlight scala %}
 trait DissolveFunctions[X, Y] extends Serializable {
@@ -235,12 +235,12 @@ The data need to be in the form of an RDD consisting of `LabeledObject[X,Y]` obj
 The parameters for the solver can be set using `SolverOptions`:
 {% highlight scala %}
 val solverOptions: SolverOptions[X, Y] = new SolverOptions()
-solverOptions.lambda = 0.01
+solverOptions.lambda = 0.01    // regularization parameter
 {% endhighlight %}
 
 
 
-With these three items, the solver can be trained like so:
+With these three items, a model can be trained as follows:
 
 {% highlight scala %}
 val trainer: StructSVMWithDBCFW[X, Y] =
