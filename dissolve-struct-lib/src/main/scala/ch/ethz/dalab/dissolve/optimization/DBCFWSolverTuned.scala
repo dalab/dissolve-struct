@@ -233,7 +233,7 @@ class DBCFWSolverTuned[X, Y](
         if (solverOptions.testDataRDD.isDefined)
           SolverUtils.averageLoss(solverOptions.testDataRDD.get, dissolveFunctions, model, testDataSize)
         else
-          0.00
+          Double.NaN
 
       val elapsedTime = getElapsedTimeSecs()
 
@@ -407,7 +407,7 @@ class DBCFWSolverTuned[X, Y](
               val dual = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
               val elapsedTime = getElapsedTimeSecs()
 
-              RoundEvaluation(roundNum, elapsedTime, 0.0, dual, 0.0, 0.0, 0.0)
+              RoundEvaluation(roundNum, elapsedTime, Double.NaN, dual, Double.NaN, Double.NaN, Double.NaN)
             }
 
           debugSb ++= roundEvaluation + "\n"
