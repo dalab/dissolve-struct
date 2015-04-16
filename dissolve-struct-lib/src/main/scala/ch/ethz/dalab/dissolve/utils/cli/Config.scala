@@ -17,7 +17,7 @@ case class Config(
   sparse: Boolean = false,
 
   // Oracle
-  oracleSize: Int = 0,
+  oracleCacheSize: Int = 0,
 
   // Spark
   checkpointFreq: Int = 50,

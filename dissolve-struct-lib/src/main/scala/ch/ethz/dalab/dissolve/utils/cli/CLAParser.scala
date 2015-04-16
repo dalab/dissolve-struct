@@ -35,9 +35,9 @@ object CLAParser {
         c.copy(sparse = true)
       } text ("Maintain vectors as sparse vectors. Default = Dense.")
 
-      opt[Int]("oraclesize") action { (x, c) =>
-        c.copy(oracleSize = x)
-      } text ("Oracle Size. Oracle. Default = Disabled")
+      opt[Int]("oraclecachesize") action { (x, c) =>
+        c.copy(oracleCacheSize = x)
+      } text ("Oracle Cache Size (caching answers of the maximization oracle for this datapoint). Default = Disabled")
 
       opt[Int]("cpfreq") action { (x, c) =>
         c.copy(checkpointFreq = x)
@@ -112,9 +112,9 @@ object CLAParser {
         }
         solverOptions.sparse = config.sparse
 
-        if (config.oracleSize > 0) {
+        if (config.oracleCacheSize > 0) {
           solverOptions.enableOracleCache = true
-          solverOptions.oracleCacheSize = config.oracleSize
+          solverOptions.oracleCacheSize = config.oracleCacheSize
         }
 
         solverOptions.checkpointFreq = config.checkpointFreq
