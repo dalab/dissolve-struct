@@ -232,7 +232,7 @@ object ChainBPDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
    * If yi is not given, then standard prediction is done (i.e. MAP decoding),
    * without any loss term.
    */
-  def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] = {
+  override def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] = {
     val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 

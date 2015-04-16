@@ -259,7 +259,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     new Weight(unary, firstBias.toDenseVector, lastBias.toDenseVector, pairwise)
   }
 
-  def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] =
+  override def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] =
     oracleFnWithDecode(model, xi, yi, logDecode)
 
   /**

@@ -39,6 +39,7 @@ class DBCFWSolverTuned[X, Y](
   case class HelperFunctions[X, Y](featureFn: (X, Y) => Vector[Double],
                                    lossFn: (Y, Y) => Double,
                                    oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
+                                   oracleStreamFn: (StructSVMModel[X, Y], X, Y) => Stream[Y],
                                    predictFn: (StructSVMModel[X, Y], X) => Y)
 
   // Input to the mapper: idx -> DataShard
@@ -97,6 +98,7 @@ class DBCFWSolverTuned[X, Y](
     val helperFunctions: HelperFunctions[X, Y] = HelperFunctions(dissolveFunctions.featureFn,
       dissolveFunctions.lossFn,
       dissolveFunctions.oracleFn,
+      dissolveFunctions.oracleCandidateStream,
       dissolveFunctions.predictFn)
 
     /**

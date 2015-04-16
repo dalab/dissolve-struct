@@ -450,7 +450,7 @@ object ImageSegmentationDemo extends DissolveFunctions[DenseMatrix[ROIFeature], 
   /**
    * Oracle function
    */
-  def oracleFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature], yi: DenseMatrix[ROILabel]): DenseMatrix[ROILabel] = {
+  override def oracleFn(model: StructSVMModel[DenseMatrix[ROIFeature], DenseMatrix[ROILabel]], xi: DenseMatrix[ROIFeature], yi: DenseMatrix[ROILabel]): DenseMatrix[ROILabel] = {
 
     if (yi != null) {
       assert(xi.rows == yi.rows)
