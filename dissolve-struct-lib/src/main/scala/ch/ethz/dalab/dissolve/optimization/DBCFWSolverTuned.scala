@@ -2,11 +2,9 @@ package ch.ethz.dalab.dissolve.optimization
 
 import scala.collection.mutable.MutableList
 import scala.reflect.ClassTag
-
 import org.apache.spark.HashPartitioner
 import org.apache.spark.SparkContext.rddToPairRDDFunctions
 import org.apache.spark.rdd.RDD
-
 import breeze.linalg.DenseVector
 import breeze.linalg.SparseVector
 import breeze.linalg.Vector
@@ -17,6 +15,7 @@ import ch.ethz.dalab.dissolve.classification.Types.BoundedCacheList
 import ch.ethz.dalab.dissolve.classification.Types.Index
 import ch.ethz.dalab.dissolve.classification.Types.PrimalInfo
 import ch.ethz.dalab.dissolve.regression.LabeledObject
+import scala.collection.mutable.PriorityQueue
 
 /**
  * Train a structured SVM using the actual distributed dissolve^struct solver.
@@ -66,6 +65,8 @@ class DBCFWSolverTuned[X, Y](
     override def toString(): String = "%d,%f,%f,%f,%f,%f,%f"
       .format(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError)
   }
+
+  val EPS: Double = 2.2204E-16
 
   /**
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
@@ -427,10 +428,41 @@ class DBCFWSolverTuned[X, Y](
              kAccum: Vector[Int]): Iterator[(Index, ProcessedDataShard[X, Y])] = {
 
     // println("[Round %d] Beginning mapper at partition %d".format(roundNum, partitionNum))
+    case class UpdateQuantities(w_s: Vector[Double],
+                                ell_s: Double,
+                                gamma: Double)
 
-    val eps: Double = 2.2204E-16
+    def getUpdateQuantities(model: StructSVMModel[X, Y],
+                            pattern: X,
+                            label: Y,
+                            ystar_i: Y,
+                            w_i: Vector[Double],
+                            ell_i: Double,
+                            k: Int): UpdateQuantities = {
+      val lambda = solverOptions.lambda
+      val lossFn = helperFunctions.lossFn
+      val phi = helperFunctions.featureFn
+
+      val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
+      val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
+      val loss_i: Double = lossFn(label, ystar_i)
+      val ell_s: Double = (1.0 / n) * loss_i
+
+      val gamma: Double =
+        if (solverOptions.doLineSearch) {
+          val thisModel = model
+          val gamma_opt = (thisModel.getWeights().t * (w_i - w_s) - ((ell_i - ell_s) * (1.0 / lambda))) /
+            ((w_i - w_s).t * (w_i - w_s) + EPS)
+          max(0.0, min(1.0, gamma_opt))
+        } else {
+          (2.0 * n) / (k + 2.0 * n)
+        }
+
+      UpdateQuantities(w_s, ell_s, gamma)
+    }
 
     val maxOracle = helperFunctions.oracleFn
+    val oracleStreamFn = helperFunctions.oracleStreamFn
     val phi = helperFunctions.featureFn
     val lossFn = helperFunctions.lossFn
 
@@ -471,7 +503,7 @@ class DBCFWSolverTuned[X, Y](
               .map {
                 case (w_s, ell_s) =>
                   (localModel.getWeights().t * (w_i - w_s) - ((ell_i - ell_s) * (1 / lambda))) /
-                    ((w_i - w_s).t * (w_i - w_s) + eps) // Map each (w_s, ell_s) to their respective step-size values 
+                    ((w_i - w_s).t * (w_i - w_s) + EPS) // Map each (w_s, ell_s) to their respective step-size values 
               }
               .zipWithIndex // We'll need the index later to retrieve the respective approx. ystar_i
               .filter { case (gamma, idx) => gamma > 0.0 }
@@ -488,7 +520,34 @@ class DBCFWSolverTuned[X, Y](
       // 2.b) Solve loss-augmented inference for point i
       val yAndCache =
         if (bestCachedCandidateForI.isEmpty) {
-          val ystar = maxOracle(localModel, pattern, label)
+
+          // val ystar = maxOracle(localModel, pattern, label)
+
+          val argmaxStream = oracleStreamFn(localModel, pattern, label)
+
+          val GAMMA_THRESHOLD = 0.0
+          // Sort by gamma, in decreasing order
+          def diff(y: (Y, UpdateQuantities)): Double = -y._2.gamma
+          // Maintain a priority queue, where the head contains the argmax with highest gamma value
+          val argmaxCandidates = new PriorityQueue[(Y, UpdateQuantities)]()(Ordering.by(diff))
+
+          // Request for argmax candidates, till a good candidate is found
+          argmaxStream
+            .takeWhile {
+              // Continue requesting for candidate argmax, till a good candidate is found (gamma > 0)
+              case y =>
+                argmaxCandidates.headOption match {
+                  case Some(head) => head._2.gamma > GAMMA_THRESHOLD
+                  case None       => true
+                }
+            }
+            .foreach {
+              case argmax_y =>
+                val updates = getUpdateQuantities(localModel, pattern, label, argmax_y, w_i, ell_i, k)
+                argmaxCandidates.enqueue((argmax_y, updates))
+            }
+
+          val (ystar, updates): (Y, UpdateQuantities) = argmaxCandidates.head
 
           val updatedCache: Option[BoundedCacheList[Y]] =
             if (solverOptions.enableOracleCache) {
@@ -511,22 +570,10 @@ class DBCFWSolverTuned[X, Y](
       val ystar_i = yAndCache._1
       val updatedCache = yAndCache._2
 
-      // 3) Define the update quantities
-      val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
-      val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
-      val loss_i: Double = lossFn(label, ystar_i)
-      val ell_s: Double = (1.0 / n) * loss_i
-
-      // 4) Get step-size gamma
-      val gamma: Double =
-        if (solverOptions.doLineSearch) {
-          val thisModel = localModel
-          val gamma_opt = (thisModel.getWeights().t * (w_i - w_s) - ((ell_i - ell_s) * (1.0 / lambda))) /
-            ((w_i - w_s).t * (w_i - w_s) + eps)
-          max(0.0, min(1.0, gamma_opt))
-        } else {
-          (2.0 * n) / (k + 2.0 * n)
-        }
+      val updates = getUpdateQuantities(localModel, pattern, label, ystar_i, w_i, ell_i, k)
+      val gamma = updates.gamma
+      val w_s = updates.w_s
+      val ell_s = updates.ell_s
 
       val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
       localModel.updateWeights(tempWeights1)
