@@ -432,6 +432,9 @@ class DBCFWSolverTuned[X, Y](
                                 ell_s: Double,
                                 gamma: Double)
 
+    /**
+     * Return updates for a specific choice of argmax and weights
+     */
     def getUpdateQuantities(model: StructSVMModel[X, Y],
                             pattern: X,
                             label: Y,
@@ -448,7 +451,6 @@ class DBCFWSolverTuned[X, Y](
       val loss_i: Double = lossFn(label, ystar_i)
       val ell_s: Double = (1.0 / n) * loss_i
 
-      // FIXME Fix Line Search
       val gamma: Double =
         if (solverOptions.doLineSearch) {
           val thisModel = model
@@ -537,8 +539,11 @@ class DBCFWSolverTuned[X, Y](
               case argmax_y =>
                 val updates = getUpdateQuantities(localModel, pattern, label, argmax_y, w_i, ell_i, k)
                 argmaxCandidates.enqueue((argmax_y, updates))
-                println("Gamma = " + updates.gamma)
-                updates.gamma < GAMMA_THRESHOLD
+                val consumeNext = updates.gamma <= GAMMA_THRESHOLD
+                consumeNext
+            }.foreach { // Streams are lazy, force an `action` on them. Otherwise, subsequent elements
+              // do not get computed
+              identity // Do nothing, just consume the argmax and move on
             }
 
           val (ystar, updates): (Y, UpdateQuantities) = argmaxCandidates.head
