@@ -448,6 +448,7 @@ class DBCFWSolverTuned[X, Y](
       val loss_i: Double = lossFn(label, ystar_i)
       val ell_s: Double = (1.0 / n) * loss_i
 
+      // FIXME Fix Line Search
       val gamma: Double =
         if (solverOptions.doLineSearch) {
           val thisModel = model
@@ -521,8 +522,6 @@ class DBCFWSolverTuned[X, Y](
       val yAndCache =
         if (bestCachedCandidateForI.isEmpty) {
 
-          // val ystar = maxOracle(localModel, pattern, label)
-
           val argmaxStream = oracleStreamFn(localModel, pattern, label)
 
           val GAMMA_THRESHOLD = 0.0
@@ -535,16 +534,11 @@ class DBCFWSolverTuned[X, Y](
           argmaxStream
             .takeWhile {
               // Continue requesting for candidate argmax, till a good candidate is found (gamma > 0)
-              case y =>
-                argmaxCandidates.headOption match {
-                  case Some(head) => head._2.gamma > GAMMA_THRESHOLD
-                  case None       => true
-                }
-            }
-            .foreach {
               case argmax_y =>
                 val updates = getUpdateQuantities(localModel, pattern, label, argmax_y, w_i, ell_i, k)
                 argmaxCandidates.enqueue((argmax_y, updates))
+                println("Gamma = " + updates.gamma)
+                updates.gamma < GAMMA_THRESHOLD
             }
 
           val (ystar, updates): (Y, UpdateQuantities) = argmaxCandidates.head
