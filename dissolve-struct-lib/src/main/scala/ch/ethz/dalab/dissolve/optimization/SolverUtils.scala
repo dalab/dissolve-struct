@@ -15,31 +15,44 @@ object SolverUtils {
    */
   def averageLoss[X, Y](data: Seq[LabeledObject[X, Y]],
                         dissolveFunctions: DissolveFunctions[X, Y],
-                        model: StructSVMModel[X, Y]): Double = {
+                        model: StructSVMModel[X, Y]): (Double, Double) = {
 
-    var lossTerm: Double = 0.0
+    var errorTerm: Double = 0.0
+    var structuredHingeLoss: Double = 0.0
+
     for (i <- 0 until data.size) {
       val ystar_i = dissolveFunctions.predictFn(model, data(i).pattern)
-      lossTerm += dissolveFunctions.lossFn(data(i).label, ystar_i)
+      val loss = dissolveFunctions.lossFn(data(i).label, ystar_i)
+      errorTerm += loss
+
+      val wFeatureDotProduct = model.getWeights().t * dissolveFunctions.featureFn(data(i).pattern, data(i).label)
+      val structuredHingeLoss: Double = loss - wFeatureDotProduct
     }
 
     // Return average of loss terms
-    lossTerm / (data.size.toDouble)
+    (errorTerm / (data.size.toDouble), structuredHingeLoss / (data.size.toDouble))
   }
 
   def averageLoss[X, Y](data: RDD[LabeledObject[X, Y]],
                         dissolveFunctions: DissolveFunctions[X, Y],
                         model: StructSVMModel[X, Y],
-                        dataSize: Int): Double = {
+                        dataSize: Int): (Double, Double) = {
 
-    val loss =
+    val (loss, hloss) =
       data.map {
         case datapoint =>
           val ystar_i = dissolveFunctions.predictFn(model, datapoint.pattern)
-          dissolveFunctions.lossFn(datapoint.label, ystar_i)
-      }.fold(0.0)((acc, ele) => acc + ele)
+          val loss = dissolveFunctions.lossFn(datapoint.label, ystar_i)
+          val wFeatureDotProduct = model.getWeights().t * dissolveFunctions.featureFn(datapoint.pattern, datapoint.label)
+          val structuredHingeLoss: Double = loss - wFeatureDotProduct
 
-    loss / dataSize
+          (loss, structuredHingeLoss)
+      }.fold((0.0, 0.0)) {
+        case ((lossAccum, hlossAccum), (loss, hloss)) =>
+          (lossAccum + loss, hlossAccum + hloss)
+      }
+
+    (loss / dataSize, hloss / dataSize)
   }
 
   /**

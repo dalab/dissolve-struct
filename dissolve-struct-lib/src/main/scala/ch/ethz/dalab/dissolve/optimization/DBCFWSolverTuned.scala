@@ -61,9 +61,11 @@ class DBCFWSolverTuned[X, Y](
                              dual: Double,
                              dualityGap: Double,
                              trainError: Double,
-                             testError: Double) {
-    override def toString(): String = "%d,%f,%f,%f,%f,%f,%f"
-      .format(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError)
+                             testError: Double,
+                             trainStructHingeLoss: Double,
+                             testStructHingeLoss: Double) {
+    override def toString(): String = "%d,%f,%f,%f,%f,%f,%f,%f,%f"
+      .format(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError, trainStructHingeLoss, testStructHingeLoss)
   }
 
   val EPS: Double = 2.2204E-16
@@ -231,19 +233,19 @@ class DBCFWSolverTuned[X, Y](
       val dualityGap = SolverUtils.dualityGap(data, dissolveFunctions, model, solverOptions.lambda, dataSize)._1
       val primal = dual + dualityGap
 
-      val trainError = SolverUtils.averageLoss(data, dissolveFunctions, model, dataSize)
-      val testError =
+      val (trainError, trainStructHingeLoss) = SolverUtils.averageLoss(data, dissolveFunctions, model, dataSize)
+      val (testError, testStructHingeLoss) =
         if (solverOptions.testDataRDD.isDefined)
           SolverUtils.averageLoss(solverOptions.testDataRDD.get, dissolveFunctions, model, testDataSize)
         else
-          Double.NaN
+          (Double.NaN, Double.NaN)
 
       val elapsedTime = getElapsedTimeSecs()
 
-      println("[%.3f] Round = %d, Gap = %f, Primal = %f, Dual = %f, TrainLoss = %f, TestLoss = %f"
-        .format(elapsedTime, roundNum, dualityGap, primal, dual, trainError, testError))
+      println("[%.3f] Round = %d, Gap = %f, Primal = %f, Dual = %f, TrainLoss = %f, TestLoss = %f, TrainSHLoss = %f, TestSHLoss = %f"
+        .format(elapsedTime, roundNum, dualityGap, primal, dual, trainError, testError, trainStructHingeLoss, testStructHingeLoss))
 
-      RoundEvaluation(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError)
+      RoundEvaluation(roundNum, elapsedTime, primal, dual, dualityGap, trainError, testError, trainStructHingeLoss, testStructHingeLoss)
     }
 
     println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
@@ -281,6 +283,7 @@ class DBCFWSolverTuned[X, Y](
       .foreach {
         roundNum =>
 
+          println("[ROUND %d]".format(roundNum))
           /**
            * Step 1 - Create a joint RDD containing all information of idx -> (data, primals, cache)
            */
@@ -410,7 +413,7 @@ class DBCFWSolverTuned[X, Y](
               val dual = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
               val elapsedTime = getElapsedTimeSecs()
 
-              RoundEvaluation(roundNum, elapsedTime, Double.NaN, dual, Double.NaN, Double.NaN, Double.NaN)
+              RoundEvaluation(roundNum, elapsedTime, Double.NaN, dual, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN)
             }
 
           debugSb ++= roundEvaluation + "\n"
