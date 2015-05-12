@@ -250,7 +250,7 @@ class DBCFWSolverTuned[X, Y](
 
     println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
 
-    debugSb ++= "round,time,primal,dual,gap,train_error,test_error\n"
+    debugSb ++= "round,time,primal,dual,gap,train_error,test_error,train_loss,test_loss\n"
 
     def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
 
