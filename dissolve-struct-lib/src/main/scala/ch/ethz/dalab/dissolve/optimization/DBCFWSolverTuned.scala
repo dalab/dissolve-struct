@@ -70,6 +70,11 @@ class DBCFWSolverTuned[X, Y](
 
   val EPS: Double = 2.2204E-16
 
+  // Beyond `DEBUG_THRESH` rounds, debug calculations occur every `DEBUG_STEP`-th round
+  val DEBUG_THRESH: Int = 20
+  val DEBUG_STEP: Int = 10
+  var nextDebugRound: Int = 1
+
   /**
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
    */
@@ -404,9 +409,19 @@ class DBCFWSolverTuned[X, Y](
             debugModel.updateEll(weightedAveragesOfPrimals._2)
           }
 
+          // Is criteria for debugging met?
+          val doDebugCalc: Boolean =
+            if (roundNum <= DEBUG_THRESH && roundNum == nextDebugRound) {
+              nextDebugRound = nextDebugRound * solverOptions.debugMultiplier
+              true
+            } else if (roundNum > DEBUG_THRESH && roundNum % 10 == DEBUG_STEP) {
+              nextDebugRound += DEBUG_STEP
+              true
+            } else
+              false
+
           val roundEvaluation =
-            if (solverOptions.debug && roundNum % solverOptions.debugMultiplier == 0) {
-              // If debug flag is enabled, make few more passes to obtain training error, gap, etc.
+            if (solverOptions.debug && doDebugCalc) {
               evaluateModel(debugModel, roundNum)
             } else {
               // If debug flag isn't on, perform calculations that don't trigger a shuffle
