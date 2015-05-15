@@ -414,7 +414,7 @@ class DBCFWSolverTuned[X, Y](
             if (roundNum <= DEBUG_THRESH && roundNum == nextDebugRound) {
               nextDebugRound = nextDebugRound * solverOptions.debugMultiplier
               true
-            } else if (roundNum > DEBUG_THRESH && roundNum % 10 == DEBUG_STEP) {
+            } else if (roundNum > DEBUG_THRESH && roundNum % DEBUG_STEP == 0) {
               nextDebugRound += DEBUG_STEP
               true
             } else
