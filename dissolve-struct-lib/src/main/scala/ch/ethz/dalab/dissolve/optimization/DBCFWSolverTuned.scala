@@ -411,7 +411,9 @@ class DBCFWSolverTuned[X, Y](
 
           // Is criteria for debugging met?
           val doDebugCalc: Boolean =
-            if (roundNum <= DEBUG_THRESH && roundNum == nextDebugRound) {
+            if (solverOptions.debugMultiplier == 1) {
+              true
+            } else if (roundNum <= DEBUG_THRESH && roundNum == nextDebugRound) {
               nextDebugRound = nextDebugRound * solverOptions.debugMultiplier
               true
             } else if (roundNum > DEBUG_THRESH && roundNum % DEBUG_STEP == 0) {

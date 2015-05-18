@@ -43,7 +43,8 @@ object SolverUtils {
         case datapoint =>
           val ystar_i = dissolveFunctions.predictFn(model, datapoint.pattern)
           val loss = dissolveFunctions.lossFn(datapoint.label, ystar_i)
-          val wFeatureDotProduct = model.getWeights().t * dissolveFunctions.featureFn(datapoint.pattern, datapoint.label)
+          val wFeatureDotProduct = model.getWeights().t * (dissolveFunctions.featureFn(datapoint.pattern, datapoint.label)
+            - dissolveFunctions.featureFn(datapoint.pattern, ystar_i))
           val structuredHingeLoss: Double = loss - wFeatureDotProduct
 
           (loss, structuredHingeLoss)
