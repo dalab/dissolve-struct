@@ -468,7 +468,7 @@ class DBCFWSolverTuned[X, Y](
 
       val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
-      val loss_i: Double = lossFn(label, ystar_i)
+      val loss_i: Double = lossFn(ystar_i, label)
       val ell_s: Double = (1.0 / n) * loss_i
 
       val gamma: Double =

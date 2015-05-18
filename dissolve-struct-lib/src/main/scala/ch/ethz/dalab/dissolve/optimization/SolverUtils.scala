@@ -22,7 +22,7 @@ object SolverUtils {
 
     for (i <- 0 until data.size) {
       val ystar_i = dissolveFunctions.predictFn(model, data(i).pattern)
-      val loss = dissolveFunctions.lossFn(data(i).label, ystar_i)
+      val loss = dissolveFunctions.lossFn(ystar_i, data(i).label)
       errorTerm += loss
 
       val wFeatureDotProduct = model.getWeights().t * dissolveFunctions.featureFn(data(i).pattern, data(i).label)
@@ -42,7 +42,7 @@ object SolverUtils {
       data.map {
         case datapoint =>
           val ystar_i = dissolveFunctions.predictFn(model, datapoint.pattern)
-          val loss = dissolveFunctions.lossFn(datapoint.label, ystar_i)
+          val loss = dissolveFunctions.lossFn(ystar_i, datapoint.label)
           val wFeatureDotProduct = model.getWeights().t * (dissolveFunctions.featureFn(datapoint.pattern, datapoint.label)
             - dissolveFunctions.featureFn(datapoint.pattern, ystar_i))
           val structuredHingeLoss: Double = loss - wFeatureDotProduct
@@ -95,7 +95,7 @@ object SolverUtils {
     var ell_s: Double = 0.0
     for (i <- 0 until n) {
       w_s += phi(data(i).pattern, data(i).label) - phi(data(i).pattern, yStars(i))
-      ell_s += lossFn(data(i).label, yStars(i))
+      ell_s += lossFn(yStars(i), data(i).label)
     }
 
     w_s = w_s / (lambda * n)
@@ -130,7 +130,7 @@ object SolverUtils {
       case datapoint =>
         val yStar = maxOracle(model, datapoint.pattern, datapoint.label)
         val w_s = phi(datapoint.pattern, datapoint.label) - phi(datapoint.pattern, yStar)
-        val ell_s = lossFn(datapoint.label, yStar)
+        val ell_s = lossFn(yStar, datapoint.label)
 
         (w_s, ell_s)
     }.fold((Vector.zeros[Double](d), 0.0)) {
@@ -162,7 +162,7 @@ object SolverUtils {
     var hingeLosses: Double = 0.0
     for (i <- 0 until data.size) {
       val yStar_i = oracleFn(model, data(i).pattern, data(i).label)
-      val loss_i = lossFn(data(i).label, yStar_i)
+      val loss_i = lossFn(yStar_i, data(i).label)
       val psi_i = featureFn(data(i).pattern, data(i).label) - featureFn(data(i).pattern, yStar_i)
 
       val hingeloss_i = loss_i - model.getWeights().t * psi_i
