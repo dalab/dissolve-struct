@@ -1,3 +1,38 @@
+# Site wide configuration
+
+title: dissolve<sup>struct</sup>
+description: "Distributed Solver for Structured Prediction"
+logo: 120x120.gif
+teaser: 400x250.gif
+locale: en_US
+url: http://dalab.github.io/dissolve-struct
+
+# Jekyll configuration
+
+sass:
+  sass_dir: _sass
+  style: compressed
+permalink: /:categories/:title/
+kramdown:
+  toc_levels: 1..2
 highlighter: pygments
-github: [Repository metadata]
-baseurl: /dissolve-struct
+gems:
+  - jekyll-sitemap
+
+
+# Site owner
+owner:
+  name: Tribhuvanesh Orekondy
+  web: http://da.inf.ethz.ch/
+  email: tribhuvanesh@gmail.com
+  twitter: tribhuvanesh
+  bio: ""
+  avatar: bio-photo.jpg # 160x160 px image for author byline
+  google:
+    plus:
+    ad-client:
+    ad-slot:
+  disqus-shortname:
+
+
+exclude: ["lib", "config.rb", ".sass-cache", "Capfile", "config", "log", "Rakefile", "Rakefile.rb", "tmp", "*.sublime-project", "*.sublime-workspace", "Gemfile", "Gemfile.lock", "README.md", "LICENSE", "node_modules", "Gruntfile.js", "package.json"]

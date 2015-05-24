@@ -1,0 +1,16 @@
+# Site navigation links
+
+- title: Getting Started
+  url: /getting-started/
+  excerpt: "Everything you need to know to get started with dissolve^struct."
+  image: 400x250.gif
+
+- title: Examples
+  url: /articles/
+  excerpt: "Examples of dissolve^struct in the wild."
+  image: 400x250.gif
+
+- title: About
+  url: /about/
+  excerpt: "All about dissolve^struct."
+  image: 400x250.gif
