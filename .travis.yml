@@ -1,0 +1,12 @@
+language: scala
+scala:
+        - 2.10.4
+
+# Build only the lib package, and exclude examples package from build
+before_install:
+        - cd dissolve-struct-lib
+
+# whitelist
+branches:
+        only:
+        - tuning
