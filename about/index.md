@@ -13,9 +13,9 @@ ads: false
 ---
 
 The dissolve<sup>struct</sup> library is developed and maintained by
-[Tribhuvanesh Orekondy](https://github.com/tribhuvanesh), 
+[Tribhuvanesh Orekondy](http://github.com/tribhuvanesh), 
 [Martin Jaggi](http://people.inf.ethz.ch/jaggim/), and 
 [Aurelien Lucchi](http://people.inf.ethz.ch/alucchi/)
-of the ETH Zurich [Data Analytics Lab](da.inf.ethz.ch).
+of the ETH Zurich [Data Analytics Lab](http://da.inf.ethz.ch).
 
-We welcome contributions and comments on our [github project page](github.com/dalab/dissolve-struct)!
+We welcome contributions and comments on our [github project page](http://github.com/dalab/dissolve-struct)!
