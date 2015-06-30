@@ -75,3 +75,7 @@ data/debug/*
 
 # ec2 credentials
 ec2_config.json
+
+# New eclipse introduced some temp files
+.cache-main
+.cache-tests
