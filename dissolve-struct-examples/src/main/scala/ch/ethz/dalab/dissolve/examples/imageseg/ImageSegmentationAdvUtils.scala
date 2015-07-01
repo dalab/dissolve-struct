@@ -3,15 +3,18 @@ package ch.ethz.dalab.dissolve.examples.imageseg
 import java.awt.image.BufferedImage
 import java.nio.file.Path
 import java.nio.file.Paths
-
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
-
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes._
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import javax.imageio.ImageIO
+import java.io.File
+import breeze.linalg.max
+import java.awt.Graphics2D
+import java.awt.Font
+import java.awt.Color
 
 /**
  * @author torekond
@@ -51,18 +54,20 @@ object ImageSegmentationAdvUtils {
     // First pass, get number of super-pixels
     val n: Int = Source.fromFile(unaryFile.toFile()).getLines.size
 
-    // Get size of unary features
+    // Get size of unary features (In this case. scores of each class
+    // except background)
     val d = lineToValues(Source.fromFile(unaryFile.toFile())
       .getLines
       .next())
       .size
 
-    val unaryMatrix = DenseMatrix.zeros[Double](d, n)
+    val unaryMatrix = DenseMatrix.zeros[Double](d + 1, n)
 
     // Second pass, get the super-pixels
     for ((line, idx) <- Source.fromFile(unaryFile.toFile()).getLines.zipWithIndex) {
       val featureVector = DenseVector(lineToValues(line))
-      unaryMatrix(::, idx) := featureVector
+      unaryMatrix(0 until d, idx) := featureVector
+      unaryMatrix(d, idx) = max(featureVector)
     }
 
     unaryMatrix
@@ -138,42 +143,46 @@ object ImageSegmentationAdvUtils {
 
   /**
    * Load Data from disk
+   *
+   * Loads filenames specified in `split` from the directory `All`
    */
   def loadData(dataDir: String = "../data/generated/msrc",
-               split: String = "Train",
+               splitFilePath: Path,
                limit: Int = Integer.MAX_VALUE): Array[LabeledObject[QuantizedImage, QuantizedLabel]] = {
 
-    val splitFilename: String = "%s.txt".format(split)
-    val splitFilePath: Path = Paths.get(dataDir, splitFilename)
+    /*assert(split == "Train" || split == "Test" || split == "Validation",
+      "split should be one of {'Train', 'Test', 'Validation'}")*/
+
+    assert(splitFilePath.toFile().exists(), "splitFilePath.toFile().exists()")
 
     val labelsDir: Path = Paths.get(dataDir, "labels")
-    val splitDir: Path = Paths.get(dataDir, split)
+    val filesDir: Path = Paths.get(dataDir, "All")
 
     val labeledObjectSeq =
-      for (imgFilenameRaw <- Source.fromFile(splitFilePath.toFile()).getLines.take(limit)) yield {
+      for (imgFilenameRaw <- Source.fromFile(splitFilePath.toFile()).getLines) yield {
         val imgName = imgFilenameRaw.trim().stripLineEnd.replace(".bmp", "")
         println(imgName)
 
         // Get Width and Height
         val imgFilename = imgName + ".bmp"
-        val imgPath = splitDir.resolve(imgFilename)
+        val imgPath = filesDir.resolve(imgFilename)
         val img = ImageIO.read(imgPath.toFile())
         val width = img.getWidth()
         val height = img.getHeight()
 
         // Read Unaries
         val unaryName = imgName + ".local1"
-        val unaryFile = splitDir.resolve(unaryName)
+        val unaryFile = filesDir.resolve(unaryName)
         val unaries: DenseMatrix[Double] = deserializeUnaryTerm(unaryFile)
 
         // Read Pairwise
         val pairwiseName = imgName + ".edges"
-        val pairwiseFile = splitDir.resolve(pairwiseName)
+        val pairwiseFile = filesDir.resolve(pairwiseName)
         val pairwise: AdjacencyList = deserializePairwiseTerm(pairwiseFile)
 
         // Read Mapping
         val mappingName = imgName + ".map"
-        val mappingFile = splitDir.resolve(mappingName)
+        val mappingFile = filesDir.resolve(mappingName)
         val pixelMapping: Array[Index] = deserializeMapping(mappingFile, width, height)
 
         // Read Labels
@@ -188,7 +197,14 @@ object ImageSegmentationAdvUtils {
         lo
       }
 
-    labeledObjectSeq.toArray
+    labeledObjectSeq
+      .filter {
+        case lo =>
+          val labels = lo.label.labels
+          !(labels.contains(22) || labels.contains(23))
+      }
+      .take(limit)
+      .toArray
   }
 
   def labelsToImage(labelArray: Array[Label], width: Int, height: Int): BufferedImage = {
@@ -198,20 +214,71 @@ object ImageSegmentationAdvUtils {
     img
   }
 
+  def getImageWithText(w: Int, h: Int, text: String): BufferedImage = {
+    val img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+    val g2: Graphics2D = img.createGraphics()
+    // Background
+    g2.setPaint(Color.WHITE)
+    g2.fillRect(0, 0, w, h)
+
+    g2.setPaint(Color.black)
+    g2.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10))
+    val ymargin = 15
+    val offset = 15
+
+    for ((str, idx) <- text.split('\n').zipWithIndex) {
+      g2.drawString(str, 10, ymargin + offset * idx)
+    }
+
+    g2.dispose()
+
+    img
+  }
+
+  /**
+   * Places images into a 2 x 2 layout
+   * Assume all images are of same size
+   */
+  def printImageTile(x11: BufferedImage,
+                     x12: BufferedImage,
+                     x21: BufferedImage,
+                     x22: BufferedImage): BufferedImage = {
+
+    val offset: Int = 10
+    val margin: Int = 10
+    val w_x: Int = x11.getWidth()
+    val h_x: Int = x11.getHeight()
+
+    val w = 2 * w_x + offset + 2 * margin
+    val h = 2 * h_x + offset + 2 * margin
+
+    val img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+    val g2: Graphics2D = img.createGraphics()
+    val oldCol = g2.getColor()
+
+    g2.setPaint(Color.WHITE)
+    g2.fillRect(0, 0, w, h)
+    g2.setColor(oldCol)
+
+    g2.drawImage(x11, null, margin, margin)
+    g2.drawImage(x12, null, w_x + offset + margin, margin)
+    g2.drawImage(x21, null, margin, h_x + offset + margin)
+    g2.drawImage(x22, null, w_x + offset + margin, h_x + offset + margin)
+
+    g2.dispose()
+
+    img
+  }
+
   /**
    * Output super-pixel labels as an image
    *
    * z(i) = j : Super-pixel idx = `i` and pixel idx = `j`
    */
-  def printQuantizedLabel(y: QuantizedLabel,
-                          z: Array[Int],
-                          width: Int,
-                          height: Int): Unit = {
-
-    val debugDir = Paths.get("../data/generated/msrc", "debug")
-    val ext = "bmp"
-    if (!debugDir.toFile().exists())
-      debugDir.toFile().mkdir()
+  def getQuantizedLabelImage(y: QuantizedLabel,
+                             z: Array[Int],
+                             width: Int,
+                             height: Int): BufferedImage = {
 
     val n = y.labels.size // # Super pixels
     val N = z.size // # Pixels
@@ -230,18 +297,21 @@ object ImageSegmentationAdvUtils {
 
     println("w = %d, h = %d".format(width, height))
 
-    val pixelLabelImage = labelsToImage(pixelLabels, width, height)
-    val imageOutName = y.filename + "." + ext
-    val imageOutFile = debugDir.resolve(imageOutName).toFile()
+    labelsToImage(pixelLabels, width, height)
+  }
 
-    ImageIO.write(pixelLabelImage, ext, imageOutFile)
-
+  def writeImage(img: BufferedImage, outFilePath: String): Unit = {
+    ImageIO.write(img, "bmp", new File(outFilePath))
   }
 
   def main(args: Array[String]): Unit = {
 
     println("Loading data")
     val data = loadData(limit = 1)
+
+    val debugDir = Paths.get("../data/generated/msrc", "debug")
+    if (!debugDir.toFile().exists())
+      debugDir.toFile().mkdir()
 
     println("Writing images")
     data.foreach {
@@ -250,7 +320,10 @@ object ImageSegmentationAdvUtils {
         val y = lo.label
 
         println(x.filename)
-        printQuantizedLabel(y, x.pixelMapping, x.width, x.height)
+        val imageOutName = y.filename + ".bmp"
+        val imageOutFile = debugDir.resolve(imageOutName)
+        writeImage(getQuantizedLabelImage(y, x.pixelMapping, x.width, x.height),
+          imageOutFile.toString())
 
     }
 
