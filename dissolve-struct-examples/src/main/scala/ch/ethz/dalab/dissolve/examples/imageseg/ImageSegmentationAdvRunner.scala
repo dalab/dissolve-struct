@@ -19,13 +19,15 @@ object ImageSegmentationAdvRunner {
     PropertyConfigurator.configure("conf/log4j.properties")
     System.setProperty("spark.akka.frameSize", "512")
 
+    val startTime = System.currentTimeMillis() / 1000
+
     /**
      * Load all options
      */
     val (solverOptions, kwargs) = CLAParser.argsToOptions[QuantizedImage, QuantizedLabel](args)
     val dataDir = kwargs.getOrElse("input_path", "../data/generated/msrc")
-    val appname = kwargs.getOrElse("appname", "imageseg-%d".format(System.currentTimeMillis() / 1000))
-    val debugPath = kwargs.getOrElse("debug_file", "imageseg-%d.csv".format(System.currentTimeMillis() / 1000))
+    val appname = kwargs.getOrElse("appname", "imageseg-%d".format(startTime))
+    val debugPath = kwargs.getOrElse("debug_file", "imageseg-%d.csv".format(startTime))
     solverOptions.debugInfoPath = debugPath
 
     println(dataDir)
@@ -40,13 +42,16 @@ object ImageSegmentationAdvRunner {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val trainDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, "Train", 50)
-    val testDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, "Test", 5)
+    val trainFilePath = Paths.get(dataDir, "1_Train.txt")
+    val valFilePath = Paths.get(dataDir, "1_Validation.txt")
+
+    val trainDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, trainFilePath)
+    val valDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, valFilePath)
 
     val trainData = sc.parallelize(trainDataSeq, 1).cache
-    val testData = sc.parallelize(testDataSeq, 1).cache
+    val valData = sc.parallelize(valDataSeq, 1).cache
 
-    solverOptions.testDataRDD = Some(testData)
+    solverOptions.testDataRDD = Some(valData)
 
     println(solverOptions)
 

@@ -1,18 +1,23 @@
 package ch.ethz.dalab.dissolve.examples.imageseg
 
-import breeze.linalg._
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes._
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
-import cc.factorie.variable.DiscreteVariable
-import cc.factorie.variable.IntegerVariable
+import java.nio.file.Paths
+import scala.collection.mutable.ArrayBuffer
+import breeze.linalg.DenseMatrix
+import breeze.linalg.DenseVector
+import breeze.linalg.Vector
+import breeze.linalg.csvwrite
+import cc.factorie.infer.MaximizeByMPLP
+import cc.factorie.model.Factor
+import cc.factorie.model.ItemizedModel
+import cc.factorie.singleFactorIterable
 import cc.factorie.variable.DiscreteDomain
+import cc.factorie.variable.DiscreteVariable
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.AdjacencyList
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.Label
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import cc.factorie.model.Factor2
 import cc.factorie.model.Factor1
-import cc.factorie.model.Factor
-import scala.collection.mutable.ArrayBuffer
-import cc.factorie.model.ItemizedModel
-import cc.factorie.infer.MaximizeByMPLP
 
 /**
  * `data` is a `F` x `N` matrix; each column contains the features for a super-pixel
@@ -51,17 +56,7 @@ object ImageSegmentationAdv
     assert(numSuperpixels == x.pairwise.length,
       "numSuperpixels == x.pairwise.length")
 
-    val unaryScores = DenseVector.zeros[Double](NUM_CLASSES * 1)
     val transitions = DenseMatrix.zeros[Double](NUM_CLASSES, NUM_CLASSES)
-
-    /**
-     * Unary features
-     * FIXME
-     */
-    for (superpixelIdx <- 0 until numSuperpixels) {
-      val label = y.labels(superpixelIdx)
-      unaryScores(label) += x.unaries(label, superpixelIdx)
-    }
 
     /**
      * Pairwise features
@@ -72,12 +67,18 @@ object ImageSegmentationAdv
       x.pairwise(superIdx).foreach {
         case adjacentSuperIdx =>
           val nextLabel = y.labels(adjacentSuperIdx)
+
           transitions(thisLabel, nextLabel) += 1.0
           transitions(nextLabel, thisLabel) += 1.0
       }
     }
 
-    // DenseVector.vertcat(unaryScores, transitions.toDenseVector)
+    /*val debugPath =
+      Paths.get("/home/torekond/dev-local/dissolve-struct/data/generated/msrc/debug",
+          "%s-trans.csv".format(x.filename))
+
+    csvwrite(debugPath.toFile(), transitions)*/
+
     transitions.toDenseVector
   }
 
@@ -85,11 +86,7 @@ object ImageSegmentationAdv
    * Per-label Hamming loss
    */
   def perLabelLoss(labTruth: Label, labPredict: Label): Double =
-    if (labPredict == BACKGROUND_CLASS)
-      1.0
-    else if (labTruth == BACKGROUND_CLASS)
-      0.0
-    else if (labTruth == labPredict)
+    if (labTruth == labPredict)
       0.0
     else
       1.0
@@ -104,32 +101,25 @@ object ImageSegmentationAdv
 
     val stuctHammingLoss = yTruth.labels
       .zip(yPredict.labels)
-      .filter {
+      /*.filter {
         case (labTruth, labPredict) =>
           labTruth != BACKGROUND_CLASS
-      }
+      }*/
       .map {
         case (labTruth, labPredict) =>
           perLabelLoss(labTruth, labPredict)
       }
 
     // Return normalized hamming loss
-
     stuctHammingLoss.sum / stuctHammingLoss.length
   }
 
-  def unpackWeightVec(weightv: DenseVector[Double]): (DenseVector[Double], DenseMatrix[Double]) = {
-    /*val unaryScores = weightv(0 until NUM_CLASSES)
-
-    val pairwiseVec = weightv(NUM_CLASSES until weightv.size)
-    val pairwisePot = pairwiseVec.toDenseMatrix.reshape(NUM_CLASSES, NUM_CLASSES)
-
-    (unaryScores, pairwisePot)*/
+  def unpackWeightVec(weightv: DenseVector[Double]): DenseMatrix[Double] = {
 
     assert(weightv.size == NUM_CLASSES * NUM_CLASSES)
     val pairwisePot = weightv.toDenseMatrix.reshape(NUM_CLASSES, NUM_CLASSES)
 
-    (null, pairwisePot)
+    pairwisePot
   }
 
   /**
@@ -159,12 +149,12 @@ object ImageSegmentationAdv
 
     def getPairwiseFactor(yi: Pixel, yj: Pixel): Factor = {
       new Factor2(yi, yj) {
-        def score(i: Pixel#Value, j: Pixel#Value) = -pairwisePot(i.intValue, j.intValue)
+        def score(i: Pixel#Value, j: Pixel#Value) = pairwisePot(i.intValue, j.intValue)
       }
     }
 
     val pixelSeq: IndexedSeq[Pixel] =
-      (0 until nSuperpixels).map(x => new Pixel(0))
+      (0 until nSuperpixels).map(x => new Pixel(18))
 
     val unaryFactors: IndexedSeq[Factor] =
       (0 until nSuperpixels).map {
@@ -215,8 +205,8 @@ object ImageSegmentationAdv
     assert(xi.pairwise.length == nSuperpixels,
       "xi.pairwise.length == nSuperpixels")
 
-    val (unaryScores, pairwisePot) = unpackWeightVec(model.weights.toDenseVector)
     val unaryPot = xi.unaries
+    val pairwisePot = unpackWeightVec(model.weights.toDenseVector)
 
     if (yi != null) {
       assert(yi.labels.length == xi.pairwise.length,

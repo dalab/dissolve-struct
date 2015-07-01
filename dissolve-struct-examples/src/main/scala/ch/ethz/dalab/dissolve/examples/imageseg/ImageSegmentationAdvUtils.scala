@@ -26,6 +26,7 @@ object ImageSegmentationAdvUtils {
    */
 
   val colormapFile = "/imageseg_label_color_map.txt"
+  val legendImage = "/msrc_legend.bmp"
 
   /**
    * Map from a label to the corresponding RGB pixel
@@ -150,9 +151,6 @@ object ImageSegmentationAdvUtils {
                splitFilePath: Path,
                limit: Int = Integer.MAX_VALUE): Array[LabeledObject[QuantizedImage, QuantizedLabel]] = {
 
-    /*assert(split == "Train" || split == "Test" || split == "Validation",
-      "split should be one of {'Train', 'Test', 'Validation'}")*/
-
     assert(splitFilePath.toFile().exists(), "splitFilePath.toFile().exists()")
 
     val labelsDir: Path = Paths.get(dataDir, "labels")
@@ -201,6 +199,8 @@ object ImageSegmentationAdvUtils {
       .filter {
         case lo =>
           val labels = lo.label.labels
+          // 22 - Mountain
+          // 23 - Horse
           !(labels.contains(22) || labels.contains(23))
       }
       .take(limit)
@@ -244,13 +244,18 @@ object ImageSegmentationAdvUtils {
                      x21: BufferedImage,
                      x22: BufferedImage): BufferedImage = {
 
+    val legend = new File("../data/generated/msrc/msrc_legend.bmp")
+    val legendImage = ImageIO.read(legend)
+    val w_leg = legendImage.getWidth()
+    val h_leg = legendImage.getHeight()
+
     val offset: Int = 10
     val margin: Int = 10
     val w_x: Int = x11.getWidth()
     val h_x: Int = x11.getHeight()
 
-    val w = 2 * w_x + offset + 2 * margin
-    val h = 2 * h_x + offset + 2 * margin
+    val w = max(2 * w_x, w_leg) + offset + 2 * margin
+    val h = 2 * h_x + h_leg + 2 * offset + 2 * margin
 
     val img = new BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
     val g2: Graphics2D = img.createGraphics()
@@ -264,6 +269,9 @@ object ImageSegmentationAdvUtils {
     g2.drawImage(x12, null, w_x + offset + margin, margin)
     g2.drawImage(x21, null, margin, h_x + offset + margin)
     g2.drawImage(x22, null, w_x + offset + margin, h_x + offset + margin)
+
+    val centeredx = w / 2 - w_leg / 2
+    g2.drawImage(legendImage, null, centeredx, 2 * (h_x + offset) + margin)
 
     g2.dispose()
 
@@ -307,9 +315,12 @@ object ImageSegmentationAdvUtils {
   def main(args: Array[String]): Unit = {
 
     println("Loading data")
-    val data = loadData(limit = 1)
 
-    val debugDir = Paths.get("../data/generated/msrc", "debug")
+    val dataDir: String = "../data/generated/msrc"
+    val trainFilePath: Path = Paths.get(dataDir, "Train.txt")
+    val data = loadData(dataDir, trainFilePath, limit = 1)
+
+    val debugDir = Paths.get(dataDir, "debug")
     if (!debugDir.toFile().exists())
       debugDir.toFile().mkdir()
 
