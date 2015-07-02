@@ -18,6 +18,11 @@ import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.Label
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import cc.factorie.model.Factor2
 import cc.factorie.model.Factor1
+import breeze.linalg.normalize
+import cc.factorie.infer.MaximizeByBP
+import cc.factorie.infer.MaximizeByBPLoopy
+import breeze.linalg.Tensor
+import cc.factorie.la.ScalarTensor
 
 /**
  * `data` is a `F` x `N` matrix; each column contains the features for a super-pixel
@@ -79,7 +84,8 @@ object ImageSegmentationAdv
 
     csvwrite(debugPath.toFile(), transitions)*/
 
-    transitions.toDenseVector
+    normalize(transitions.toDenseVector)
+    // transitions.toDenseVector
   }
 
   /**
@@ -101,10 +107,6 @@ object ImageSegmentationAdv
 
     val stuctHammingLoss = yTruth.labels
       .zip(yPredict.labels)
-      /*.filter {
-        case (labTruth, labPredict) =>
-          labTruth != BACKGROUND_CLASS
-      }*/
       .map {
         case (labTruth, labPredict) =>
           perLabelLoss(labTruth, labPredict)
@@ -154,7 +156,7 @@ object ImageSegmentationAdv
     }
 
     val pixelSeq: IndexedSeq[Pixel] =
-      (0 until nSuperpixels).map(x => new Pixel(18))
+      (0 until nSuperpixels).map(x => new Pixel(12))
 
     val unaryFactors: IndexedSeq[Factor] =
       (0 until nSuperpixels).map {
@@ -179,13 +181,15 @@ object ImageSegmentationAdv
     model ++= unaryFactors
     model ++= pairwiseFactors
 
-    val maxIterations = 200
+    // MaximizeByBPLoopy.maximize(pixelSeq, model)
+    val maxIterations = 300
     val maximizer = new MaximizeByMPLP(maxIterations)
     val assgn = maximizer.infer(pixelSeq, model).mapAssignment
 
     val mapLabels: Array[Label] = (0 until nSuperpixels).map {
       idx =>
         assgn(pixelSeq(idx)).intValue
+      // pixelSeq(idx).intValue
     }.toArray
 
     mapLabels

@@ -108,22 +108,12 @@ object ImageSegmentationAdvRunner {
 
     }
 
-    /*
-    for (lo <- testDataSeq) {
-      val t0 = System.currentTimeMillis()
-      val prediction = model.predict(lo.pattern)
-      val t1 = System.currentTimeMillis()
-
-      val filename = lo.pattern.filename
-      val format = "bmp"
-      val debugFilename = imageOutDir.resolve("test-%s.%s".format(filename, format))
-
-      ImageSegmentationAdvUtils.printQuantizedLabel(lo.label,
-        lo.pattern.pixelMapping,
-        lo.pattern.width,
-        lo.pattern.height)
-
-    }*/
+    val transDebugPath =
+      Paths.get("/home/torekond/dev-local/dissolve-struct/data/generated/msrc/debug",
+        "%s-trans.csv".format(appname))
+    val weights = model.getWeights().toDenseVector
+    val transMat = ImageSegmentationAdv.unpackWeightVec(weights)
+    breeze.linalg.csvwrite(transDebugPath.toFile(), transMat)
 
   }
 
