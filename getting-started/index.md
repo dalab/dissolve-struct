@@ -72,6 +72,9 @@ spark-1.X/bin/spark-submit \
 	<optional-arguments>
 {% endhighlight %}
 
+**PS:**  We recommend using the latest Spark version (1.3 at the time of writing).
+{: .notice-info}
+
 For example, the Binary classification example can be run within the `dissolve-struct-examples` directory using:
 {% highlight bash %}
 spark-1.X/bin/spark-submit \
