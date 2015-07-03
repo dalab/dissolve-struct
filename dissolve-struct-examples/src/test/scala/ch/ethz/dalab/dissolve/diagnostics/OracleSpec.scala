@@ -43,7 +43,7 @@ class OracleSpec extends UnitSpec {
    * Tests - Structured Hinge Loss
    */
 
-  "Structured Hinge Loss [\\Delta(y^m, y^*) - <w, \\psi(x^m, y^*)]" should "be >= 0 for GIVEN (x_m, y_m) pairs" in {
+  "Structured Hinge Loss [Δ(y_m, y*) - < w, ψ(x_m, y*) >]" should "be >= 0 for GIVEN (x_m, y_m) pairs" in {
 
     val shlSeq: Seq[Double] = for (k <- 0 until NUM_WEIGHT_VECS) yield {
 
@@ -69,7 +69,7 @@ class OracleSpec extends UnitSpec {
     val negShlSeq: Seq[Double] = shlSeq.filter(_ < 0.0)
 
     assert(negShlSeq.length == 0,
-      "%d / %d cases contain SHL < 0.0".format(negShlSeq.length, shlSeq.length))
+      "%d / %d cases failed".format(negShlSeq.length, shlSeq.length))
 
   }
 
@@ -99,14 +99,14 @@ class OracleSpec extends UnitSpec {
     val negShlSeq: Seq[Double] = shlSeq.filter(_ < 0.0)
 
     assert(negShlSeq.length == 0,
-      "%d / %d cases contain SHL < 0.0".format(negShlSeq.length, shlSeq.length))
+      "%d / %d cases failed".format(negShlSeq.length, shlSeq.length))
 
   }
 
   /**
    * Tests - Discriminant function
    */
-  "F(x_m, y^*)" should "be >= F(x_m, y_m)" in {
+  "F(x_m, y*)" should "be >= F(x_m, y_m)" in {
 
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
@@ -132,7 +132,7 @@ class OracleSpec extends UnitSpec {
     val negDiffSeq: Seq[Double] = diffSeq.filter(_ < 0.0)
 
     assert(negDiffSeq.length == 0,
-      "%d / %d cases contain SHL < 0.0".format(negDiffSeq.length, diffSeq.length))
+      "%d / %d cases failed".format(negDiffSeq.length, diffSeq.length))
 
   }
 
@@ -162,8 +162,66 @@ class OracleSpec extends UnitSpec {
     val negDiffSeq: Seq[Double] = diffSeq.filter(_ < 0.0)
 
     assert(negDiffSeq.length == 0,
-      "%d / %d cases contain SHL < 0.0".format(negDiffSeq.length, diffSeq.length))
+      "%d / %d cases failed".format(negDiffSeq.length, diffSeq.length))
 
+  }
+
+  "H(w; x_m, y_m)" should "be >= Δ(y_m, y_m) + F(x_m, y_m)" in {
+
+    val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
+      // Set weight vector
+      val w: WeightVector = weightVectors(k)
+      model.updateWeights(w)
+
+      // Choose a random example
+      val m = scala.util.Random.nextInt(M)
+      val lo = data(m)
+      val x_m = lo.pattern
+      val y_m = lo.label
+
+      // Get loss-augmented argmax prediction
+      val ystar = maxoracle(model, x_m, y_m)
+
+      val H = delta(y_m, ystar) - deltaF(lo, ystar, w)
+      val F_loss_aug = delta(y_m, y_m) - deltaF(lo, y_m, w)
+
+      H - F_loss_aug
+    }
+
+    // This should be empty
+    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < 0.0)
+
+    assert(negDiffSeq.length == 0,
+      "%d / %d cases failed".format(negDiffSeq.length, diffSeq.length))
+  }
+
+  it should "be >= PERTURBED Δ(y_m, y_m) + F(x_m, y_m)" in {
+
+    val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
+      // Set weight vector
+      val w: WeightVector = weightVectors(k)
+      model.updateWeights(w)
+
+      // Choose a random example
+      val m = scala.util.Random.nextInt(M)
+      val lo = data(m)
+      val x_m = lo.pattern
+      val y_m = perturb(lo.label, 0.1)
+
+      // Get loss-augmented argmax prediction
+      val ystar = maxoracle(model, x_m, y_m)
+
+      val H = delta(y_m, ystar) - deltaF(lo, ystar, w)
+      val F_loss_aug = delta(y_m, y_m) - deltaF(lo, y_m, w)
+
+      H - F_loss_aug
+    }
+
+    // This should be empty
+    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < 0.0)
+
+    assert(negDiffSeq.length == 0,
+      "%d / %d cases failed".format(negDiffSeq.length, diffSeq.length))
   }
 
 }
