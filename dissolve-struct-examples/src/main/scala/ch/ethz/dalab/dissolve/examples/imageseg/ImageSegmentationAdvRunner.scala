@@ -42,8 +42,8 @@ object ImageSegmentationAdvRunner {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val trainFilePath = Paths.get(dataDir, "1_Train.txt")
-    val valFilePath = Paths.get(dataDir, "1_Validation.txt")
+    val trainFilePath = Paths.get(dataDir, "3_Train.txt")
+    val valFilePath = Paths.get(dataDir, "3_Validation.txt")
 
     val trainDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, trainFilePath)
     val valDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, valFilePath)
@@ -108,12 +108,16 @@ object ImageSegmentationAdvRunner {
 
     }
 
+    val unaryDebugPath =
+      Paths.get("/home/torekond/dev-local/dissolve-struct/data/generated/msrc/debug",
+        "%s-unary.csv".format(appname))
     val transDebugPath =
       Paths.get("/home/torekond/dev-local/dissolve-struct/data/generated/msrc/debug",
         "%s-trans.csv".format(appname))
     val weights = model.getWeights().toDenseVector
-    val transMat = ImageSegmentationAdv.unpackWeightVec(weights)
-    breeze.linalg.csvwrite(transDebugPath.toFile(), transMat)
+    val (unaryMat, transMat) = ImageSegmentationAdv.unpackWeightVec(weights)
+    breeze.linalg.csvwrite(unaryDebugPath.toFile(), unaryMat)
+    // breeze.linalg.csvwrite(transDebugPath.toFile(), transMat)
 
   }
 

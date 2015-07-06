@@ -1,11 +1,12 @@
 package ch.ethz.dalab.dissolve.examples.imageseg
 
-import java.nio.file.Paths
+import scala.annotation.elidable
+import scala.annotation.elidable.ASSERTION
 import scala.collection.mutable.ArrayBuffer
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Vector
-import breeze.linalg.csvwrite
+import breeze.linalg.argmax
 import cc.factorie.infer.MaximizeByMPLP
 import cc.factorie.model.Factor
 import cc.factorie.model.ItemizedModel
@@ -15,14 +16,10 @@ import cc.factorie.variable.DiscreteVariable
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.AdjacencyList
 import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.Label
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.RGB_INT
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import cc.factorie.model.Factor2
 import cc.factorie.model.Factor1
-import breeze.linalg.normalize
-import cc.factorie.infer.MaximizeByBP
-import cc.factorie.infer.MaximizeByBPLoopy
-import breeze.linalg.Tensor
-import cc.factorie.la.ScalarTensor
 
 /**
  * `data` is a `F` x `N` matrix; each column contains the features for a super-pixel
@@ -34,7 +31,9 @@ case class QuantizedImage(unaries: DenseMatrix[Double],
                           pixelMapping: Array[Int],
                           width: Int,
                           height: Int,
-                          filename: String = "NA")
+                          filename: String = "NA",
+                          unaryFeatures: DenseMatrix[Double] = null,
+                          rgbArray: Array[RGB_INT] = null)
 /**
  * labels(i) contains label for `i+1`th super-pixel
  */
@@ -50,6 +49,11 @@ object ImageSegmentationAdv
   val NUM_CLASSES: Int = 22 // # Classes (0-indexed)
   val BACKGROUND_CLASS: Int = 21 // The last label
 
+  val INTENSITY_LEVELS: Int = 4
+  val NUM_BINS = INTENSITY_LEVELS * INTENSITY_LEVELS * INTENSITY_LEVELS // Size of feature vector x_i
+
+  val DISABLE_PAIRWISE = true
+
   /**
    * Joint Feature Map
    */
@@ -61,31 +65,41 @@ object ImageSegmentationAdv
     assert(numSuperpixels == x.pairwise.length,
       "numSuperpixels == x.pairwise.length")
 
-    val transitions = DenseMatrix.zeros[Double](NUM_CLASSES, NUM_CLASSES)
-
     /**
-     * Pairwise features
+     * Unary Features
      */
+    val d = x.unaryFeatures.rows
+    assert(d == NUM_BINS, "d == NUM_BINS")
+
+    val unaryFeatures = DenseMatrix.zeros[Double](d, NUM_CLASSES)
     for (superIdx <- 0 until numSuperpixels) {
       val thisLabel = y.labels(superIdx)
 
-      x.pairwise(superIdx).foreach {
-        case adjacentSuperIdx =>
-          val nextLabel = y.labels(adjacentSuperIdx)
-
-          transitions(thisLabel, nextLabel) += 1.0
-          transitions(nextLabel, thisLabel) += 1.0
-      }
+      val x_i = x.unaryFeatures(::, superIdx)
+      unaryFeatures(::, thisLabel) := unaryFeatures(::, thisLabel) + x_i
     }
 
-    /*val debugPath =
-      Paths.get("/home/torekond/dev-local/dissolve-struct/data/generated/msrc/debug",
-          "%s-trans.csv".format(x.filename))
+    if (DISABLE_PAIRWISE)
+      unaryFeatures.toDenseVector
+    else {
+      /**
+       * Pairwise features
+       */
+      val transitions = DenseMatrix.zeros[Double](NUM_CLASSES, NUM_CLASSES)
+      for (superIdx <- 0 until numSuperpixels) {
+        val thisLabel = y.labels(superIdx)
 
-    csvwrite(debugPath.toFile(), transitions)*/
+        x.pairwise(superIdx).foreach {
+          case adjacentSuperIdx =>
+            val nextLabel = y.labels(adjacentSuperIdx)
 
-    normalize(transitions.toDenseVector)
-    // transitions.toDenseVector
+            transitions(thisLabel, nextLabel) += 1.0
+            transitions(nextLabel, thisLabel) += 1.0
+        }
+      }
+
+      DenseVector.vertcat(unaryFeatures.toDenseVector, transitions.toDenseVector)
+    }
   }
 
   /**
@@ -116,14 +130,6 @@ object ImageSegmentationAdv
     stuctHammingLoss.sum / stuctHammingLoss.length
   }
 
-  def unpackWeightVec(weightv: DenseVector[Double]): DenseMatrix[Double] = {
-
-    assert(weightv.size == NUM_CLASSES * NUM_CLASSES)
-    val pairwisePot = weightv.toDenseMatrix.reshape(NUM_CLASSES, NUM_CLASSES)
-
-    pairwisePot
-  }
-
   /**
    * Construct Factor graph and run MAP
    */
@@ -135,7 +141,8 @@ object ImageSegmentationAdv
     val nClasses = unaryPot.rows
 
     assert(nClasses == NUM_CLASSES)
-    assert(pairwisePot.rows == NUM_CLASSES)
+    if (!DISABLE_PAIRWISE)
+      assert(pairwisePot.rows == NUM_CLASSES)
 
     object PixelDomain extends DiscreteDomain(nClasses)
 
@@ -145,7 +152,7 @@ object ImageSegmentationAdv
 
     def getUnaryFactor(yi: Pixel, idx: Int): Factor = {
       new Factor1(yi) {
-        def score(k: Pixel#Value) = -unaryPot(k.intValue, idx)
+        def score(k: Pixel#Value) = unaryPot(k.intValue, idx)
       }
     }
 
@@ -164,35 +171,57 @@ object ImageSegmentationAdv
           getUnaryFactor(pixelSeq(idx), idx)
       }
 
-    val pairwiseFactors =
-      (0 until nSuperpixels).flatMap {
-        case thisIdx =>
-          val thisFactors = new ArrayBuffer[Factor]
-
-          adj(thisIdx).foreach {
-            case nextIdx =>
-              thisFactors ++=
-                getPairwiseFactor(pixelSeq(thisIdx), pixelSeq(nextIdx))
-          }
-          thisFactors
-      }
-
     val model = new ItemizedModel
     model ++= unaryFactors
-    model ++= pairwiseFactors
+
+    if (!DISABLE_PAIRWISE) {
+      val pairwiseFactors =
+        (0 until nSuperpixels).flatMap {
+          case thisIdx =>
+            val thisFactors = new ArrayBuffer[Factor]
+
+            adj(thisIdx).foreach {
+              case nextIdx =>
+                thisFactors ++=
+                  getPairwiseFactor(pixelSeq(thisIdx), pixelSeq(nextIdx))
+            }
+            thisFactors
+        }
+      model ++= pairwiseFactors
+    }
 
     // MaximizeByBPLoopy.maximize(pixelSeq, model)
-    val maxIterations = 300
+    val maxIterations = 100
     val maximizer = new MaximizeByMPLP(maxIterations)
     val assgn = maximizer.infer(pixelSeq, model).mapAssignment
 
     val mapLabels: Array[Label] = (0 until nSuperpixels).map {
       idx =>
         assgn(pixelSeq(idx)).intValue
-      // pixelSeq(idx).intValue
     }.toArray
 
     mapLabels
+  }
+
+  /**
+   * Unpack weight vector to Unary and Pairwise weights
+   */
+  def unpackWeightVec(weightv: DenseVector[Double]): (DenseMatrix[Double], DenseMatrix[Double]) = {
+
+    assert(weightv.size >= (NUM_CLASSES * NUM_BINS))
+    val d = NUM_BINS
+
+    val unaryWeights = weightv(0 until NUM_CLASSES * d)
+    val unaryWeightMat = unaryWeights.toDenseMatrix.reshape(d, NUM_CLASSES)
+
+    val pairwisePot =
+      if (!DISABLE_PAIRWISE) {
+        assert(weightv.size == (NUM_CLASSES * NUM_BINS) + (NUM_CLASSES * NUM_CLASSES))
+        val pairwiseWeights = weightv((NUM_CLASSES * d) until weightv.size)
+        pairwiseWeights.toDenseMatrix.reshape(NUM_CLASSES, NUM_CLASSES)
+      } else null
+
+    (unaryWeightMat, pairwisePot)
   }
 
   /**
@@ -202,15 +231,16 @@ object ImageSegmentationAdv
                         xi: QuantizedImage,
                         yi: QuantizedLabel): QuantizedLabel = {
 
-    println("Decoding: " + xi.filename)
-
     val nSuperpixels = xi.unaries.cols
+    val d = xi.unaryFeatures.rows
 
     assert(xi.pairwise.length == nSuperpixels,
       "xi.pairwise.length == nSuperpixels")
+    assert(xi.unaryFeatures.cols == nSuperpixels,
+      "xi.pairwise.length == nSuperpixels")
 
-    val unaryPot = xi.unaries
-    val pairwisePot = unpackWeightVec(model.weights.toDenseVector)
+    val (unaryWeights, pairwisePot) = unpackWeightVec(model.weights.toDenseVector)
+    val unaryPot = unaryWeights.t * xi.unaryFeatures
 
     if (yi != null) {
       assert(yi.labels.length == xi.pairwise.length,
@@ -228,6 +258,7 @@ object ImageSegmentationAdv
     }
 
     val decodedLabels = decode(unaryPot, pairwisePot, xi.pairwise)
+
     QuantizedLabel(decodedLabels, xi.filename)
   }
 

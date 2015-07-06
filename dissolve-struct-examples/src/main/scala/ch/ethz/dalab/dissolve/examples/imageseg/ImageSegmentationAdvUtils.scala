@@ -15,6 +15,8 @@ import breeze.linalg.max
 import java.awt.Graphics2D
 import java.awt.Font
 import java.awt.Color
+import scala.collection.mutable
+import breeze.linalg.normalize
 
 /**
  * @author torekond
@@ -27,6 +29,12 @@ object ImageSegmentationAdvUtils {
 
   val colormapFile = "/imageseg_label_color_map.txt"
   val legendImage = "/msrc_legend.bmp"
+
+  /**
+   * === Parameters ===
+   */
+  val INTENSITY_LEVELS = ImageSegmentationAdv.INTENSITY_LEVELS
+  val NUM_BINS = ImageSegmentationAdv.NUM_BINS
 
   /**
    * Map from a label to the corresponding RGB pixel
@@ -188,7 +196,12 @@ object ImageSegmentationAdvUtils {
         val labelsFile = labelsDir.resolve(labelsName)
         val labels: Array[Label] = deserializeLabels(labelsFile)
 
-        val x = QuantizedImage(unaries, pairwise, pixelMapping, width, height, imgName)
+        // Get features per super pixel
+        val rgbArray = imageToRGBVector(img)
+        val pixelGroups: Map[Index, Array[Index]] = pixelMappingToGroups(pixelMapping)
+        val unaryFeatures: DenseMatrix[Double] = getUnaryFeatures(rgbArray, pixelGroups)
+
+        val x = QuantizedImage(unaries, pairwise, pixelMapping, width, height, imgName, unaryFeatures)
         val y = QuantizedLabel(labels, imgName)
         val lo = LabeledObject(y, x)
 
@@ -207,9 +220,99 @@ object ImageSegmentationAdvUtils {
       .toArray
   }
 
+  /**
+   * Convert a BufferedImage to a matrix representing each pixel's RGB values
+   */
+  def imageToRGBVector(img: BufferedImage): DenseVector[RGB_INT] = {
+
+    val imgHeight = img.getHeight()
+    val imgWidth = img.getWidth()
+
+    val rgbArrayRowMajor: Array[Int] = img.getRGB(0, 0, imgWidth, imgHeight, null, 0, imgWidth)
+
+    DenseVector(rgbArrayRowMajor)
+  }
+
+  /**
+   * Creating mapping from Super-pixel-IDX -> [Pixel-IDX ...]
+   */
+  def pixelMappingToGroups(pixelMapping: Array[Index]): Map[Index, Array[Index]] = {
+
+    val groupsMutable = mutable.HashMap[Index, mutable.ArrayBuffer[Index]]()
+
+    pixelMapping.zipWithIndex.foreach {
+      case (superIdx, pixIdx) =>
+        val curList = groupsMutable.getOrElse(superIdx, new ArrayBuffer[Index]())
+        curList += pixIdx
+        groupsMutable.update(superIdx, curList)
+    }
+
+    val groups: Map[Index, Array[Index]] = groupsMutable.iterator.map {
+      case (supIdx, pixIdxArrayBuff) =>
+        (supIdx, pixIdxArrayBuff.toArray)
+    }.toMap
+
+    groups
+  }
+
+  /**
+   *
+   */
+  def getUnaryFeatures(rgbVector: DenseVector[RGB_INT],
+                       pixelGroups: Map[Index, Array[Index]]): DenseMatrix[Double] = {
+
+    val numSuperpixels = pixelGroups.size
+    val unaryFeatures = DenseMatrix.zeros[Double](NUM_BINS, numSuperpixels)
+
+    for (spIdx <- 0 until numSuperpixels) {
+
+      val rgbArray = pixelGroups(spIdx).map(pixelIdx => rgbVector(pixelIdx))
+      val xiFeatureVector = histogramFeatureVector(rgbArray)
+      unaryFeatures(::, spIdx) := normalize(xiFeatureVector, 2)
+      // unaryFeatures(::, spIdx) := xiFeatureVector
+
+    }
+
+    unaryFeatures
+  }
+
+  /**
+   *
+   */
+  def histogramFeatureVector(rgbArray: Array[RGB_INT]): DenseVector[Double] = {
+
+    val histogramVector =
+      DenseVector.zeros[Double](NUM_BINS)
+
+    for (i <- 0 until rgbArray.size) {
+
+      val rgb: RGB_INT = rgbArray(i)
+
+      val red = (rgb >> 16) & 0xFF
+      val green = (rgb >> 8) & 0xFF
+      val blue = (rgb) & 0xFF
+
+      // Calculate the index of this pixel in the histogramVector
+      val idx = math.pow(INTENSITY_LEVELS, 0) * ((red * (INTENSITY_LEVELS - 1)) / 256.0).round +
+        math.pow(INTENSITY_LEVELS, 1) * ((green * (INTENSITY_LEVELS - 1)) / 256.0).round +
+        math.pow(INTENSITY_LEVELS, 2) * ((blue * (INTENSITY_LEVELS - 1)) / 256.0).round
+
+      histogramVector(idx.round.toInt) += 1.0
+    }
+
+    histogramVector
+  }
+
   def labelsToImage(labelArray: Array[Label], width: Int, height: Int): BufferedImage = {
     val img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
     img.setRGB(0, 0, width, height, labelArray.map(i => labelToRGB(i)), 0, width)
+
+    img
+  }
+
+  def pixelsToImage(rgbArray: Array[Label], width: Int, height: Int): BufferedImage = {
+    val img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
+    img.setRGB(0, 0, width, height, rgbArray, 0, width)
 
     img
   }
@@ -308,6 +411,47 @@ object ImageSegmentationAdvUtils {
     labelsToImage(pixelLabels, width, height)
   }
 
+  /**
+   * Output super-pixel labels as an image
+   *
+   * z(i) = j : Super-pixel idx = `i` and pixel idx = `j`
+   */
+  def getQuantizedImage(x: QuantizedImage,
+                        width: Int,
+                        height: Int): BufferedImage = {
+
+    val z = x.pixelMapping
+
+    val n = x.unaryFeatures.cols // # Super pixels
+    val N = z.size // # Pixels
+
+    val groups: Map[Index, Array[Index]] = pixelMappingToGroups(z)
+
+    val rgbArray: Array[RGB_INT] = Array.fill(N)(0)
+    // Color the super-pixel with some random color
+    for (supIdx <- 0 until n) {
+
+      // Pick random RGB values
+      val r = scala.util.Random.nextInt(256)
+      val g = scala.util.Random.nextInt(256)
+      val b = scala.util.Random.nextInt(256)
+      val rgb: RGB_INT = rgbToPixel((r, g, b))
+
+      groups(supIdx).foreach {
+        case pixIdx =>
+          rgbArray(pixIdx) = rgb
+      }
+    }
+
+    pixelsToImage(rgbArray, width, height)
+  }
+
+  /**
+   * Convert an RGB object into TYPE_INT_ARGB representation
+   */
+  def rgbToPixel(rgb: (Int, Int, Int)): RGB_INT =
+    (rgb._1 << 16) | (rgb._2 << 8) | rgb._3
+
   def writeImage(img: BufferedImage, outFilePath: String): Unit = {
     ImageIO.write(img, "bmp", new File(outFilePath))
   }
@@ -317,8 +461,8 @@ object ImageSegmentationAdvUtils {
     println("Loading data")
 
     val dataDir: String = "../data/generated/msrc"
-    val trainFilePath: Path = Paths.get(dataDir, "Train.txt")
-    val data = loadData(dataDir, trainFilePath, limit = 1)
+    val trainFilePath: Path = Paths.get(dataDir, "3_Train.txt")
+    val data = loadData(dataDir, trainFilePath, 1)
 
     val debugDir = Paths.get(dataDir, "debug")
     if (!debugDir.toFile().exists())
@@ -333,8 +477,16 @@ object ImageSegmentationAdvUtils {
         println(x.filename)
         val imageOutName = y.filename + ".bmp"
         val imageOutFile = debugDir.resolve(imageOutName)
-        writeImage(getQuantizedLabelImage(y, x.pixelMapping, x.width, x.height),
-          imageOutFile.toString())
+        val xImg = getQuantizedImage(x, x.width, x.height)
+        val yImg = getQuantizedLabelImage(y, x.pixelMapping, x.width, x.height)
+
+        val tile = printImageTile(xImg, yImg, xImg, yImg)
+        writeImage(tile, imageOutFile.toString())
+        
+        // Write Unary Features
+        val csvOutName = x.filename + "-unaryf-" + ".csv"
+        val csvOutFile = debugDir.resolve(csvOutName)
+        breeze.linalg.csvwrite(csvOutFile.toFile(), x.unaryFeatures)
 
     }
 
