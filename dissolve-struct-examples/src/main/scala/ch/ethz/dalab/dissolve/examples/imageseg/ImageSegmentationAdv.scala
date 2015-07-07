@@ -24,6 +24,9 @@ import java.nio.file.Paths
 import javax.imageio.ImageIO
 import breeze.linalg.normalize
 import breeze.linalg.norm
+import cc.factorie.infer.MaximizeByBPLoopy
+import cc.factorie.la.Tensor
+import cc.factorie.la.DenseTensor1
 
 /**
  * `data` is a `F` x `N` matrix; each column contains the features for a super-pixel
@@ -155,13 +158,21 @@ object ImageSegmentationAdv
 
     def getUnaryFactor(yi: Pixel, idx: Int): Factor = {
       new Factor1(yi) {
+        val weights: DenseTensor1 = new DenseTensor1(unaryPot(::, idx).toArray)
         def score(k: Pixel#Value) = unaryPot(k.intValue, idx)
+        override def valuesScore(tensor: Tensor): Double = {
+          weights dot tensor
+        }
       }
     }
 
     def getPairwiseFactor(yi: Pixel, yj: Pixel): Factor = {
       new Factor2(yi, yj) {
+        val weights: DenseTensor1 = new DenseTensor1(pairwisePot.toArray)
         def score(i: Pixel#Value, j: Pixel#Value) = pairwisePot(i.intValue, j.intValue)
+        override def valuesScore(tensor: Tensor): Double = {
+          weights dot tensor
+        }
       }
     }
 
@@ -193,14 +204,15 @@ object ImageSegmentationAdv
       model ++= pairwiseFactors
     }
 
-    // MaximizeByBPLoopy.maximize(pixelSeq, model)
-    val maxIterations = 300
+    MaximizeByBPLoopy.maximize(pixelSeq, model)
+    /*val maxIterations = 300
     val maximizer = new MaximizeByMPLP(maxIterations)
-    val assgn = maximizer.infer(pixelSeq, model).mapAssignment
+    val assgn = maximizer.infer(pixelSeq, model).mapAssignment*/
 
     val mapLabels: Array[Label] = (0 until nSuperpixels).map {
       idx =>
-        assgn(pixelSeq(idx)).intValue
+        // assgn(pixelSeq(idx)).intValue
+        pixelSeq(idx).intValue
     }.toArray
 
     mapLabels
@@ -265,16 +277,18 @@ object ImageSegmentationAdv
     }
 
     val t0 = System.currentTimeMillis()
-    // val decodedLabels = decode(unaryPot, pairwisePot, xi.pairwise)
-    val decodedLabels = {
+    val decodedLabels = decode(unaryPot, pairwisePot, xi.pairwise)
+    /*val decodedLabels = {
       val labels = Array.fill[Label](nSuperpixels)(0)
       for (superIdx <- 0 until nSuperpixels) {
         labels(superIdx) = argmax(unaryPot(::, superIdx))
       }
       labels
-    }
+    }*/
     val oracleSolution = QuantizedLabel(decodedLabels, xi.filename)
     val t1 = System.currentTimeMillis()
+
+    // println("Decode time: %d ms".format(t1 - t0))
 
     /**
      * Debugging helpers
