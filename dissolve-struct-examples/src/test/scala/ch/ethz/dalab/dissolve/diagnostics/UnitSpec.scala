@@ -32,8 +32,8 @@ object ImageTestAdapter {
    */
   val data = {
     val dataDir = "../data/generated/msrc"
-    val trainFilePath = Paths.get(dataDir, "1_Train.txt")
-    val trainDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, trainFilePath, limit = 10)
+    val trainFilePath = Paths.get(dataDir, "Train.txt")
+    val trainDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, trainFilePath, limit = 50)
 
     trainDataSeq
   }
@@ -46,8 +46,21 @@ object ImageTestAdapter {
     new StructSVMModel[X, Y](DenseVector.zeros(numd), 0.0,
       DenseVector.zeros(numd), dissolveFunctions, 1)
 
-  // TODO
-  def perturb(y: Y, degree: Double = 0.1): Y = y
+  def perturb(y: Y, degree: Double = 0.1): Y = {
+    val d = y.labels.size
+    val numSwaps = max(1, (degree * d).toInt)
+
+    for (swapNo <- 0 until numSwaps) {
+      // Swap two random values in y
+      val (i, j) = (scala.util.Random.nextInt(d), scala.util.Random.nextInt(d))
+      val temp = y.labels(i)
+      y.labels(i) = y.labels(j)
+      y.labels(j) = temp
+    }
+
+    y
+
+  }
 }
 
 object ChainTestAdapter {

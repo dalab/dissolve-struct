@@ -269,7 +269,6 @@ object ImageSegmentationAdvUtils {
       val rgbArray = pixelGroups(spIdx).map(pixelIdx => rgbVector(pixelIdx))
       val xiFeatureVector = histogramFeatureVector(rgbArray)
       unaryFeatures(::, spIdx) := normalize(xiFeatureVector, 2)
-      // unaryFeatures(::, spIdx) := xiFeatureVector
 
     }
 
@@ -403,10 +402,10 @@ object ImageSegmentationAdvUtils {
       pixelLabels(pixelIdx) = superPixelLabel
     }
 
-    val foo = pixelLabels.groupBy(identity).map(x => (x._1, x._2.size))
-    println(foo)
+    /*val foo = pixelLabels.groupBy(identity).map(x => (x._1, x._2.size))
+    println(foo)*/
 
-    println("w = %d, h = %d".format(width, height))
+    /*println("w = %d, h = %d".format(width, height))*/
 
     labelsToImage(pixelLabels, width, height)
   }

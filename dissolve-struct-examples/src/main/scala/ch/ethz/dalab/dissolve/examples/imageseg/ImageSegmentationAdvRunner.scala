@@ -42,8 +42,8 @@ object ImageSegmentationAdvRunner {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val trainFilePath = Paths.get(dataDir, "3_Train.txt")
-    val valFilePath = Paths.get(dataDir, "3_Validation.txt")
+    val trainFilePath = Paths.get(dataDir, "4_Train.txt")
+    val valFilePath = Paths.get(dataDir, "4_Validation.txt")
 
     val trainDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, trainFilePath)
     val valDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, valFilePath)
@@ -79,7 +79,46 @@ object ImageSegmentationAdvRunner {
       val outPath = Paths.get(imageOutDir.toString(), "train-%s.%s".format(filename, format))
 
       // Image
-      val imgPath = Paths.get(dataDir.toString(), "Train", "%s.bmp".format(filename))
+      val imgPath = Paths.get(dataDir.toString(), "All", "%s.bmp".format(filename))
+      val img = ImageIO.read(imgPath.toFile())
+
+      val width = img.getWidth()
+      val height = img.getHeight()
+
+      // Write loss info
+      val predictTime: Long = t1 - t0
+      val loss: Double = ImageSegmentationAdv.lossFn(prediction, lo.label)
+      val text = "filename = %s\nprediction time = %d ms\nerror = %f\n#spx = %d".format(filename, predictTime, loss, lo.pattern.unaries.cols)
+      val textInfoImg = ImageSegmentationAdvUtils.getImageWithText(width, height, text)
+
+      // GT
+      val gtImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(lo.label,
+        lo.pattern.pixelMapping,
+        lo.pattern.width,
+        lo.pattern.height)
+
+      // Prediction
+      val predImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(prediction,
+        lo.pattern.pixelMapping,
+        lo.pattern.width,
+        lo.pattern.height)
+
+      val prettyOut = ImageSegmentationAdvUtils.printImageTile(img, gtImage, textInfoImg, predImage)
+      ImageSegmentationAdvUtils.writeImage(prettyOut, outPath.toString())
+
+    }
+
+    for (lo <- valDataSeq) {
+      val t0 = System.currentTimeMillis()
+      val prediction = model.predict(lo.pattern)
+      val t1 = System.currentTimeMillis()
+
+      val filename = lo.pattern.filename
+      val format = "bmp"
+      val outPath = Paths.get(imageOutDir.toString(), "val-%s.%s".format(filename, format))
+
+      // Image
+      val imgPath = Paths.get(dataDir.toString(), "All", "%s.bmp".format(filename))
       val img = ImageIO.read(imgPath.toFile())
 
       val width = img.getWidth()
@@ -117,7 +156,8 @@ object ImageSegmentationAdvRunner {
     val weights = model.getWeights().toDenseVector
     val (unaryMat, transMat) = ImageSegmentationAdv.unpackWeightVec(weights)
     breeze.linalg.csvwrite(unaryDebugPath.toFile(), unaryMat)
-    // breeze.linalg.csvwrite(transDebugPath.toFile(), transMat)
+    if(transMat != null)
+      breeze.linalg.csvwrite(transDebugPath.toFile(), transMat)
 
   }
 
