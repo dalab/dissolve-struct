@@ -9,8 +9,9 @@ import ch.ethz.dalab.dissolve.regression.LabeledObject
  * @author torekond
  */
 class OracleSpec extends UnitSpec {
-
-  val NUM_WEIGHT_VECS = 10 // = # times each test case is attempted
+  
+  val NUM_WEIGHT_VECS = 500 // = # times each test case is attempted
+  val EPSILON = 2.2204E-16
 
   // A sample datapoint
   val lo = data(0)
@@ -66,7 +67,7 @@ class OracleSpec extends UnitSpec {
     }
 
     // This should be empty
-    val negShlSeq: Seq[Double] = shlSeq.filter(_ < 0.0)
+    val negShlSeq: Seq[Double] = shlSeq.filter(_ < -EPSILON)
 
     assert(negShlSeq.length == 0,
       "%d / %d cases failed".format(negShlSeq.length, shlSeq.length))
@@ -96,7 +97,7 @@ class OracleSpec extends UnitSpec {
     }
 
     // This should be empty
-    val negShlSeq: Seq[Double] = shlSeq.filter(_ < 0.0)
+    val negShlSeq: Seq[Double] = shlSeq.filter(_ < -EPSILON)
 
     assert(negShlSeq.length == 0,
       "%d / %d cases failed".format(negShlSeq.length, shlSeq.length))
@@ -125,11 +126,15 @@ class OracleSpec extends UnitSpec {
       val F_ystar = F(x_m, ystar, w)
       val F_gt = F(x_m, y_m, w)
 
-      F_ystar - F_gt
+      val diff = F_ystar - F_gt
+
+      diff
     }
 
+    /*println(diffSeq)*/
+
     // This should be empty
-    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < 0.0)
+    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < -EPSILON)
 
     assert(negDiffSeq.length == 0,
       "%d / %d cases failed".format(negDiffSeq.length, diffSeq.length))
@@ -158,8 +163,10 @@ class OracleSpec extends UnitSpec {
       F_ystar - F_gt
     }
 
+    /*println(diffSeq)*/
+
     // This should be empty
-    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < 0.0)
+    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < -EPSILON)
 
     assert(negDiffSeq.length == 0,
       "%d / %d cases failed".format(negDiffSeq.length, diffSeq.length))
@@ -188,8 +195,10 @@ class OracleSpec extends UnitSpec {
       H - F_loss_aug
     }
 
+    /*println(diffSeq)*/
+
     // This should be empty
-    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < 0.0)
+    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < -EPSILON)
 
     assert(negDiffSeq.length == 0,
       "%d / %d cases failed".format(negDiffSeq.length, diffSeq.length))
@@ -217,8 +226,10 @@ class OracleSpec extends UnitSpec {
       H - F_loss_aug
     }
 
+    /*println(diffSeq)*/
+
     // This should be empty
-    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < 0.0)
+    val negDiffSeq: Seq[Double] = diffSeq.filter(_ < -EPSILON)
 
     assert(negDiffSeq.length == 0,
       "%d / %d cases failed".format(negDiffSeq.length, diffSeq.length))
