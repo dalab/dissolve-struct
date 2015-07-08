@@ -7,7 +7,10 @@ image:
 ---
 
 <div class="tiles">
-<p class="post-excerpt">Distributed solver library for structured output prediction (<a href="https://en.wikipedia.org/wiki/Structured_support_vector_machine">structured SVMs</a>)</p>
+<p class="post-excerpt">A distributed, easy to use solver library for large scale <a href="https://en.wikipedia.org/wiki/Structured_support_vector_machine">structured SVMs</a></p>
+</div>
+
+<div class="tiles">
 
 <div class="tile">
   <h2 class="post-title">Apache Spark</h2>
