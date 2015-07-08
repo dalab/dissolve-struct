@@ -1,35 +1,26 @@
 package ch.ethz.dalab.dissolve.examples.imageseg
 
-import scala.annotation.elidable
-import scala.annotation.elidable.ASSERTION
 import scala.collection.mutable.ArrayBuffer
+
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Vector
-import breeze.linalg.argmax
-import cc.factorie.infer.MaximizeByMPLP
-import cc.factorie.model.Factor
-import cc.factorie.model.ItemizedModel
+import breeze.linalg.normalize
+import cc.factorie.infer.MaximizeByBPLoopy
+import cc.factorie.la.DenseTensor1
+import cc.factorie.la.Tensor
+import cc.factorie.model._
 import cc.factorie.singleFactorIterable
 import cc.factorie.variable.DiscreteDomain
 import cc.factorie.variable.DiscreteVariable
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.AdjacencyList
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.Label
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes.RGB_INT
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegTypes.AdjacencyList
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegTypes.Label
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegTypes.RGB_INT
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
-import cc.factorie.model.Factor2
-import cc.factorie.model.Factor1
-import java.nio.file.Paths
-import javax.imageio.ImageIO
-import breeze.linalg.normalize
-import breeze.linalg.norm
-import cc.factorie.infer.MaximizeByBPLoopy
-import cc.factorie.la.Tensor
-import cc.factorie.la.DenseTensor1
 
 /**
- * `data` is a `F` x `N` matrix; each column contains the features for a super-pixel
+ * `data` is a `d` x `N` matrix; each column contains the features of super-pixel
  * `transitions` is an adjacency list. transitions(i) contains neighbours of super-pixel `i+1`'th super-pixel
  * `pixelMapping` contains mapping of super-pixel to corresponding pixel in the original image (column-major)
  */
@@ -42,15 +33,17 @@ case class QuantizedImage(unaries: DenseMatrix[Double],
                           unaryFeatures: DenseMatrix[Double] = null,
                           rgbArray: Array[RGB_INT] = null)
 /**
- * labels(i) contains label for `i+1`th super-pixel
+ * labels(i) contains label for `i`th super-pixel
  */
 case class QuantizedLabel(labels: Array[Int],
                           filename: String = "NA")
 
 /**
  * Functions for dissolve^struct
+ *
+ * Designed for the MSRC-21 dataset
  */
-object ImageSegmentationAdv
+object ImageSeg
     extends DissolveFunctions[QuantizedImage, QuantizedLabel] {
 
   val NUM_CLASSES: Int = 22 // # Classes (0-indexed)
@@ -59,10 +52,10 @@ object ImageSegmentationAdv
   val INTENSITY_LEVELS: Int = 8
   val NUM_BINS = INTENSITY_LEVELS * INTENSITY_LEVELS * INTENSITY_LEVELS // Size of feature vector x_i
 
-  val DISABLE_PAIRWISE = true
+  var DISABLE_PAIRWISE = false
 
   /**
-   * Joint Feature Map
+   * ======= Joint Feature Map =======
    */
   def featureFn(x: QuantizedImage, y: QuantizedLabel): Vector[Double] = {
 
@@ -118,7 +111,7 @@ object ImageSegmentationAdv
       1.0
 
   /**
-   * Structured Error Function
+   * ======= Structured Error Function =======
    */
   def lossFn(yTruth: QuantizedLabel, yPredict: QuantizedLabel): Double = {
 
@@ -138,6 +131,7 @@ object ImageSegmentationAdv
 
   /**
    * Construct Factor graph and run MAP
+   * (Max-product using Loopy Belief Propogation)
    */
   def decode(unaryPot: DenseMatrix[Double],
              pairwisePot: DenseMatrix[Double],
@@ -205,13 +199,9 @@ object ImageSegmentationAdv
     }
 
     MaximizeByBPLoopy.maximize(pixelSeq, model)
-    /*val maxIterations = 300
-    val maximizer = new MaximizeByMPLP(maxIterations)
-    val assgn = maximizer.infer(pixelSeq, model).mapAssignment*/
 
     val mapLabels: Array[Label] = (0 until nSuperpixels).map {
       idx =>
-        // assgn(pixelSeq(idx)).intValue
         pixelSeq(idx).intValue
     }.toArray
 
@@ -240,7 +230,7 @@ object ImageSegmentationAdv
   }
 
   /**
-   * Maximization Oracle
+   * ======= Maximization Oracle =======
    */
   override def oracleFn(model: StructSVMModel[QuantizedImage, QuantizedLabel],
                         xi: QuantizedImage,
@@ -256,13 +246,6 @@ object ImageSegmentationAdv
 
     val (unaryWeights, pairwisePot) = unpackWeightVec(model.weights.toDenseVector)
     val unaryPot = unaryWeights.t * xi.unaryFeatures
-    /*val unaryPot = DenseMatrix.zeros[Double](NUM_CLASSES, nSuperpixels)
-    for (
-      superIdx <- 0 until nSuperpixels;
-      label <- 0 until NUM_CLASSES
-    ) {
-      unaryPot(label, superIdx) = unaryWeights(::, label) dot xi.unaryFeatures(::, superIdx)
-    }*/
 
     if (yi != null) {
       assert(yi.labels.length == xi.pairwise.length,
@@ -278,97 +261,8 @@ object ImageSegmentationAdv
 
     val t0 = System.currentTimeMillis()
     val decodedLabels = decode(unaryPot, pairwisePot, xi.pairwise)
-    /*val decodedLabels = {
-      val labels = Array.fill[Label](nSuperpixels)(0)
-      for (superIdx <- 0 until nSuperpixels) {
-        labels(superIdx) = argmax(unaryPot(::, superIdx))
-      }
-      labels
-    }*/
     val oracleSolution = QuantizedLabel(decodedLabels, xi.filename)
     val t1 = System.currentTimeMillis()
-
-    // println("Decode time: %d ms".format(t1 - t0))
-
-    /**
-     * Debugging helpers
-     */
-    if (yi != null) {
-      /*if (xi.filename.contains("1_22")) {
-        println("L2 norm (w) = " + norm(model.getWeights(), 2))
-      }*/
-
-      val dataDir = "../data/generated/msrc"
-      val imageOutDir = Paths.get(dataDir, "debug", "debug-oracle")
-
-      val filename = xi.filename
-      val format = "bmp"
-      val outPath = Paths.get(imageOutDir.toString(), "train-%s-maxoracle-%d.%s".format(filename, t0 / 1000, format))
-
-      // Image
-      val imgPath = Paths.get(dataDir.toString(), "All", "%s.bmp".format(filename))
-      val img = ImageIO.read(imgPath.toFile())
-
-      val width = img.getWidth()
-      val height = img.getHeight()
-
-      // Write loss info
-      val predictTime: Long = t1 - t0
-      val loss: Double = ImageSegmentationAdv.lossFn(oracleSolution, yi)
-      val text = "filename = %s\nprediction time = %d ms\nerror = %f\n#spx = %d".format(filename, predictTime, loss, xi.unaryFeatures.cols)
-      val textInfoImg = ImageSegmentationAdvUtils.getImageWithText(width, height, text)
-
-      // GT
-      val gtImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(yi,
-        xi.pixelMapping,
-        xi.width,
-        xi.height)
-
-      // Prediction
-      val predImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(oracleSolution,
-        xi.pixelMapping,
-        xi.width,
-        xi.height)
-
-      val prettyOut = ImageSegmentationAdvUtils.printImageTile(img, gtImage, textInfoImg, predImage)
-      // ImageSegmentationAdvUtils.writeImage(prettyOut, outPath.toString())
-    } else {
-      val dataDir = "../data/generated/msrc"
-      val imageOutDir = Paths.get(dataDir, "debug", "debug-oracle")
-
-      val filename = xi.filename
-      val format = "bmp"
-      val outPath = Paths.get(imageOutDir.toString(), "train-%s-pred-%d.%s".format(filename, t0 / 1000, format))
-
-      // Image
-      val imgPath = Paths.get(dataDir.toString(), "All", "%s.bmp".format(filename))
-      val img = ImageIO.read(imgPath.toFile())
-
-      val width = img.getWidth()
-      val height = img.getHeight()
-
-      // Write loss info
-      val predictTime: Long = t1 - t0
-      val loss: Double = 0.0
-      val text = "filename = %s\nprediction time = %d ms\nerror = %f\n#spx = %d".format(filename, predictTime, loss, xi.unaryFeatures.cols)
-      val textInfoImg = ImageSegmentationAdvUtils.getImageWithText(width, height, text)
-
-      // GT
-      val gtImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(oracleSolution,
-        xi.pixelMapping,
-        xi.width,
-        xi.height)
-
-      // Prediction
-      val predImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(oracleSolution,
-        xi.pixelMapping,
-        xi.width,
-        xi.height)
-
-      val prettyOut = ImageSegmentationAdvUtils.printImageTile(img, gtImage, textInfoImg, predImage)
-      // ImageSegmentationAdvUtils.writeImage(prettyOut, outPath.toString())
-
-    }
 
     oracleSolution
   }

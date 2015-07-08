@@ -1,27 +1,29 @@
 package ch.ethz.dalab.dissolve.examples.imageseg
 
+import java.awt.Color
+import java.awt.Font
+import java.awt.Graphics2D
 import java.awt.image.BufferedImage
+import java.io.File
 import java.nio.file.Path
 import java.nio.file.Paths
+
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
+
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationTypes._
+import breeze.linalg.max
+import breeze.linalg.normalize
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegTypes._
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import javax.imageio.ImageIO
-import java.io.File
-import breeze.linalg.max
-import java.awt.Graphics2D
-import java.awt.Font
-import java.awt.Color
-import scala.collection.mutable
-import breeze.linalg.normalize
 
 /**
  * @author torekond
  */
-object ImageSegmentationAdvUtils {
+object ImageSegUtils {
 
   /**
    * === Paths ===
@@ -33,8 +35,8 @@ object ImageSegmentationAdvUtils {
   /**
    * === Parameters ===
    */
-  val INTENSITY_LEVELS = ImageSegmentationAdv.INTENSITY_LEVELS
-  val NUM_BINS = ImageSegmentationAdv.NUM_BINS
+  val INTENSITY_LEVELS = ImageSeg.INTENSITY_LEVELS
+  val NUM_BINS = ImageSeg.NUM_BINS
 
   /**
    * Map from a label to the corresponding RGB pixel
@@ -401,11 +403,6 @@ object ImageSegmentationAdvUtils {
       val superPixelLabel = y.labels(superPixelIdx)
       pixelLabels(pixelIdx) = superPixelLabel
     }
-
-    /*val foo = pixelLabels.groupBy(identity).map(x => (x._1, x._2.size))
-    println(foo)*/
-
-    /*println("w = %d, h = %d".format(width, height))*/
 
     labelsToImage(pixelLabels, width, height)
   }

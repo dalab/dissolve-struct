@@ -12,7 +12,7 @@ import javax.imageio.ImageIO
 /**
  * @author torekond
  */
-object ImageSegmentationAdvRunner {
+object ImageSegRunner {
 
   def main(args: Array[String]): Unit = {
 
@@ -28,12 +28,20 @@ object ImageSegmentationAdvRunner {
     val dataDir = kwargs.getOrElse("input_path", "../data/generated/msrc")
     val appname = kwargs.getOrElse("appname", "imageseg-%d".format(startTime))
     val debugPath = kwargs.getOrElse("debug_file", "imageseg-%d.csv".format(startTime))
+
+    val unariesOnly = kwargs.getOrElse("unaries", "true").toBoolean
+
+    val trainFile = kwargs.getOrElse("train", "Train.txt")
+    val validationFile = kwargs.getOrElse("validation", "Validation.txt")
     solverOptions.debugInfoPath = debugPath
 
     println(dataDir)
     println(kwargs)
 
     solverOptions.doLineSearch = true
+
+    if (unariesOnly)
+      ImageSeg.DISABLE_PAIRWISE = true
 
     /**
      * Setup Spark
@@ -42,11 +50,11 @@ object ImageSegmentationAdvRunner {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val trainFilePath = Paths.get(dataDir, "4_Train.txt")
-    val valFilePath = Paths.get(dataDir, "4_Validation.txt")
+    val trainFilePath = Paths.get(dataDir, trainFile)
+    val valFilePath = Paths.get(dataDir, validationFile)
 
-    val trainDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, trainFilePath)
-    val valDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, valFilePath)
+    val trainDataSeq = ImageSegUtils.loadData(dataDir, trainFilePath)
+    val valDataSeq = ImageSegUtils.loadData(dataDir, valFilePath)
 
     val trainData = sc.parallelize(trainDataSeq, 1).cache
     val valData = sc.parallelize(valDataSeq, 1).cache
@@ -58,7 +66,7 @@ object ImageSegmentationAdvRunner {
     val trainer: StructSVMWithDBCFW[QuantizedImage, QuantizedLabel] =
       new StructSVMWithDBCFW[QuantizedImage, QuantizedLabel](
         trainData,
-        ImageSegmentationAdv,
+        ImageSeg,
         solverOptions)
 
     val model: StructSVMModel[QuantizedImage, QuantizedLabel] = trainer.trainModel()
@@ -87,24 +95,24 @@ object ImageSegmentationAdvRunner {
 
       // Write loss info
       val predictTime: Long = t1 - t0
-      val loss: Double = ImageSegmentationAdv.lossFn(prediction, lo.label)
+      val loss: Double = ImageSeg.lossFn(prediction, lo.label)
       val text = "filename = %s\nprediction time = %d ms\nerror = %f\n#spx = %d".format(filename, predictTime, loss, lo.pattern.unaries.cols)
-      val textInfoImg = ImageSegmentationAdvUtils.getImageWithText(width, height, text)
+      val textInfoImg = ImageSegUtils.getImageWithText(width, height, text)
 
       // GT
-      val gtImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(lo.label,
+      val gtImage = ImageSegUtils.getQuantizedLabelImage(lo.label,
         lo.pattern.pixelMapping,
         lo.pattern.width,
         lo.pattern.height)
 
       // Prediction
-      val predImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(prediction,
+      val predImage = ImageSegUtils.getQuantizedLabelImage(prediction,
         lo.pattern.pixelMapping,
         lo.pattern.width,
         lo.pattern.height)
 
-      val prettyOut = ImageSegmentationAdvUtils.printImageTile(img, gtImage, textInfoImg, predImage)
-      ImageSegmentationAdvUtils.writeImage(prettyOut, outPath.toString())
+      val prettyOut = ImageSegUtils.printImageTile(img, gtImage, textInfoImg, predImage)
+      ImageSegUtils.writeImage(prettyOut, outPath.toString())
 
     }
 
@@ -126,24 +134,24 @@ object ImageSegmentationAdvRunner {
 
       // Write loss info
       val predictTime: Long = t1 - t0
-      val loss: Double = ImageSegmentationAdv.lossFn(prediction, lo.label)
+      val loss: Double = ImageSeg.lossFn(prediction, lo.label)
       val text = "filename = %s\nprediction time = %d ms\nerror = %f\n#spx = %d".format(filename, predictTime, loss, lo.pattern.unaries.cols)
-      val textInfoImg = ImageSegmentationAdvUtils.getImageWithText(width, height, text)
+      val textInfoImg = ImageSegUtils.getImageWithText(width, height, text)
 
       // GT
-      val gtImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(lo.label,
+      val gtImage = ImageSegUtils.getQuantizedLabelImage(lo.label,
         lo.pattern.pixelMapping,
         lo.pattern.width,
         lo.pattern.height)
 
       // Prediction
-      val predImage = ImageSegmentationAdvUtils.getQuantizedLabelImage(prediction,
+      val predImage = ImageSegUtils.getQuantizedLabelImage(prediction,
         lo.pattern.pixelMapping,
         lo.pattern.width,
         lo.pattern.height)
 
-      val prettyOut = ImageSegmentationAdvUtils.printImageTile(img, gtImage, textInfoImg, predImage)
-      ImageSegmentationAdvUtils.writeImage(prettyOut, outPath.toString())
+      val prettyOut = ImageSegUtils.printImageTile(img, gtImage, textInfoImg, predImage)
+      ImageSegUtils.writeImage(prettyOut, outPath.toString())
 
     }
 
@@ -154,9 +162,9 @@ object ImageSegmentationAdvRunner {
       Paths.get("/home/torekond/dev-local/dissolve-struct/data/generated/msrc/debug",
         "%s-trans.csv".format(appname))
     val weights = model.getWeights().toDenseVector
-    val (unaryMat, transMat) = ImageSegmentationAdv.unpackWeightVec(weights)
+    val (unaryMat, transMat) = ImageSeg.unpackWeightVec(weights)
     breeze.linalg.csvwrite(unaryDebugPath.toFile(), unaryMat)
-    if(transMat != null)
+    if (transMat != null)
       breeze.linalg.csvwrite(transDebugPath.toFile(), transMat)
 
   }
