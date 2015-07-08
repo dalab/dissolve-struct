@@ -1,7 +1,7 @@
 ---
 layout: article
 title: "Semantic Image Segmentation With CRFs"
-modified:
+modified: 2015-07-08
 categories: examples
 excerpt:
 tags: []
@@ -13,23 +13,45 @@ date: 2015-05-24T22:58:03+02:00
 ---
 
 
-Image Segmentation is performed on the [MSRC](http://research.microsoft.com/en-us/projects/objectclassrecognition/).
-This is done by dividing the image into a fixed number of regions and extracting histogram features for each region.
-Decoding is performed on a CRF modeled using Factorie, using belief propagation on unary and pairwise features.
+Image Segmentation is performed on the [MSRC-21](http://research.microsoft.com/en-us/projects/objectclassrecognition/) dataset.
+To use this, you'll need to download and extract the MSRC dataset from [here](https://s3-eu-west-1.amazonaws.com/dissolve-struct/msrc/msrc.tar.gz)
+into the `data/generated` directory.
+This dataset contains the MSRC-21 labelled images, the extracted super-pixels using [SLIC](http://ivrl.epfl.ch/research/superpixels)
+and its [features](http://cvlab.epfl.ch/data/dpg/index.php).
 
-This examples requires the dataset (Pixel-wise labelled image v2 dataset) downloaded from the MSRC [webpage](http://research.microsoft.com/en-us/projects/objectclassrecognition/) to be placed within the `data/generated` directory.
+The problem is formulated as CRF parameter learning.
+We use simple histogram features for the data term (unaries) and pairwise
+transitions.
+The maximization oracle performs loss-augmented decoding on a second-order
+factor graph using Loopy Belief Propagation through [Factorie](http://factorie.cs.umass.edu/).
 
+In order to run the example, you'll need to execute the following command, from
+within the `dissolve-struct-examples` directory.
 {% highlight bash %}
 spark-1.X/bin/spark-submit \
-	--jars \ ../dissolve-struct-lib/target/scala-2.10/dissolvestruct_2.10-0.1-SNAPSHOT.jar,lib/factorie-1.0.jar \
-	--class "ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationDemo" \
-	--master local \
-	--driver-memory 2G \
-	target/scala-2.10/dissolvestructexample_2.10-0.1-SNAPSHOT.jar \
+  --class "ch.ethz.dalab.dissolve.examples.imageseg.ImageSegRunner" \
+  --master local \
+  --driver-memory 2G \
+  <examples-jar-path>
 {% endhighlight %}
+This should take about 5-6 hours to obtain satisfactory results.
 
-The first time the command is executed, the features from the images are pre-computed and stored within the MSRC directory to speed up subsequent executions.
-This however make take around 10 minutes, depending on the machine.
-
-Training the model over pairwise factors can be extremely slow, since the MAP assignment needs to be computed over thousands of factors, each which can take a combination of 24<sup>2</sup> labels.
-The training can be done quickly with only unary features using the `-onlyunaries` flag.
+Alternatively, this can be run either on a subset of the original dataset, like so:
+{% highlight bash %}
+spark-1.X/bin/spark-submit \
+  --class "ch.ethz.dalab.dissolve.examples.imageseg.ImageSegRunner" \
+  --master local \
+  --driver-memory 2G \
+  <examples-jar-path> \
+  --kwargs train=Train-small.txt,validation=Validation-small.txt
+{% endhighlight %}
+or by using only the unary features:
+{% highlight bash %}
+spark-1.X/bin/spark-submit \
+  --class "ch.ethz.dalab.dissolve.examples.imageseg.ImageSegRunner" \
+  --master local \
+  --driver-memory 2G \
+  <examples-jar-path> \
+  --kwargs unaries=true
+{% endhighlight %}
+Both of these should finish execution in under 5 minutes.
