@@ -74,7 +74,7 @@ object ImageSegRunner {
     // Create directories for image out, if it doesn't exist
     val imageOutDir = Paths.get(dataDir, "debug", appname)
     if (!imageOutDir.toFile().exists())
-      imageOutDir.toFile().mkdir()
+      imageOutDir.toFile().mkdirs()
 
     println("Test time!")
     for (lo <- trainDataSeq) {

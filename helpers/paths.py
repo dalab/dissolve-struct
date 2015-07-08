@@ -30,6 +30,8 @@ COV_MULT_URL = "http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/multiclas
 
 RCV1_URL = "http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/binary/rcv1_train.binary.bz2"
 
+MSRC_URL = "https://s3-eu-west-1.amazonaws.com/dissolve-struct/msrc/msrc.tar.gz"
+
 chain_files = ["folds_test.csv",
                "folds_train.csv",
                "patterns_train.csv",
