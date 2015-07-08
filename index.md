@@ -3,7 +3,7 @@ layout: home
 title: dissolve^struct
 permalink: /
 image:
-  feature: wood-texture-1600x800.jpg
+  feature: matterhorn.jpeg
 ---
 
 <div class="tiles">
