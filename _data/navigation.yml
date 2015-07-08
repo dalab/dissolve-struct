@@ -6,8 +6,13 @@
   image: 400x250.gif
 
 - title: Examples
-  url: /articles/
+  url: /examples/
   excerpt: "Examples of dissolve^struct in the wild."
+  image: 400x250.gif
+
+- title: Wiki
+  url: /wiki/
+  excerpt: "dissolve^struct wiki"
   image: 400x250.gif
 
 - title: About
