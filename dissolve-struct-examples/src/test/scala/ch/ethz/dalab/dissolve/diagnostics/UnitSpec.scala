@@ -11,8 +11,8 @@ import breeze.linalg.Matrix
 import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.examples.chain.ChainDemo
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationAdv
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegmentationAdvUtils
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSeg
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegUtils
 import ch.ethz.dalab.dissolve.examples.imageseg.QuantizedImage
 import ch.ethz.dalab.dissolve.examples.imageseg.QuantizedLabel
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
@@ -26,14 +26,14 @@ object ImageTestAdapter {
   /**
    * Dissolve Functions
    */
-  val dissolveFunctions: DissolveFunctions[X, Y] = ImageSegmentationAdv
+  val dissolveFunctions: DissolveFunctions[X, Y] = ImageSeg
   /**
    * Some Data
    */
   val data = {
     val dataDir = "../data/generated/msrc"
     val trainFilePath = Paths.get(dataDir, "Train.txt")
-    val trainDataSeq = ImageSegmentationAdvUtils.loadData(dataDir, trainFilePath, limit = 50)
+    val trainDataSeq = ImageSegUtils.loadData(dataDir, trainFilePath, limit = 50)
 
     trainDataSeq
   }
@@ -41,7 +41,7 @@ object ImageTestAdapter {
    * A dummy model
    */
   val lo = data(0)
-  val numd = ImageSegmentationAdv.featureFn(lo.pattern, lo.label).size
+  val numd = ImageSeg.featureFn(lo.pattern, lo.label).size
   val model: StructSVMModel[X, Y] =
     new StructSVMModel[X, Y](DenseVector.zeros(numd), 0.0,
       DenseVector.zeros(numd), dissolveFunctions, 1)
@@ -121,7 +121,7 @@ object ChainTestAdapter {
  */
 abstract class UnitSpec extends FlatSpec with Matchers with OptionValues with Inside with Inspectors {
 
-  val DissolveAdapter = ChainTestAdapter
+  val DissolveAdapter = ImageTestAdapter
 
   type X = DissolveAdapter.X
   type Y = DissolveAdapter.Y
