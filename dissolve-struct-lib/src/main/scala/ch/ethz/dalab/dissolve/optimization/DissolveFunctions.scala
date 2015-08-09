@@ -18,4 +18,14 @@ trait DissolveFunctions[X, Y] extends Serializable {
 
   def predictFn(model: StructSVMModel[X, Y], x: X): Y
 
+  /**
+   * Image Segmentation-specific adapters
+   */
+  def getImageID(x: X): String = "NA"
+  
+  def numClasses(): Int = -1
+
+  // Returns: Label -> (TotalPixelCount, CorrectPixelCount)
+  def perClassAccuracy(yPredicted: Y, yTruth: Y): Array[(Int, Int)] = null
+
 }
