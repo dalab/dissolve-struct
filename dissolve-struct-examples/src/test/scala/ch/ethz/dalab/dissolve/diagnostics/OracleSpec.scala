@@ -9,7 +9,7 @@ import ch.ethz.dalab.dissolve.regression.LabeledObject
  * @author torekond
  */
 class OracleSpec extends UnitSpec {
-  
+
   val NUM_WEIGHT_VECS = 500 // = # times each test case is attempted
   val EPSILON = 2.2204E-16
 
@@ -120,8 +120,8 @@ class OracleSpec extends UnitSpec {
       val x_m = lo.pattern
       val y_m = lo.label
 
-      // Get loss-augmented argmax prediction
-      val ystar = maxoracle(model, x_m, y_m)
+      // Get argmax prediction
+      val ystar = predict(model, x_m)
 
       val F_ystar = F(x_m, ystar, w)
       val F_gt = F(x_m, y_m, w)
@@ -154,8 +154,8 @@ class OracleSpec extends UnitSpec {
       val x_m = lo.pattern
       val y_m = perturb(lo.label, 0.1)
 
-      // Get loss-augmented argmax prediction
-      val ystar = maxoracle(model, x_m, y_m)
+      // Get argmax prediction
+      val ystar = predict(model, x_m)
 
       val F_ystar = F(x_m, ystar, w)
       val F_gt = F(x_m, y_m, w)

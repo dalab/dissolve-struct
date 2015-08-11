@@ -139,6 +139,7 @@ abstract class UnitSpec extends FlatSpec with Matchers with OptionValues with In
   def phi = dissolveFunctions.featureFn _
   def delta = dissolveFunctions.lossFn _
   def maxoracle = dissolveFunctions.oracleFn _
+  def predict = dissolveFunctions.predictFn _
 
   def psi(lo: LabeledObject[X, Y], ymap: Y) =
     phi(lo.pattern, lo.label) - phi(lo.pattern, ymap)
