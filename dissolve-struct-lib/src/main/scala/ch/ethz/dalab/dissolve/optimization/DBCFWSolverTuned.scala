@@ -59,6 +59,7 @@ class DBCFWSolverTuned[X, Y](
                                    oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
                                    oracleStreamFn: (StructSVMModel[X, Y], X, Y) => Stream[Y],
                                    predictFn: (StructSVMModel[X, Y], X) => Y,
+                                   fineOracleFn: (StructSVMModel[X, Y], X, Y) => Y,
                                    xid: (X) => String)
 
   // Input to the mapper: idx -> DataShard
@@ -152,8 +153,8 @@ class DBCFWSolverTuned[X, Y](
   val EPS: Double = 2.2204E-16
 
   // Beyond `DEBUG_THRESH` rounds, debug calculations occur every `DEBUG_STEP`-th round
-  val DEBUG_THRESH: Int = 20
-  val DEBUG_STEP: Int = 10
+  val DEBUG_THRESH: Int = 100
+  val DEBUG_STEP: Int = 50
   var nextDebugRound: Int = 1
 
   val header: String = {
@@ -212,6 +213,7 @@ class DBCFWSolverTuned[X, Y](
       dissolveFunctions.oracleFn,
       dissolveFunctions.oracleCandidateStream,
       dissolveFunctions.predictFn,
+      dissolveFunctions.fineOracleFn,
       dissolveFunctions.getImageID)
 
     /**
@@ -410,7 +412,7 @@ class DBCFWSolverTuned[X, Y](
     println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
 
     debugSb ++= header
-    LAdap.log.info("[G] %s,%s,%s,%s,%s".format("k", "filename", "gamma", "w_s", "ell_s"))
+    LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "level", "filename", "gamma", "w_s", "ell_s", "gamma_f", "w_s_f", "ell_s_f"))
 
     def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
 
@@ -669,6 +671,7 @@ class DBCFWSolverTuned[X, Y](
     val oracleStreamFn = helperFunctions.oracleStreamFn
     val phi = helperFunctions.featureFn
     val lossFn = helperFunctions.lossFn
+    val fineOracleFn = helperFunctions.fineOracleFn
 
     val lambda = solverOptions.lambda
 
@@ -721,13 +724,16 @@ class DBCFWSolverTuned[X, Y](
           else None
         } else None
 
+      var level = 0
+
       // 2.b) Solve loss-augmented inference for point i
       val yAndCache =
         if (bestCachedCandidateForI.isEmpty) {
 
           val argmaxStream = oracleStreamFn(localModel, pattern, label)
 
-          val GAMMA_THRESHOLD = 0.5 * ((2.0 * n) / (k + 2.0 * n))
+          // val GAMMA_THRESHOLD = 0.5 * ((2.0 * n) / (k + 2.0 * n))
+          val GAMMA_THRESHOLD = EPS
           // Sort by gamma, in decreasing order
           def diff(y: (Y, UpdateQuantities)): Double = -y._2.gamma
           // Maintain a priority queue, where the head contains the argmax with highest gamma value
@@ -747,6 +753,7 @@ class DBCFWSolverTuned[X, Y](
                   consumeNext
               }.foreach { // Streams are lazy, force an `action` on them. Otherwise, subsequent elements
                 // do not get computed
+                level += 1
                 identity // Do nothing, just consume the argmax and move on
               }
           }, "oracle-stream")
@@ -780,7 +787,34 @@ class DBCFWSolverTuned[X, Y](
       val w_s = updates.w_s
       val ell_s = updates.ell_s
 
-      LAdap.log.info("[G] " + k + "," + helperFunctions.xid(pattern) + "," + gamma + "," + norm(w_s, 2) + "," + ell_s)
+      val gammaLogSb = new StringBuilder()
+      gammaLogSb ++=
+        "[G] " + k + "," +
+        level + "," +
+        helperFunctions.xid(pattern) + "," +
+        gamma + "," +
+        norm(w_s, 2) + "," +
+        ell_s
+
+      // Obtain oracle decoding for last-level, in order to compare the gamma
+      val ystar_i_fine = fineOracleFn(localModel, pattern, label)
+      if (ystar_i_fine != null) {
+        val updates_fine = getUpdateQuantities(localModel, pattern, label, ystar_i_fine, w_i, ell_i, k)
+        val gamma_fine = updates_fine.gamma
+        val w_s_fine = updates.w_s
+        val ell_s_fine = updates_fine.ell_s
+        gammaLogSb ++= "," +
+          gamma_fine + "," +
+          norm(w_s_fine, 2) + "," +
+          ell_s_fine
+      } else {
+        gammaLogSb ++= "," +
+          Double.NaN + "," +
+          Double.NaN + "," +
+          Double.NaN
+      }
+
+      LAdap.log.info(gammaLogSb.toString())
 
       val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
       localModel.updateWeights(tempWeights1)

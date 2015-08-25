@@ -247,9 +247,10 @@ object SolverUtils {
         val lossAug_yStar = maxOracle(model, datapoint.pattern, datapoint.label)
         val w_s = phi(datapoint.pattern, datapoint.label) - phi(datapoint.pattern, lossAug_yStar)
         val ell_s = lossFn(lossAug_yStar, datapoint.label)
-        val wFeatureDotProduct = model.getWeights().t * (phi(datapoint.pattern, datapoint.label)
-          - phi(datapoint.pattern, lossAug_yStar))
-        val structuredHingeLoss: Double = wFeatureDotProduct
+        val lossAug_wFeatureDotProduct = lossFn(lossAug_yStar, datapoint.label) -
+          (model.getWeights().t * (phi(datapoint.pattern, datapoint.label)
+            - phi(datapoint.pattern, lossAug_yStar)))
+        val structuredHingeLoss: Double = lossAug_wFeatureDotProduct
 
         /**
          * \Delta

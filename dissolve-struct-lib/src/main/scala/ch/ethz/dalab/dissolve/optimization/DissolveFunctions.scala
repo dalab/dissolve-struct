@@ -21,8 +21,13 @@ trait DissolveFunctions[X, Y] extends Serializable {
   /**
    * Image Segmentation-specific adapters
    */
-  def getImageID(x: X): String = "NA"
   
+  // Get the loss-augmented decoding on the final level
+  def fineOracleFn(model: StructSVMModel[X, Y], x: X, y: Y): Y =
+    oracleFn(model, x, y)
+
+  def getImageID(x: X): String = "NA"
+
   def numClasses(): Int = -1
 
   // Returns: Label -> (TotalPixelCount, CorrectPixelCount)
