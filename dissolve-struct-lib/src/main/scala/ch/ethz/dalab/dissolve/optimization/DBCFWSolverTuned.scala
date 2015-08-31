@@ -412,7 +412,7 @@ class DBCFWSolverTuned[X, Y](
     println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
 
     debugSb ++= header
-    LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "level", "filename", "gamma", "w_s", "ell_s", "gamma_f", "w_s_f", "ell_s_f"))
+    LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "ts", "level", "filename", "gamma", "w_s", "ell_s", "gamma_f", "w_s_f", "ell_s_f"))
 
     def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
 
@@ -724,10 +724,8 @@ class DBCFWSolverTuned[X, Y](
           else None
         } else None
 
-      var level = 0
-
       // 2.b) Solve loss-augmented inference for point i
-      val yAndCache =
+      val yCacheMaxLevel =
         if (bestCachedCandidateForI.isEmpty) {
 
           val argmaxStream = oracleStreamFn(localModel, pattern, label)
@@ -753,13 +751,14 @@ class DBCFWSolverTuned[X, Y](
                   consumeNext
               }.foreach { // Streams are lazy, force an `action` on them. Otherwise, subsequent elements
                 // do not get computed
-                level += 1
                 identity // Do nothing, just consume the argmax and move on
               }
           }, "oracle-stream")
 
           val (ystar, updates): (Y, UpdateQuantities) =
             time({ argmaxCandidates.head }, "argmax-head")
+
+          val maxLevel = argmaxCandidates.size - 1 // Levels are 0-indexed
 
           val updatedCache: Option[BoundedCacheList[Y]] =
             if (solverOptions.enableOracleCache) {
@@ -774,13 +773,14 @@ class DBCFWSolverTuned[X, Y](
               Some(nonTruncatedCache.takeRight(solverOptions.oracleCacheSize))
             } else None
 
-          (ystar, updatedCache)
+          (ystar, updatedCache, maxLevel)
         } else {
-          (bestCachedCandidateForI.get, optionalCache_i)
+          (bestCachedCandidateForI.get, optionalCache_i, 0)
         }
 
-      val ystar_i = yAndCache._1
-      val updatedCache = yAndCache._2
+      val ystar_i = yCacheMaxLevel._1
+      val updatedCache = yCacheMaxLevel._2
+      val maxLevel = yCacheMaxLevel._3
 
       val updates = getUpdateQuantities(localModel, pattern, label, ystar_i, w_i, ell_i, k)
       val gamma = updates.gamma
@@ -790,7 +790,8 @@ class DBCFWSolverTuned[X, Y](
       val gammaLogSb = new StringBuilder()
       gammaLogSb ++=
         "[G] " + k + "," +
-        level + "," +
+        System.currentTimeMillis() + "," +
+        maxLevel + "," +
         helperFunctions.xid(pattern) + "," +
         gamma + "," +
         norm(w_s, 2) + "," +

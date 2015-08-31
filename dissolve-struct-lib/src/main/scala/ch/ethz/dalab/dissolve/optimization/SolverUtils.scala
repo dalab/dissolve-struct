@@ -233,7 +233,7 @@ object SolverUtils {
       }
 
     val initEval =
-      PartialTrainDataEval(Vector.zeros[Double](d),
+      PartialTrainDataEval(DenseVector.zeros[Double](d),
         0.0,
         0.0,
         0.0,
@@ -272,7 +272,7 @@ object SolverUtils {
           structuredHingeLoss,
           y_perClassLoss)
 
-    }.fold(initEval) {
+    }.reduce {
       case (prevEval, nextEval) =>
 
         val sum_w_s = prevEval.sum_w_s + nextEval.sum_w_s
