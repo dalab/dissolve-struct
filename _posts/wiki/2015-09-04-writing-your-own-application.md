@@ -16,14 +16,14 @@ Here, we'll show you how to write your own Distributed Structured Prediction app
 the help of the packaged starter-kit found in `dissolve-struct-application`.
 To begin, you'll need:
 
-* Basic experience with [Structured SVMs](https://en.wikipedia.org/wiki/Structured_support_vector_machine)
+* Basic experience with [SVMs](https://en.wikipedia.org/wiki/Support_vector_machine) or [Structured SVMs](https://en.wikipedia.org/wiki/Structured_support_vector_machine)
 * Linux or Mac OS X
 * [Scala Eclipse IDE](http://scala-ide.org/)
 * sbt (`sudo apt-get install sbt` on Ubuntu or `brew install sbt` on OS X)
 
 {% include toc.html %}
 
-# Obtain Project repository
+# Obtain project repository
 
 First, you'll need to obtain the project repository.
 
@@ -52,8 +52,7 @@ switch to `Fixed Scala Installation: 2.10.x (built-in)`.
 
 # Implement Dissolve Functions
 
-Now that the development environment is set, you'll need to write define
-some implementations for an interface provided using `DissolveFunctions`.
+Now that the development environment is set, you'll need to implement a few functions for an interface named `DissolveFunctions`.
 In order to bootstrap and get you started, you'll find a skeleton in
 `src/main/scala/ch/ethz/dalab/dissolve/app/DSApp.scala`.
 This file contains all the necessary instructions to get you started with
