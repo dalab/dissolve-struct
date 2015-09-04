@@ -79,3 +79,7 @@ ec2_config.json
 # New eclipse introduced some temp files
 .cache-main
 .cache-tests
+
+# tribhu's current directory
+benchmark-data/
+jars/
