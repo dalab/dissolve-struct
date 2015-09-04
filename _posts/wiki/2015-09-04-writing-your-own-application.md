@@ -21,6 +21,8 @@ To begin, you'll need:
 * [Scala Eclipse IDE](http://scala-ide.org/)
 * sbt (`sudo apt-get install sbt` on Ubuntu or `brew install sbt` on OS X)
 
+{% include toc.html %}
+
 # Obtain Project repository
 
 First, you'll need to obtain the project repository.
