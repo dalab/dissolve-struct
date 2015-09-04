@@ -11,13 +11,13 @@ import breeze.linalg.Matrix
 import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.examples.chain.ChainDemo
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSeg
+import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegUtils
 import ch.ethz.dalab.dissolve.examples.imageseg.QuantizedImage
 import ch.ethz.dalab.dissolve.examples.imageseg.QuantizedLabel
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg.max
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSeg
-import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegUtils
 
 object ImageTestAdapter {
   type X = QuantizedImage
@@ -121,7 +121,7 @@ object ChainTestAdapter {
  */
 abstract class UnitSpec extends FlatSpec with Matchers with OptionValues with Inside with Inspectors {
 
-  val DissolveAdapter = ChainTestAdapter
+  val DissolveAdapter = ImageTestAdapter
 
   type X = DissolveAdapter.X
   type Y = DissolveAdapter.Y
@@ -139,6 +139,7 @@ abstract class UnitSpec extends FlatSpec with Matchers with OptionValues with In
   def phi = dissolveFunctions.featureFn _
   def delta = dissolveFunctions.lossFn _
   def maxoracle = dissolveFunctions.oracleFn _
+  def predict = dissolveFunctions.predictFn _
 
   def psi(lo: LabeledObject[X, Y], ymap: Y) =
     phi(lo.pattern, lo.label) - phi(lo.pattern, ymap)

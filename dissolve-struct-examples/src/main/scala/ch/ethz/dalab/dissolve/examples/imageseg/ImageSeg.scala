@@ -31,7 +31,8 @@ case class QuantizedImage(unaries: DenseMatrix[Double],
                           height: Int,
                           filename: String = "NA",
                           unaryFeatures: DenseMatrix[Double] = null,
-                          rgbArray: Array[RGB_INT] = null)
+                          rgbArray: Array[RGB_INT] = null,
+                          globalFeatures: Vector[Double] = null)
 /**
  * labels(i) contains label for `i`th super-pixel
  */
@@ -71,11 +72,24 @@ object ImageSeg
     val d = x.unaryFeatures.rows
     assert(d == NUM_BINS, "d == NUM_BINS")
 
-    val unaryFeatures = DenseMatrix.zeros[Double](d, NUM_CLASSES)
+    val dCombined =
+      if (x.globalFeatures != null)
+        d + x.globalFeatures.size
+      else
+        d
+
+    val unaryFeatures = DenseMatrix.zeros[Double](dCombined, NUM_CLASSES)
     for (superIdx <- 0 until numSuperpixels) {
       val x_i = x.unaryFeatures(::, superIdx)
+      val x_global = x.globalFeatures
+
+      val x_comb =
+        if (x_global == null)
+          x_i
+        else
+          Vector(Array.concat(x_i.toArray, x_global.toArray))
       val label = y.labels(superIdx)
-      unaryFeatures(::, label) += x_i
+      unaryFeatures(::, label) += x_comb
     }
 
     if (DISABLE_PAIRWISE)
@@ -211,9 +225,8 @@ object ImageSeg
   /**
    * Unpack weight vector to Unary and Pairwise weights
    */
-  def unpackWeightVec(weightv: DenseVector[Double]): (DenseMatrix[Double], DenseMatrix[Double]) = {
+  def unpackWeightVec(weightv: DenseVector[Double], d: Int): (DenseMatrix[Double], DenseMatrix[Double]) = {
 
-    val d = NUM_BINS
     assert(weightv.size >= (NUM_CLASSES * d))
 
     val unaryWeights = weightv(0 until NUM_CLASSES * d)
@@ -238,14 +251,33 @@ object ImageSeg
 
     val nSuperpixels = xi.unaryFeatures.cols
     val d = xi.unaryFeatures.rows
+    val dComb =
+      if (xi.globalFeatures == null)
+        d
+      else
+        d + xi.globalFeatures.size
 
     assert(xi.pairwise.length == nSuperpixels,
       "xi.pairwise.length == nSuperpixels")
     assert(xi.unaryFeatures.cols == nSuperpixels,
       "xi.unaryFeatures.cols == nSuperpixels")
 
-    val (unaryWeights, pairwisePot) = unpackWeightVec(model.weights.toDenseVector)
-    val unaryPot = unaryWeights.t * xi.unaryFeatures
+    val (unaryWeights, pairwisePot) = unpackWeightVec(model.weights.toDenseVector, dComb)
+    val localFeatures =
+      if (xi.globalFeatures == null)
+        xi.unaryFeatures
+      else {
+        // Concatenate global features to local features
+        // The order is : local || global
+        val dGlob = xi.globalFeatures.size
+        val glob = xi.globalFeatures.toDenseVector
+        val globalFeatures = DenseMatrix.zeros[Double](dGlob, nSuperpixels)
+        for (superIdx <- 0 until nSuperpixels) {
+          globalFeatures(::, superIdx) := glob
+        }
+        DenseMatrix.vertcat(xi.unaryFeatures, globalFeatures)
+      }
+    val unaryPot = unaryWeights.t * localFeatures
 
     if (yi != null) {
       assert(yi.labels.length == xi.pairwise.length,
@@ -254,6 +286,7 @@ object ImageSeg
       // Loss augment the scores
       for (superIdx <- 0 until nSuperpixels) {
         val trueLabel = yi.labels(superIdx)
+        // FIXME Use \delta here
         unaryPot(::, superIdx) += (1.0 / nSuperpixels)
         unaryPot(trueLabel, superIdx) -= (1.0 / nSuperpixels)
       }
