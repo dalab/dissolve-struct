@@ -317,7 +317,7 @@ object ImageSegUtils {
     img
   }
 
-  def pixelsToImage(rgbArray: Array[Label], width: Int, height: Int): BufferedImage = {
+  def pixelsToImage(rgbArray: Array[RGB_INT], width: Int, height: Int): BufferedImage = {
     val img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
     img.setRGB(0, 0, width, height, rgbArray, 0, width)
 
