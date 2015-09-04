@@ -413,7 +413,7 @@ class DBCFWSolverTuned[X, Y](
 
     debugSb ++= header
     LAdap.log.info("[D] %s,%s,%s,%s,%s,%s,%s,%s".format("expt_name", "ts", "level", "nNodes", "nSupernodes", "filename", "ts_decode", "ts_oracle_init"))
-    LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "ts", "level", "filename", "gamma", "w_s", "ell_s", "gamma_f", "w_s_f", "ell_s_f"))
+    LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "ts", "level", "filename", "gamma", "w_s", "ell_s", "energy", "gamma_f", "w_s_f", "ell_s_f", "energy_f"))
 
     def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
 
@@ -741,7 +741,7 @@ class DBCFWSolverTuned[X, Y](
           // Request for argmax candidates, till a good candidate is found
           var startConsume = System.currentTimeMillis()
           var prevConsume = System.currentTimeMillis()
-          
+
           time({
             argmaxStream
               .takeWhile {
@@ -789,6 +789,12 @@ class DBCFWSolverTuned[X, Y](
       val w_s = updates.w_s
       val ell_s = updates.ell_s
 
+      // Calculate Energy in this level
+      val phi_i_label: Vector[Double] = phi(pattern, label)
+      val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
+      val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
+      val energy = lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i)
+
       val gammaLogSb = new StringBuilder()
       gammaLogSb ++=
         "[G] " + k + "," +
@@ -797,7 +803,8 @@ class DBCFWSolverTuned[X, Y](
         helperFunctions.xid(pattern) + "," +
         gamma + "," +
         norm(w_s, 2) + "," +
-        ell_s
+        ell_s + "," +
+        energy
 
       // Obtain oracle decoding for last-level, in order to compare the gamma
       val ystar_i_fine = fineOracleFn(localModel, pattern, label)
@@ -806,12 +813,19 @@ class DBCFWSolverTuned[X, Y](
         val gamma_fine = updates_fine.gamma
         val w_s_fine = updates.w_s
         val ell_s_fine = updates_fine.ell_s
+
+        val phi_i_ystar_fine: Vector[Double] = phi(pattern, ystar_i_fine)
+        val psi_i_fine: Vector[Double] = phi_i_label - phi_i_ystar_fine
+        val energy_fine = lossFn(label, ystar_i_fine) - (localModel.getWeights() dot psi_i_fine)
+
         gammaLogSb ++= "," +
           gamma_fine + "," +
           norm(w_s_fine, 2) + "," +
-          ell_s_fine
+          ell_s_fine + "," +
+          energy_fine
       } else {
         gammaLogSb ++= "," +
+          Double.NaN + "," +
           Double.NaN + "," +
           Double.NaN + "," +
           Double.NaN
