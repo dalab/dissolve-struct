@@ -64,6 +64,7 @@ The main idea is to implement:
 1. The Joint feature map \\( \phi \\)
 2. A Loss function \\( \Delta \\)
 3. The Maximization Oracle \\( H(w) \\)
+
 and provide the training data in the `main()` function.
 
 # Building
