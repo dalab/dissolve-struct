@@ -412,6 +412,7 @@ class DBCFWSolverTuned[X, Y](
     println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
 
     debugSb ++= header
+    LAdap.log.info("[D] %s,%s,%s,%s,%s,%s,%s,%s".format("expt_name", "ts", "level", "nNodes", "nSupernodes", "filename", "ts_decode", "ts_oracle_init"))
     LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "ts", "level", "filename", "gamma", "w_s", "ell_s", "gamma_f", "w_s_f", "ell_s_f"))
 
     def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
@@ -651,7 +652,7 @@ class DBCFWSolverTuned[X, Y](
       val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
       val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
-      val loss_i: Double = time({ lossFn(ystar_i, label) }, "Delta")
+      val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta")
       val ell_s: Double = (1.0 / n) * loss_i
 
       val gamma: Double =
@@ -740,6 +741,7 @@ class DBCFWSolverTuned[X, Y](
           // Request for argmax candidates, till a good candidate is found
           var startConsume = System.currentTimeMillis()
           var prevConsume = System.currentTimeMillis()
+          
           time({
             argmaxStream
               .takeWhile {
