@@ -73,7 +73,8 @@ class DBCFWSolverTuned[X, Y](
                                       localSummary: Option[LocalSummary[X, Y]])
 
   case class LocalSummary[X, Y](deltaLocalModel: StructSVMModel[X, Y],
-                                deltaLocalK: Vector[Int])
+                                deltaLocalK: Vector[Int],
+                                deltaLocalAveragedModel: StructSVMModel[X, Y])
 
   // Experimental data
   case class RoundEvaluation(roundNum: Int,
@@ -202,6 +203,8 @@ class DBCFWSolverTuned[X, Y](
     // Global model uses Dense Vectors by default
     var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
       DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
+    var globalModelWeightedAverage: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
+      DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
 
     val numPartitions: Int =
       data.partitions.size
@@ -318,11 +321,6 @@ class DBCFWSolverTuned[X, Y](
       else null
     var lAvg: Double = 0.0
 
-    var weightedAveragesOfPrimals: PrimalInfo =
-      if (solverOptions.doWeightedAveraging)
-        (DenseVector.zeros(d), 0.0)
-      else null
-
     var iterCount: Int = 0
 
     // Amount of time (in ms) spent in debug operation,
@@ -330,12 +328,10 @@ class DBCFWSolverTuned[X, Y](
     var evaluateModelTimeMillis: Long = 0
 
     def getLatestModel(): StructSVMModel[X, Y] = {
-      val debugModel: StructSVMModel[X, Y] = globalModel.clone()
-      if (solverOptions.doWeightedAveraging) {
-        debugModel.updateWeights(weightedAveragesOfPrimals._1)
-        debugModel.updateEll(weightedAveragesOfPrimals._2)
-      }
-      debugModel
+      if (solverOptions.doWeightedAveraging)
+        globalModelWeightedAverage.clone()
+      else
+        globalModel.clone()
     }
 
     def getLatestGap(): Double = {
@@ -481,6 +477,7 @@ class DBCFWSolverTuned[X, Y](
                   helperFunctions,
                   solverOptions,
                   globalModel,
+                  globalModelWeightedAverage,
                   dataSize,
                   kAccum),
               preservesPartitioning = true)
@@ -517,6 +514,17 @@ class DBCFWSolverTuned[X, Y](
                 (model1, model2) =>
                   (model1._1 + model2._1, model1._2 + model2._2))
 
+          // Weighted Average model
+          val sumDeltaWeightsAndEllWAvg =
+            localSummaryList
+              .map {
+                case summary =>
+                  val model = summary.deltaLocalAveragedModel
+                  (model.getWeights(), model.getEll())
+              }.reduce(
+                (model1, model2) =>
+                  (model1._1 + model2._1, model1._2 + model2._2))
+
           val deltaK: Vector[Int] = localSummaryList
             .map(_.deltaLocalK)
             .reduce((x, y) => x + y)
@@ -525,6 +533,11 @@ class DBCFWSolverTuned[X, Y](
           val newGlobalModel = globalModel.clone()
           newGlobalModel.updateWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
           newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
+
+          // Weighted Average model
+          val newGlobalModelWAvg = globalModelWeightedAverage.clone()
+          newGlobalModelWAvg.updateWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
+          newGlobalModelWAvg.updateEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * (beta / numPartitions))
 
           val w_t = globalModel.getWeights()
           val w_tp1 = newGlobalModel.getWeights()
@@ -545,6 +558,7 @@ class DBCFWSolverTuned[X, Y](
             cos_w)
 
           globalModel = newGlobalModel
+          globalModelWeightedAverage = newGlobalModelWAvg
 
           /**
            * Step 3b - Obtain the new set of primals
@@ -580,11 +594,10 @@ class DBCFWSolverTuned[X, Y](
            * Debug info
            */
           // Obtain duality gap after each communication round
-          val debugModel: StructSVMModel[X, Y] = globalModel.clone()
-          if (solverOptions.doWeightedAveraging) {
-            debugModel.updateWeights(weightedAveragesOfPrimals._1)
-            debugModel.updateEll(weightedAveragesOfPrimals._2)
-          }
+          val debugModel: StructSVMModel[X, Y] =
+            if (solverOptions.doWeightedAveraging)
+              globalModelWeightedAverage.clone()
+            else globalModel.clone()
 
           // Is criteria for debugging met?
           val doDebugCalc: Boolean =
@@ -626,6 +639,7 @@ class DBCFWSolverTuned[X, Y](
              helperFunctions: HelperFunctions[X, Y],
              solverOptions: SolverOptions[X, Y],
              localModel: StructSVMModel[X, Y],
+             localModelWeightedAverage: StructSVMModel[X, Y],
              n: Int,
              kAccum: Vector[Int]): Iterator[(Index, ProcessedDataShard[X, Y])] = {
 
@@ -680,8 +694,10 @@ class DBCFWSolverTuned[X, Y](
     var k = kAccum(partitionIdx)
 
     var ell = localModel.getEll()
+    var ellWeightedAverage = localModelWeightedAverage.getEll()
 
     val prevModel = localModel.clone()
+    val prevModelWeightedAverage = localModelWeightedAverage.clone()
 
     for ((index, shard) <- dataIterator) yield {
 
@@ -843,6 +859,13 @@ class DBCFWSolverTuned[X, Y](
       val ell_i_prime = (ell_i * (1.0 - gamma)) + (ell_s * gamma)
       ell = ell + ell_i_prime
 
+      // Do Weighted Averaging
+      val rho = 2.0 / (k + 2.0)
+      val wAvg = (1.0 - rho) * localModelWeightedAverage.getWeights() + rho * localModel.getWeights()
+      val ellAvg = (1.0 - rho) * localModelWeightedAverage.getEll() + rho * localModel.getEll()
+      localModelWeightedAverage.updateWeights(wAvg)
+      localModelWeightedAverage.updateEll(ellAvg)
+
       k += 1
 
       if (!dataIterator.hasNext) {
@@ -853,11 +876,15 @@ class DBCFWSolverTuned[X, Y](
         deltaLocalModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
         deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
 
+        val deltaLocalModelWeightedAverage = localModelWeightedAverage.clone()
+        deltaLocalModelWeightedAverage.updateWeights(localModelWeightedAverage.getWeights() - prevModelWeightedAverage.getWeights())
+        deltaLocalModelWeightedAverage.updateEll(localModelWeightedAverage.getEll() - prevModelWeightedAverage.getEll())
+
         val deltaK = k - kAccum(partitionIdx)
         val kAccumLocalDelta = DenseVector.zeros[Int](numPartitions)
         kAccumLocalDelta(partitionIdx) = deltaK
 
-        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), updatedCache, Some(LocalSummary(deltaLocalModel, kAccumLocalDelta))))
+        (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), updatedCache, Some(LocalSummary(deltaLocalModel, kAccumLocalDelta, deltaLocalModelWeightedAverage))))
       } else
         (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i), updatedCache, None))
     }
