@@ -189,35 +189,9 @@ class DBCFWSolverTuned[X, Y](
     val startTime = System.currentTimeMillis()
 
     val sc = data.context
+    val numPartitions: Int = data.partitions.size
 
     val debugSb: StringBuilder = new StringBuilder()
-
-    val samplePoint = data.first()
-    val dataSize = data.count().toInt
-    val testDataSize = if (solverOptions.testDataRDD.isDefined) solverOptions.testDataRDD.get.count().toInt else 0
-
-    val verboseDebug: Boolean = false
-
-    val d: Int = dissolveFunctions.featureFn(samplePoint.pattern, samplePoint.label).size
-    // Let the initial model contain zeros for all weights
-    // Global model uses Dense Vectors by default
-    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
-      DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
-    var globalModelWeightedAverage: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
-      DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
-
-    val numPartitions: Int =
-      data.partitions.size
-
-    val beta: Double = 1.0
-
-    val helperFunctions: HelperFunctions[X, Y] = HelperFunctions(dissolveFunctions.featureFn,
-      dissolveFunctions.lossFn,
-      dissolveFunctions.oracleFn,
-      dissolveFunctions.oracleCandidateStream,
-      dissolveFunctions.predictFn,
-      dissolveFunctions.fineOracleFn,
-      dissolveFunctions.getImageID)
 
     /**
      *  Create four RDDs:
@@ -246,20 +220,69 @@ class DBCFWSolverTuned[X, Y](
     * 
     */
 
-    // The work-around for bug SPARK-4433
-    val zippedIndexedTrainDataRDD: RDD[(Index, LabeledObject[X, Y])] =
+    /**
+     * 1. Training Data RDD
+     */
+    data.cache()
+    val indexedTrainDataRDD: RDD[(Index, LabeledObject[X, Y])] =
       data.zipWithIndex()
         .map {
           case (labeledObject, idx) =>
             (idx.toInt, labeledObject)
         }
-    zippedIndexedTrainDataRDD.count()
-
-    val indexedTrainDataRDD: RDD[(Index, LabeledObject[X, Y])] =
-      zippedIndexedTrainDataRDD
         .partitionBy(new HashPartitioner(numPartitions))
         .cache()
 
+    /**
+     * 1.b. Obtain and set parameters from training data
+     */
+    val dataSize = indexedTrainDataRDD.count().toInt
+    val samplePoint = indexedTrainDataRDD.take(1)(0)._2
+    val indexedTestDataRDD =
+      if (solverOptions.testDataRDD.isDefined)
+        Some(
+          {
+            solverOptions.testDataRDD.get.zipWithIndex()
+              .map {
+                case (labeledObject, idx) =>
+                  (idx.toInt, labeledObject)
+              }
+              .partitionBy(new HashPartitioner(numPartitions))
+              .cache()
+          })
+      else
+        None
+    val testDataSize =
+      if (indexedTestDataRDD.isDefined)
+        indexedTestDataRDD.get.count().toInt
+      else
+        0
+
+    val verboseDebug: Boolean = false
+
+    val d: Int = dissolveFunctions.featureFn(samplePoint.pattern, samplePoint.label).size
+    // Let the initial model contain zeros for all weights
+    // Global model uses Dense Vectors by default
+    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
+      DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
+    var globalModelWeightedAverage: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
+      DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
+
+    val beta: Double = 1.0
+
+    val helperFunctions: HelperFunctions[X, Y] = HelperFunctions(dissolveFunctions.featureFn,
+      dissolveFunctions.lossFn,
+      dissolveFunctions.oracleFn,
+      dissolveFunctions.oracleCandidateStream,
+      dissolveFunctions.predictFn,
+      dissolveFunctions.fineOracleFn,
+      dissolveFunctions.getImageID)
+
+    data.unpersist()
+
+    /**
+     * Primals RDD
+     */
     val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until dataSize).toArray.zip(
       // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
       Array.fill(dataSize)((
@@ -273,6 +296,9 @@ class DBCFWSolverTuned[X, Y](
         .partitionBy(new HashPartitioner(numPartitions))
         .cache()
 
+    /**
+     * Oracle Cache RDD
+     */
     // For each Primal (i.e, Index), cache a list of Decodings (i.e, Y's)
     // If cache is disabled, add an empty array. This immediately drops the joins later on and saves time in communicating an unnecessary RDD.
     val indexedCache: Array[(Index, BoundedCacheList[Y])] =
@@ -336,7 +362,8 @@ class DBCFWSolverTuned[X, Y](
 
     def getLatestGap(): Double = {
       val debugModel: StructSVMModel[X, Y] = getLatestModel()
-      val gap = SolverUtils.dualityGap(data, dissolveFunctions, debugModel, solverOptions.lambda, dataSize)
+      val trainingData = indexedTrainDataRDD.values
+      val gap = SolverUtils.dualityGap(trainingData, dissolveFunctions, debugModel, solverOptions.lambda, dataSize)
       gap._1
     }
 
@@ -356,7 +383,8 @@ class DBCFWSolverTuned[X, Y](
         else
           (Double.NaN, Double.NaN)*/
 
-      val trainDataEval = SolverUtils.trainDataEval(data, dissolveFunctions, model, solverOptions.lambda, dataSize)
+      val trainingData = indexedTrainDataRDD.values
+      val trainDataEval = SolverUtils.trainDataEval(trainingData, dissolveFunctions, model, solverOptions.lambda, dataSize)
       val dual = -SolverUtils.objectiveFunction(model.getWeights(), model.getEll(), solverOptions.lambda)
       val dualityGap = trainDataEval.gap
       val primal = dual + dualityGap
@@ -369,14 +397,14 @@ class DBCFWSolverTuned[X, Y](
           trainDataEval.perClassAccuracy,
           trainDataEval.globalAccuracy)
 
-      val testDataEval = if (solverOptions.testDataRDD.isDefined)
-        SolverUtils.trainDataEval(solverOptions.testDataRDD.get, dissolveFunctions, model, solverOptions.lambda, dataSize)
+      val testDataEval = if (indexedTestDataRDD.isDefined)
+        SolverUtils.trainDataEval(indexedTestDataRDD.get.values, dissolveFunctions, model, solverOptions.lambda, dataSize)
       else null
       val (testError,
         testStructHingeLoss,
         testPerClassAccuracy,
         testGlobalAccuracy) =
-        if (solverOptions.testDataRDD.isDefined)
+        if (indexedTestDataRDD.isDefined)
           (testDataEval.avgDelta,
             testDataEval.avgHLoss,
             testDataEval.perClassAccuracy,
@@ -409,7 +437,7 @@ class DBCFWSolverTuned[X, Y](
 
     debugSb ++= header
     LAdap.log.info("[D] %s,%s,%s,%s,%s,%s,%s,%s".format("expt_name", "ts", "level", "nNodes", "nSupernodes", "filename", "ts_decode", "ts_oracle_init"))
-    LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "ts", "level", "filename", "gamma", "w_s", "ell_s", "energy", "gamma_f", "w_s_f", "ell_s_f", "energy_f"))
+    LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "ts", "level", "filename", "gamma", "w_s", "ell_s", "energy", "gamma_f", "w_s_f", "ell_s_f", "energy_f", "ell_i"))
 
     def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
 
@@ -465,9 +493,6 @@ class DBCFWSolverTuned[X, Y](
            * Step 2 - Map each partition to produce: idx -> (newPrimals, newCache, optionalModel)
            * Note that the optionalModel column is sparse. There exist only `numPartitions` of them in the RDD.
            */
-
-          // if (indexedLocalProcessedData != null)
-          // indexedLocalProcessedData.unpersist(false)
 
           indexedLocalProcessedData =
             indexedJointData.mapPartitionsWithIndex(
@@ -566,6 +591,7 @@ class DBCFWSolverTuned[X, Y](
 
           val newPrimalsRDD = indexedLocalProcessedData
             .mapValues(_.primalInfo)
+            .cache()
 
           indexedPrimalsRDD = indexedPrimalsRDD
             .leftOuterJoin(newPrimalsRDD)
@@ -750,7 +776,7 @@ class DBCFWSolverTuned[X, Y](
           // val GAMMA_THRESHOLD = 0.5 * ((2.0 * n) / (k + 2.0 * n))
           val GAMMA_THRESHOLD = EPS
           // Sort by gamma, in decreasing order
-          def diff(y: (Y, UpdateQuantities)): Double = -y._2.gamma
+          def diff(y: (Y, UpdateQuantities)): Double = y._2.gamma
           // Maintain a priority queue, where the head contains the argmax with highest gamma value
           val argmaxCandidates = new PriorityQueue[(Y, UpdateQuantities)]()(Ordering.by(diff))
 
@@ -765,7 +791,7 @@ class DBCFWSolverTuned[X, Y](
                 case argmax_y =>
                   val updates = getUpdateQuantities(localModel, pattern, label, argmax_y, w_i, ell_i, k)
                   argmaxCandidates.enqueue((argmax_y, updates))
-                  val consumeNext = updates.gamma <= GAMMA_THRESHOLD
+                  val consumeNext = (updates.gamma <= GAMMA_THRESHOLD)
                   consumeNext
               }.foreach { // Streams are lazy, force an `action` on them. Otherwise, subsequent elements
                 // do not get computed
@@ -775,6 +801,10 @@ class DBCFWSolverTuned[X, Y](
 
           val (ystar, updates): (Y, UpdateQuantities) =
             time({ argmaxCandidates.head }, "argmax-head")
+
+          /*if (argmaxCandidates.size > 1)
+            println("argmaxCandidates.size = %d, argmax.head = %s, argmax.last = %s, Gammas = %s"
+              .format(argmaxCandidates.size, List(argmaxCandidates.head._2.gamma), List(argmaxCandidates.last._2.gamma), argmaxCandidates.map(_._2.gamma).toList))*/
 
           val maxLevel = argmaxCandidates.size - 1 // Levels are 0-indexed
 
@@ -820,7 +850,8 @@ class DBCFWSolverTuned[X, Y](
         gamma + "," +
         norm(w_s, 2) + "," +
         ell_s + "," +
-        energy
+        energy + "," +
+        ell
 
       // Obtain oracle decoding for last-level, in order to compare the gamma
       val ystar_i_fine = fineOracleFn(localModel, pattern, label)

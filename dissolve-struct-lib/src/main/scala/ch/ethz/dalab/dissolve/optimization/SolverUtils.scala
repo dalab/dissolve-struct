@@ -7,6 +7,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
+import org.apache.spark.broadcast.Broadcast
 
 object SolverUtils {
 
@@ -243,12 +244,11 @@ object SolverUtils {
 
     val numClasses = dissolveFunctions.numClasses()
 
-    val w: Vector[Double] = model.getWeights()
-    val ell: Double = model.getEll()
-
     val n: Int = dataSize.toInt
     val d: Int = model.getWeights().size
-
+    
+    val bcModel: Broadcast[StructSVMModel[X, Y]] = data.context.broadcast(model)
+    
     val initEval =
       PartialTrainDataEval(DenseVector.zeros[Double](d),
         0.0,
@@ -261,18 +261,18 @@ object SolverUtils {
         /**
          * Gap and Structured HingeLoss
          */
-        val lossAug_yStar = maxOracle(model, datapoint.pattern, datapoint.label)
+        val lossAug_yStar = maxOracle(bcModel.value, datapoint.pattern, datapoint.label)
         val w_s = phi(datapoint.pattern, datapoint.label) - phi(datapoint.pattern, lossAug_yStar)
         val ell_s = lossFn(datapoint.label, lossAug_yStar)
         val lossAug_wFeatureDotProduct = lossFn(datapoint.label, lossAug_yStar) -
-          (model.getWeights().t * (phi(datapoint.pattern, datapoint.label)
+          (bcModel.value.getWeights().t * (phi(datapoint.pattern, datapoint.label)
             - phi(datapoint.pattern, lossAug_yStar)))
         val structuredHingeLoss: Double = lossAug_wFeatureDotProduct
 
         /**
          * \Delta
          */
-        val predict_yStar = predictFn(model, datapoint.pattern)
+        val predict_yStar = predictFn(bcModel.value, datapoint.pattern)
         val loss = lossFn(datapoint.label, predict_yStar)
 
         /**
@@ -290,6 +290,9 @@ object SolverUtils {
           y_perClassLoss)
 
     }.reduce(_ + _)
+    
+    val w: Vector[Double] = model.getWeights()
+    val ell: Double = model.getEll()
 
     // Gap
     val sum_w_s = partialEval.sum_w_s
