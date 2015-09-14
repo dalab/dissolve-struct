@@ -123,6 +123,9 @@ class SolverOptions[X, Y] extends Serializable {
     }
 
     sb ++= "# debugMultiplier=%d\n".format(debugMultiplier)
+    
+    sb ++= "# resumeMaxLevel=%s\n".format(resumeMaxLevel)
+    sb ++= "# stubRepetitions=%s\n".format(stubRepetitions)
 
     sb.toString()
   }

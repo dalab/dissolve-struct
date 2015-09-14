@@ -36,6 +36,10 @@ case class Config(
   debug: Boolean = false,
   debugMultiplier: Int = 1,
   debugPath: String = new File(".", "debug-%d.csv".format(System.currentTimeMillis())).getAbsolutePath,
+  
+  // HADES related
+  resumeMaxLevel: Boolean = false,
+  stubRepetitions: Boolean = false,
 
   // Other parameters
   kwargs: Map[String, String] = Map())
