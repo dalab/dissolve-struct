@@ -162,14 +162,15 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
    */
   def train(
     data: RDD[LabeledPoint],
-    featureFn: (Vector[Double], MultiClassLabel) => Vector[Double], // (y, x) => FeatureVector
-    lossFn: (MultiClassLabel, MultiClassLabel) => Double, // (yTruth, yPredict) => LossValue
-    oracleFn: (StructSVMModel[Vector[Double], MultiClassLabel], Vector[Double], MultiClassLabel) => MultiClassLabel, // (model, y_i, x_i) => Label
-    predictFn: (StructSVMModel[Vector[Double], MultiClassLabel], Vector[Double]) => MultiClassLabel,
+    dissolveFunctions: DissolveFunctions[Vector[Double], MultiClassLabel],
+    //featureFn: (Vector[Double], MultiClassLabel) => Vector[Double], // (y, x) => FeatureVector
+    //lossFn: (MultiClassLabel, MultiClassLabel) => Double, // (yTruth, yPredict) => LossValue
+    //oracleFn: (StructSVMModel[Vector[Double], MultiClassLabel], Vector[Double], MultiClassLabel) => MultiClassLabel, // (model, y_i, x_i) => Label
+    //predictFn: (StructSVMModel[Vector[Double], MultiClassLabel], Vector[Double]) => MultiClassLabel,
     solverOptions: SolverOptions[Vector[Double], MultiClassLabel]): StructSVMModel[Vector[Double], MultiClassLabel] = {
 
     val numClasses = solverOptions.numClasses
-    assert(numClasses < 1)
+    assert(numClasses > 1)
 
     val minlabel = data.map(_.label).min()
     val maxlabel = data.map(_.label).max()
@@ -198,7 +199,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
 
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
       repartData,
-      this,
+      dissolveFunctions,
       solverOptions,
       miniBatchEnabled = false).optimize()
 
