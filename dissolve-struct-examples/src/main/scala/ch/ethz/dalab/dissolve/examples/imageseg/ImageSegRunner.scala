@@ -162,7 +162,15 @@ object ImageSegRunner {
       Paths.get("/home/torekond/dev-local/dissolve-struct/data/generated/msrc/debug",
         "%s-trans.csv".format(appname))
     val weights = model.getWeights().toDenseVector
-    val (unaryMat, transMat) = ImageSeg.unpackWeightVec(weights)
+
+    val xi = trainDataSeq(0).pattern
+    val d =
+    if (xi.globalFeatures == null)
+      xi.unaryFeatures.rows
+    else
+     xi.unaryFeatures.rows + xi.globalFeatures.size
+    val (unaryMat, transMat) = ImageSeg.unpackWeightVec(weights, d)
+
     breeze.linalg.csvwrite(unaryDebugPath.toFile(), unaryMat)
     if (transMat != null)
       breeze.linalg.csvwrite(transDebugPath.toFile(), transMat)

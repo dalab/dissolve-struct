@@ -56,7 +56,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
    * Want: argmax L(y_i, y) - <w, psi_i(y)>
    * This returns the most violating (Loss-augmented) label.
    */
-  def oracleFn(model: StructSVMModel[Vector[Double], MultiClassLabel], xi: Vector[Double], yi: MultiClassLabel): MultiClassLabel = {
+  override def oracleFn(model: StructSVMModel[Vector[Double], MultiClassLabel], xi: Vector[Double], yi: MultiClassLabel): MultiClassLabel = {
 
     val weights = model.getWeights()
     val numClasses = yi.numClasses
