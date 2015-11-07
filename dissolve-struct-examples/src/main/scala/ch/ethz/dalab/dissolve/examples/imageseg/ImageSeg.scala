@@ -33,6 +33,7 @@ case class QuantizedImage(unaries: DenseMatrix[Double],
                           unaryFeatures: DenseMatrix[Double] = null,
                           rgbArray: Array[RGB_INT] = null,
                           globalFeatures: Vector[Double] = null)
+
 /**
  * labels(i) contains label for `i`th super-pixel
  */
@@ -225,6 +226,7 @@ object ImageSeg
   /**
    * Unpack weight vector to Unary and Pairwise weights
    */
+
   def unpackWeightVec(weightv: DenseVector[Double], d: Int): (DenseMatrix[Double], DenseMatrix[Double]) = {
 
     assert(weightv.size >= (NUM_CLASSES * d))

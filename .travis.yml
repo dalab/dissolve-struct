@@ -9,4 +9,4 @@ before_install:
 # whitelist
 branches:
         only:
-        - tuning
+        - master

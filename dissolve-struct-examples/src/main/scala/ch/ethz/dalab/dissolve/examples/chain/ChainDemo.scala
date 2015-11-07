@@ -303,8 +303,8 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     val test_data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
 
     // Read order from the file and permute the Vector accordingly
-    val trainOrder: String = "../data/perm_train.csv"
-    val permLine: Array[String] = scala.io.Source.fromFile(trainOrder).getLines().toArray[String]
+    val trainOrder: String = "/chain_train.csv"
+    val permLine: Array[String] = scala.io.Source.fromURL(getClass.getResource(trainOrder)).getLines().toArray[String]
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     // val train_data = train_data_unord(List.fromArray(perm))
@@ -325,7 +325,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
           test_data(0).label.size))
     }
 
-    val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions();
+    val solverOptions: SolverOptions[Matrix[Double], Vector[Double]] = new SolverOptions()
     solverOptions.roundLimit = 5
     solverOptions.debug = true
     solverOptions.lambda = 0.01
