@@ -242,12 +242,12 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError, testError))
             if (solverOptions.debug)
-              debugSb ++= "%d,%f,%d,%f,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError, testError)
+              debugSb ++= "%d,%f,%d,%s,%s,%s,%f,%f\n".format(passNum + 1, curTime, k, primal.toString(), f.toString(), gap.toString(), trainError, testError)
           } else {
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError))
             if (solverOptions.debug)
-              debugSb ++= "%d,%f,%d,%f,%f,%f,%f\n".format(passNum + 1, curTime, k, primal, f, gap, trainError)
+              debugSb ++= "%d,%f,%d,%s,%s,%s,%f\n".format(passNum + 1, curTime, k, primal.toString(), f.toString(), gap.toString(), trainError)
           }
 
           debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
