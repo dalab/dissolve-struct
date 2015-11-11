@@ -31,6 +31,6 @@ trait DissolveFunctions[X, Y] extends Serializable {
   def numClasses(): Int = -1
 
   // Returns: Label -> (TotalPixelCount, CorrectPixelCount)
-  def perClassAccuracy(yPredicted: Y, yTruth: Y): Array[(Int, Int)] = null
+  def perClassAccuracy(yPredicted: Y, yTruth: Y): Array[(Int, Int)] = Array.empty[(Int, Int)]
 
 }

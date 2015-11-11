@@ -105,7 +105,7 @@ class DBCFWSolverTuned[X, Y](
       /**
        * Train
        */
-      assert(perClassAccuracyTrain.size == numClasses)
+      // assert(perClassAccuracyTrain.size == numClasses)
       // Assume background label is the last class
       val candidateLabelsTrain = perClassAccuracyTrain.dropRight(1)
       // Compute only over non-zero candidates. (To handle unencountered classes)
@@ -127,7 +127,7 @@ class DBCFWSolverTuned[X, Y](
       /**
        * Test
        */
-      assert(perClassAccuracyTest.size == numClasses)
+      // assert(perClassAccuracyTest.size == numClasses)
       // Assume background label is the last class
       val candidateLabelsTest = perClassAccuracyTest.dropRight(1)
       // Compute only over non-zero candidates. (To handle unencountered classes)
@@ -146,8 +146,8 @@ class DBCFWSolverTuned[X, Y](
         averagePerClassAccuracyTest,
         globalAccuracyTest)
 
-      "%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%s,%s"
-        .format(roundNum, elapsedTime, wallTime, primal, dual, dualityGap,
+      "%d,%f,%f,%s,%s,%s,%f,%f,%f,%f,%f,%f,%f,%s,%s"
+        .format(roundNum, elapsedTime, wallTime, primal.toString(), dual.toString(), dualityGap.toString(),
           trainError, testError, trainStructHingeLoss, testStructHingeLoss,
           w_t_norm, w_update_norm, cos_w_update,
           accuracyStringTrain, accuracyStringTest)
@@ -180,8 +180,11 @@ class DBCFWSolverTuned[X, Y](
       accuracyHeader.toString()
     }
 
-    "round,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos,%s,%s\n"
-      .format(getAccuracyHeaderWithPrefix("train"), getAccuracyHeaderWithPrefix("test"))
+    if (dissolveFunctions.numClasses() < 0)
+      "round,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos\n"
+    else
+      "round,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos,%s,%s\n"
+        .format(getAccuracyHeaderWithPrefix("train"), getAccuracyHeaderWithPrefix("test"))
   }
 
   /**
@@ -429,8 +432,8 @@ class DBCFWSolverTuned[X, Y](
 
       val wallTime = elapsedTime - (evaluateModelTimeMillis / 1000.0)
 
-      println("[%.3f] WallTime = %.3f, Round = %d, Gap = %f, Primal = %f, Dual = %f, TrainLoss = %f, TestLoss = %f, TrainSHLoss = %f, TestSHLoss = %f"
-        .format(elapsedTime, wallTime, roundNum, dualityGap, primal, dual, trainError, testError, trainStructHingeLoss, testStructHingeLoss))
+      println("[%.3f] WallTime = %.3f, Round = %d, Gap = %s, Primal = %s, Dual = %s, TrainLoss = %f, TestLoss = %f, TrainSHLoss = %f, TestSHLoss = %f"
+        .format(elapsedTime, wallTime, roundNum, dualityGap.toString(), primal.toString(), dual.toString(), trainError, testError, trainStructHingeLoss, testStructHingeLoss))
 
       val roundEval = RoundEvaluation(roundNum, elapsedTime, wallTime, primal, dual, dualityGap,
         trainError, testError, trainStructHingeLoss, testStructHingeLoss,

@@ -33,6 +33,8 @@ import ch.ethz.dalab.dissolve.utils.cli.CLAParser
 object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
   val debugOn = true
+  
+  override def numClasses(): Int = -1
 
   /**
    * Reads data produced by the convert-ocr-data.py script and loads into memory as a vector of Labeled objects
@@ -406,7 +408,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
     println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
-    val conf = new SparkConf().setAppName(appname)
+    val conf = new SparkConf().setAppName(appname).setMaster("local")
         
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
