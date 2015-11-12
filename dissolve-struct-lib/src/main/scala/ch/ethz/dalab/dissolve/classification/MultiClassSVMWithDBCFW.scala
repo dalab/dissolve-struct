@@ -183,9 +183,15 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
       data.map {
         case x: LabeledPoint =>
           new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses),
-            if (solverOptions.sparse)
-              SparseVector(x.features.toArray)
-            else
+            if (solverOptions.sparse){
+              val r:Vector[Double] =  x.features match{
+                case features:org.apache.spark.mllib.linalg.SparseVector =>
+                  val builder:VectorBuilder[Double] = new VectorBuilder(features.indices,features.values,features.indices.length,x.features.size)
+                  builder.toSparseVector
+                case _ => SparseVector(x.features.toArray)
+              } 
+              r  
+            } else
               Vector(x.features.toArray))
       }
 
