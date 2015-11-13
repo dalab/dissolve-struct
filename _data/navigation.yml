@@ -15,6 +15,11 @@
   excerpt: "dissolve^struct wiki"
   image: 400x250.gif
 
+- title: FAQ
+  url: /faq/
+  excerpt: "Frequently Asked Questions"
+  image: 400x250.gif
+
 - title: About
   url: /about/
   excerpt: "All about dissolve^struct."
