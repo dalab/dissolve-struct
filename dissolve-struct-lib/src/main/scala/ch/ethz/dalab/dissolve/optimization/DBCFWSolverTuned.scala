@@ -211,7 +211,7 @@ class DBCFWSolverTuned[X, Y](
     def getLatestModel(): StructSVMModel[X, Y] = {
       val debugModel: StructSVMModel[X, Y] = globalModel.clone()
       if (solverOptions.doWeightedAveraging) {
-        debugModel.updateWeights(weightedAveragesOfPrimals._1)
+        debugModel.setWeights(weightedAveragesOfPrimals._1)
         debugModel.updateEll(weightedAveragesOfPrimals._2)
       }
       debugModel
@@ -278,6 +278,8 @@ class DBCFWSolverTuned[X, Y](
       .foreach {
         roundNum =>
 
+          println("Round Number: " + roundNum)
+         // var currentTime = System.currentTimeMillis()
           /**
            * Step 1 - Create a joint RDD containing all information of idx -> (data, primals, cache)
            */
@@ -354,7 +356,7 @@ class DBCFWSolverTuned[X, Y](
           kAccum += deltaK
 
           val newGlobalModel = globalModel.clone()
-          newGlobalModel.updateWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
+          newGlobalModel.setWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
           newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
           globalModel = newGlobalModel
 
@@ -394,7 +396,7 @@ class DBCFWSolverTuned[X, Y](
           // Obtain duality gap after each communication round
           val debugModel: StructSVMModel[X, Y] = globalModel.clone()
           if (solverOptions.doWeightedAveraging) {
-            debugModel.updateWeights(weightedAveragesOfPrimals._1)
+            debugModel.setWeights(weightedAveragesOfPrimals._1)
             debugModel.updateEll(weightedAveragesOfPrimals._2)
           }
 
@@ -411,6 +413,7 @@ class DBCFWSolverTuned[X, Y](
             }
 
           debugSb ++= roundEvaluation + "\n"
+          //println("Round took: " + (System.currentTimeMillis() - currentTime) + " millisecs to complete")
       }
 
     (globalModel, debugSb.toString())
@@ -426,6 +429,9 @@ class DBCFWSolverTuned[X, Y](
 
     // println("[Round %d] Beginning mapper at partition %d".format(roundNum, partitionNum))
 
+    
+    
+    
     val eps: Double = 2.2204E-16
 
     val maxOracle = helperFunctions.oracleFn
@@ -441,8 +447,8 @@ class DBCFWSolverTuned[X, Y](
 
     val prevModel = localModel.clone()
 
+    
     for ((index, shard) <- dataIterator) yield {
-
       /*if (index < 10)
         println("Partition = %d, Index = %d".format(partitionNum, index))*/
 
@@ -510,11 +516,15 @@ class DBCFWSolverTuned[X, Y](
       val updatedCache = yAndCache._2
 
       // 3) Define the update quantities
+      
+      
       val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
       val loss_i: Double = lossFn(label, ystar_i)
       val ell_s: Double = (1.0 / n) * loss_i
 
+      //println("psi_i is sparse - " + psi_i.isInstanceOf[SparseVector[Double]])
+      
       // 4) Get step-size gamma
       val gamma: Double =
         if (solverOptions.doLineSearch) {
@@ -526,11 +536,16 @@ class DBCFWSolverTuned[X, Y](
           (2.0 * n) / (k + 2.0 * n)
         }
 
-      val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
-      localModel.updateWeights(tempWeights1)
+     
+      //val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
+      //localModel.setWeights(tempWeights1)
+      localModel.subtractFromWeight(w_i)
+      
       val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)
-      val tempWeights2: Vector[Double] = localModel.getWeights() + w_i_prime
-      localModel.updateWeights(tempWeights2)
+      
+      //val tempWeights2: Vector[Double] = localModel.getWeights() + w_i_prime
+      //localModel.setWeights(tempWeights2)
+      localModel.addToWeight(w_i_prime)
 
       ell = ell - ell_i
       val ell_i_prime = (ell_i * (1.0 - gamma)) + (ell_s * gamma)
@@ -538,12 +553,14 @@ class DBCFWSolverTuned[X, Y](
 
       k += 1
 
+      
+      
       if (!dataIterator.hasNext) {
 
         localModel.updateEll(ell)
 
         val deltaLocalModel = localModel.clone()
-        deltaLocalModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
+        deltaLocalModel.setWeights(localModel.getWeights() - prevModel.getWeights())
         deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
 
         val deltaK = k - kAccum(partitionIdx)
