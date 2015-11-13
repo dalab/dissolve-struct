@@ -517,11 +517,12 @@ class DBCFWSolverTuned[X, Y](
 
       // 3) Define the update quantities
       
+      val weight = solverOptions.classWeights.get(label).get
       
-      val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
+      val psi_i: Vector[Double] = (phi(pattern, label) - phi(pattern, ystar_i))*weight
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
-      val loss_i: Double = lossFn(label, ystar_i)
-      val ell_s: Double = (1.0 / n) * loss_i
+      val loss_i: Double = lossFn(label, ystar_i)*weight
+      val ell_s: Double = (1.0 / n) * loss_i 
 
       //println("psi_i is sparse - " + psi_i.isInstanceOf[SparseVector[Double]])
       
