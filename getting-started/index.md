@@ -145,9 +145,9 @@ Our oracle-based solver requires 4 functions, which follow the same interface as
 3. **Maximization Oracle**
 
    An oracle which computes the _most violating constraint_ by solving:
-	\\[ \hat{Y} = \arg \max_{Y \in \mathcal{Y}_i} \Delta(Y_i, Y) - \langle w, \psi_i(X, Y) \rangle \\]
+	\\[ \hat{Y} = \arg \max_{Y \in \mathcal{Y}_i} \Delta(Y_i, Y) - \langle w, \psi_i(X_i, Y) \rangle \\]
   where
-  \\[ \psi_i(X, Y) = \phi(X, Y_i) - \phi(X, Y) \\]
+  \\[ \psi_i(X_i, Y) = \phi(X_i, Y_i) - \phi(X_i, Y) \\]
 
 4. **Prediction function** (optional)
 
