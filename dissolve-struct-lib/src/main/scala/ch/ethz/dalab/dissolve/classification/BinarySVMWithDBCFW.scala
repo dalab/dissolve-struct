@@ -5,10 +5,8 @@
 package ch.ethz.dalab.dissolve.classification
 
 import java.io.FileWriter
-
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-
 import breeze.linalg.DenseVector
 import breeze.linalg.SparseVector
 import breeze.linalg.Vector
@@ -17,6 +15,8 @@ import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject
+import breeze.linalg.VectorBuilder
+import scala.collection.mutable.HashMap
 
 /**
  * @author tribhu
@@ -34,6 +34,7 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
   def featureFn(x: Vector[Double], y: Double): Vector[Double] = {
     x * y
   }
+ 
 
   /**
    * Loss function
@@ -105,7 +106,13 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
     val objectifiedData: RDD[LabeledObject[Vector[Double], Double]] =
       data.map {
         case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], Double](x.label, SparseVector(x.features.toArray))
+          val features:Vector[Double] =  x.features match{
+                case features:org.apache.spark.mllib.linalg.SparseVector =>
+                  val builder:VectorBuilder[Double] = new VectorBuilder(features.indices,features.values,features.indices.length,x.features.size)
+                  builder.toSparseVector
+                case _ => SparseVector(x.features.toArray)
+              }          
+          new LabeledObject[Vector[Double], Double](x.label,features)
       }
 
     val repartData =
@@ -156,9 +163,15 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
       data.map {
         case x: LabeledPoint =>
           new LabeledObject[Vector[Double], Double](x.label,
-            if (solverOptions.sparse)
-              SparseVector(x.features.toArray)
-            else
+            if (solverOptions.sparse){
+              val features:Vector[Double] =  x.features match{
+                case features:org.apache.spark.mllib.linalg.SparseVector =>
+                  val builder:VectorBuilder[Double] = new VectorBuilder(features.indices,features.values,features.indices.length,x.features.size)
+                  builder.toSparseVector
+                case _ => SparseVector(x.features.toArray)
+              } 
+              features  
+            }else
               DenseVector(x.features.toArray))
       }
 
