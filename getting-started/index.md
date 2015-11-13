@@ -72,7 +72,7 @@ spark-1.X/bin/spark-submit \
 	<optional-arguments>
 {% endhighlight %}
 
-**PS:**  We recommend using the latest Spark version (1.3 at the time of writing).
+**PS:**  We recommend using the latest Spark version.
 {: .notice-info}
 
 For example, the Binary classification example can be run within the `dissolve-struct-examples` directory using:
@@ -145,7 +145,7 @@ Our oracle-based solver requires 4 functions, which follow the same interface as
 3. **Maximization Oracle**
 
    An oracle which computes the _most violating constraint_ by solving:
-	\\[ \hat{Y} = \arg \max_{Y \in \mathcal{Y}_i} \Delta(Y_i, Y) + \langle w, \psi_i(X, Y) \rangle \\]
+	\\[ \hat{Y} = \arg \max_{Y \in \mathcal{Y}_i} \Delta(Y_i, Y) - \langle w, \psi_i(X, Y) \rangle \\]
   where
   \\[ \psi_i(X, Y) = \phi(X, Y_i) - \phi(X, Y) \\]
 
@@ -153,7 +153,7 @@ Our oracle-based solver requires 4 functions, which follow the same interface as
 
    A prediction function that computes:
 
-	\\[ \hat{Y} = \arg \max_{Y \in \mathcal{Y}_i} \langle w, \psi(X_i, Y) \rangle \\]
+	\\[ \hat{Y} = \arg \max_{Y \in \mathcal{Y}_i} \langle w, \phi(X_i, Y) \rangle \\]
 
 	If no prediction function is defined, the solver will call the maximization oracle with the \\(\Delta\\) term set to zero.
 
