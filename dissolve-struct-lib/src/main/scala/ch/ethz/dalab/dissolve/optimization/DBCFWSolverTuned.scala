@@ -568,12 +568,12 @@ class DBCFWSolverTuned[X, Y](
           kAccum += deltaK
 
           val newGlobalModel = globalModel.clone()
-          newGlobalModel.updateWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
+          newGlobalModel.setWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
           newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
 
           // Weighted Average model
           val newGlobalModelWAvg = globalModelWeightedAverage.clone()
-          newGlobalModelWAvg.updateWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
+          newGlobalModelWAvg.setWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
           newGlobalModelWAvg.updateEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * (beta / numPartitions))
 
           val w_t = globalModel.getWeights()
@@ -959,10 +959,10 @@ class DBCFWSolverTuned[X, Y](
       LAdap.log.info(gammaLogSb.toString())
 
       val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
-      localModel.updateWeights(tempWeights1)
+      localModel.setWeights(tempWeights1)
       val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)
       val tempWeights2: Vector[Double] = localModel.getWeights() + w_i_prime
-      localModel.updateWeights(tempWeights2)
+      localModel.setWeights(tempWeights2)
 
       ell = ell - ell_i
       val ell_i_prime = (ell_i * (1.0 - gamma)) + (ell_s * gamma)
@@ -972,7 +972,7 @@ class DBCFWSolverTuned[X, Y](
       val rho = 2.0 / (k + 2.0)
       val wAvg = (1.0 - rho) * localModelWeightedAverage.getWeights() + rho * localModel.getWeights()
       val ellAvg = (1.0 - rho) * localModelWeightedAverage.getEll() + rho * localModel.getEll()
-      localModelWeightedAverage.updateWeights(wAvg)
+      localModelWeightedAverage.setWeights(wAvg)
       localModelWeightedAverage.updateEll(ellAvg)
 
       k += 1
@@ -982,11 +982,11 @@ class DBCFWSolverTuned[X, Y](
         localModel.updateEll(ell)
 
         val deltaLocalModel = localModel.clone()
-        deltaLocalModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
+        deltaLocalModel.setWeights(localModel.getWeights() - prevModel.getWeights())
         deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
 
         val deltaLocalModelWeightedAverage = localModelWeightedAverage.clone()
-        deltaLocalModelWeightedAverage.updateWeights(localModelWeightedAverage.getWeights() - prevModelWeightedAverage.getWeights())
+        deltaLocalModelWeightedAverage.setWeights(localModelWeightedAverage.getWeights() - prevModelWeightedAverage.getWeights())
         deltaLocalModelWeightedAverage.updateEll(localModelWeightedAverage.getEll() - prevModelWeightedAverage.getEll())
 
         val deltaK = k - kAccum(partitionIdx)
