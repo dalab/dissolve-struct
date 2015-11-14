@@ -958,11 +958,11 @@ class DBCFWSolverTuned[X, Y](
 
       LAdap.log.info(gammaLogSb.toString())
 
-      val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
-      localModel.setWeights(tempWeights1)
+//      val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
+      localModel.subtractFromWeight(w_i)
       val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)
-      val tempWeights2: Vector[Double] = localModel.getWeights() + w_i_prime
-      localModel.setWeights(tempWeights2)
+//      val tempWeights2: Vector[Double] = localModel.getWeights() + w_i_prime
+      localModel.addToWeight( w_i_prime)
 
       ell = ell - ell_i
       val ell_i_prime = (ell_i * (1.0 - gamma)) + (ell_s * gamma)
