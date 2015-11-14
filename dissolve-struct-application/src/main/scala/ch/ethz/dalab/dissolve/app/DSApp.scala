@@ -32,8 +32,8 @@ case class Label() {
 
 /**
  * This is the core of your Structured SVM application.
- * In here, you'll find 3 functions that you'll need to fill in to get your
- * application running.
+ * In here, you'll find three functions and a driver program that you'll need
+ * to fill in to get your application running.
  *
  * The interface is inspired by SVM^struct by Joachims et al.
  * (http://www.cs.cornell.edu/people/tj/svm_light/svm_struct.html)

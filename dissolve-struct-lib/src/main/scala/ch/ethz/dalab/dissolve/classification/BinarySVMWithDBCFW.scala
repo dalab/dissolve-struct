@@ -54,7 +54,7 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
    * Want: max L(y_i, y) - <w, psi_i(y)>
    * This returns the most violating (Loss-augmented) label.
    */
-  def oracleFn(model: StructSVMModel[Vector[Double], Double], xi: Vector[Double], yi: Double): Double = {
+  override def oracleFn(model: StructSVMModel[Vector[Double], Double], xi: Vector[Double], yi: Double): Double = {
 
     val weights = model.getWeights()
 

@@ -83,6 +83,13 @@ class SolverOptions[X, Y] extends Serializable {
 
   // Path to write the CSVs
   var debugInfoPath: String = new File(".").getCanonicalPath() + "/debugInfo-%d.csv".format(System.currentTimeMillis())
+  
+  // Level History
+  // Store last decoded level, and resume searching for candidates on that level
+  var resumeMaxLevel: Boolean = false
+  // Store past 10 decodings. For every decoding, check that this hasn't been 
+  // already suggested. If it has, move to next level (if exists)
+  var stubRepetitions: Boolean = false
 
   override def toString(): String = {
     val sb: StringBuilder = new StringBuilder()
@@ -119,6 +126,9 @@ class SolverOptions[X, Y] extends Serializable {
     }
 
     sb ++= "# debugMultiplier=%d\n".format(debugMultiplier)
+    
+    sb ++= "# resumeMaxLevel=%s\n".format(resumeMaxLevel)
+    sb ++= "# stubRepetitions=%s\n".format(stubRepetitions)
 
     sb.toString()
   }

@@ -12,8 +12,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 
-import breeze.linalg.DenseMatrix
-import breeze.linalg.DenseVector
+import breeze.linalg._
 import breeze.linalg.max
 import breeze.linalg.normalize
 import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegTypes._
@@ -183,6 +182,12 @@ object ImageSegUtils {
         val unaryFile = filesDir.resolve(unaryName)
         val unaries: DenseMatrix[Double] = deserializeUnaryTerm(unaryFile)
 
+        // Read global features
+        val globalName = imgName + ".csv"
+        val globalFile = Paths.get(dataDir, "global_features", globalName)
+        val globalFeatures: Vector[Double] =
+          Vector(breeze.linalg.csvread(globalFile.toFile()).toArray)
+
         // Read Pairwise
         val pairwiseName = imgName + ".edges"
         val pairwiseFile = filesDir.resolve(pairwiseName)
@@ -203,7 +208,8 @@ object ImageSegUtils {
         val pixelGroups: Map[Index, Array[Index]] = pixelMappingToGroups(pixelMapping)
         val unaryFeatures: DenseMatrix[Double] = getUnaryFeatures(rgbArray, pixelGroups)
 
-        val x = QuantizedImage(unaries, pairwise, pixelMapping, width, height, imgName, unaryFeatures)
+        val x = QuantizedImage(unaries, pairwise, pixelMapping, width, height,
+          imgName, unaryFeatures, null, null)
         val y = QuantizedLabel(labels, imgName)
         val lo = LabeledObject(y, x)
 
@@ -311,7 +317,7 @@ object ImageSegUtils {
     img
   }
 
-  def pixelsToImage(rgbArray: Array[Label], width: Int, height: Int): BufferedImage = {
+  def pixelsToImage(rgbArray: Array[RGB_INT], width: Int, height: Int): BufferedImage = {
     val img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB)
     img.setRGB(0, 0, width, height, rgbArray, 0, width)
 
@@ -478,7 +484,7 @@ object ImageSegUtils {
 
         val tile = printImageTile(xImg, yImg, xImg, yImg)
         writeImage(tile, imageOutFile.toString())
-        
+
         // Write Unary Features
         val csvOutName = x.filename + "-unaryf-" + ".csv"
         val csvOutFile = debugDir.resolve(csvOutName)
