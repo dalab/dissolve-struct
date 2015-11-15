@@ -56,6 +56,9 @@ class SolverOptions[X, Y] extends Serializable {
   var enableManualPartitionSize: Boolean = false
   var NUM_PART: Int = 1 // Number of partitions of the RDD
 
+  // SSG specific params
+  var ssg_gamma0: Int = 1000
+  
   // For debugging/Testing purposes
   // Basic debugging flag
   var debug: Boolean = false

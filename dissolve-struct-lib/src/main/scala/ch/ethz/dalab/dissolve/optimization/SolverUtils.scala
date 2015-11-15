@@ -151,7 +151,7 @@ object SolverUtils {
    * Primal objective.
    * Requires one full pass of decoding over all data examples.
    */
-  def primalObjective[X, Y](data: Vector[LabeledObject[X, Y]],
+  def primalObjective[X, Y](data: Seq[LabeledObject[X, Y]],
                             dissolveFunctions: DissolveFunctions[X, Y],
                             model: StructSVMModel[X, Y],
                             lambda: Double): Double = {
