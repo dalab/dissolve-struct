@@ -47,10 +47,78 @@
 \newcommand{\dataset}{{\cal D}}
 \newcommand{\fracpartial}[2]{\frac{\partial #1}{\partial  #2}}
 
-\newcommand{\w}{{\bf w}}
+\DeclareMathOperator*{\E}{\rm E}
+\newcommand{\simplex}{\Delta}
 
-\DeclareMathOperator*{\argmax}{arg\,max}
-\DeclareMathOperator*{\argmin}{\arg\!\min} % get rids of the ugly space!
+% general math
+\newcommand{\argmax}{\operatornamewithlimits{argmax}}
+\newcommand{\argmin}{\operatornamewithlimits{argmin}}
+\newcommand{\kroneckerdelta}[2]{\delta_{#2}(#1)}
+\newcommand{\realnumbers}{\mathbb{R}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\transpose}{\mathsf{T}}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\floor}[1]{\left\lfloor#1\right\rfloor}
+\newcommand{\ceil}[1]{\left\lceil#1\right\rceil}
+\newcommand\SetOf[2]{\left\{#1\,\vphantom{#2}\right.\left|\vphantom{#1}\,#2\right\}}
+
+%vectors
+\newcommand{\id}{\mathbf{I}} % big i for identity
+\newcommand{\ind}{\mathbf{1}} % indicator vectors
+\newcommand{\0}{\mathbf{0}} % the origin
+\newcommand{\unit}{\mathbf{e}} % unit basis vectors
+\newcommand{\one}{\mathbf{1}} % all one vector
+
+\newcommand{\bv}{\bm{b}}
+
+% structured output prediction
+\newcommand{\inputvar}{x}
+\newcommand{\inputvarv}{\bm{\inputvar}}
+\newcommand{\inputdomain}{\mathcal{X}}
+\newcommand{\outputvar}{y}
+\newcommand{\outputvarv}{\bm{\outputvar}}
+\newcommand{\outputdomain}{\mathcal{Y}}
+%\newcommand{\hiddenvar}{z}
+%\newcommand{\hiddenvarv}{\bm{\hiddenvar}}
+%\newcommand{\hiddendomain}{\mathcal{Z}}
+\newcommand{\inputoutputdomain}{\mathcal{H}}
+\newcommand{\featuremap}{\phi}
+\newcommand{\featuremapv}{\bm{\featuremap}}
+\newcommand{\featuremapdiff}{\psi}
+\newcommand{\featuremapdiffv}{\bm{\featuremapdiff}}
+\newcommand{\errorterm}{L}
+\newcommand{\weight}{w}
+\newcommand{\weightv}{\bm{\weight}}
+\newcommand{\wv}{{\bm{\weight}}}
+\newcommand{\dualvar}{\alpha}
+\newcommand{\dualvarv}{\bm{\alpha}}
+\newcommand{\kernelmatrix}{K}
+\newcommand{\kernelmatrixv}{\bm{\kernelmatrix}}
+\newcommand{\Lmax}{L_{\text{\tiny{max}}}}
+
+% Frank-Wolfe
+\newcommand{\sv}{\bm{s}}
+\newcommand{\x}{{\bm{x}}} %not to be confused with SVM x
+\newcommand{\y}{{\bm{y}}} %not to be confused with SVM y
+\newcommand{\e}{{\bm{e}}} % appears in proof of linear convergence...
+\newcommand{\stepsize}{\gamma}
+\newcommand{\domain}{\mathcal{D}} %TODO: be careful!
+%\newcommand{\CfTotal}{C_f^{\text{\tiny{prod}}}}
+\newcommand{\CfTotal}{C_{\hspace{-0.1em}f}^\otimes}
+\newcommand{\Cf}{C_{\hspace{-0.08em}f}}
+\DeclareMathOperator{\approxLin}{\textsc{ApproxLinearMin}}
+\DeclareMathOperator{\exactLin}{\textsc{LinearMin}}
+\newcommand{\approxArgMin}{\operatornamewithlimits{[approx]\argmin}}
+\newcommand{\X}{\mathcal{X}}
+\newcommand{\vv}{{\bm{v}}}
+\newcommand{\ww}{{\bm{w}}}
+\newcommand{\zz}{{\bm{z}}}
+\newcommand{\mapprox}{\nu} % multiplicative approximation quality
+\newcommand{\addFactor}{\tilde{\gamma}} % constant appearing in the additive approximatoin quality
+
+\newcommand{\note}[1]{{\color{red}#1}}
+\newcommand{\ignore}[1]{}
+
 
 
 % Heading arguments are {volume}{year}{pages}{submitted}{published}{author-full-names}
@@ -113,37 +181,56 @@ i.e.,
 %
 \begin{equation}
 \label{eq:inference}
-\hat{Y} = \argmax_{Y \in \mathcal{Y}} S_\w(Y) = \argmax_{Y \in \mathcal{Y}} \w^T\Psi(X,Y),
+\hat{Y} = \argmax_{Y \in \mathcal{Y}} S_\wv(Y) = \argmax_{Y \in \mathcal{Y}} \wv^T\Psi(X,Y),
 \end{equation}
 %
-where $\w$ are the model parameters and $\Psi(X,Y)$ is the \emph{feature map} corresponding to the input $X$ and the labeling $Y$.
+where $\wv$ are the model parameters and $\Psi(X,Y)$ is the \emph{feature map} corresponding to the input $X$ and the labeling $Y$.
 
 
-Given a set of $N$ training examples $\mathcal{D}=((X^1,Y^1), \dots, (X^N,Y^N))$ where $X^i \in \mathcal{X}$ and $Y^i \in \mathcal{Y}$ is the associated labeling, 
+Given a set of $N$ training examples $\dataset=\{(X^1,Y^1), \dots, (X^N,Y^N)\}$ where $X^i \in \mathcal{X}$ and $Y^i \in \mathcal{Y}$ is the associated labeling, 
 the learning task consists in finding model parameters $\mathbf{w}$ that
 achieve low empirical loss subject to some regularization. In other words, we seek
 %
 \begin{align}
 \label{eq:obj}
 \nonumber
-\w^* &= \argmin_\w \mathcal{L}(\mathcal{D}, \w) \\
-& = \argmin_{\w} \sum_{n=1}^N l(X^n, Y^n, \w) + R(\w),
+\wv^* &= \argmin_\wv \mathcal{L}(\dataset, \wv) \\
+& = \argmin_{\wv} \sum_{n=1}^N l(X^n, Y^n, \wv) + R(\wv),
 \end{align}
 %
 where $l$ is the \emph{surrogate loss} function,
 a quantity that is usually related to and often upper-bounds the training error, 
 and $R(\mathbf{w})$ is the regularizer (such as the L2 norm of $\mathbf{w}$)
 that helps prevent overfitting. 
-The most common choice of $l$ is the hinge
-
-loss, as used in~\cite{Taskar:2003tt,Tsochantaridis:2005ww}, which is defined as
+The most common choice of $l$ is the hinge loss, as used in~\cite{Taskar:2003tt,Tsochantaridis:2005ww}, which is defined as
 \begin{equation}
 \label{eq:hinge-loss}
-l(Y^n, Y^*_\mathbf{w}, \w) = [S_\mathbf{w}(Y^*_\w) + \Delta(Y^n,Y^*_\w) - S_\w(Y^n)]_+
+l(Y^n, Y^*_\mathbf{w}, \wv) = [S_\mathbf{w}(Y^*_\wv) + \Delta(Y^n,Y^*_\wv) - S_\wv(Y^n)]_+
 \end{equation}
 
 
-The most popular method to solve problems of the form~\ref{eq:obj} is the stochastic subgradient method (SGD) TOOD: REF. Although this method has been quite successful it requires tuning parameters to achieve good performance (SAY SOMETHING about parallel SGD). We instead rely the COCOA framework (CITATION). WRITE DOWN DUAL and explain how step-size is selected...
+The most popular method to solve problems of the form~\eqref{eq:obj} is the stochastic subgradient method (SGD) TOOD: REF. Although this method has been quite successful it requires tuning parameters to achieve good performance (SAY SOMETHING about parallel SGD). We instead rely the \cocoa framework \citep{Jaggi:2014vi}. WRITE DOWN DUAL and explain how step-size is selected...
+
+The Lagrange dual of the above $n$-slack-formulation (\ref{eq:svmstruct_nslack_primal}) has $m := \sum_i |\outputdomain_i|$ variables or potential `support vectors'.
+Writing $\dualvar_i(\outputvarv)$ for the dual variable associated with the training example $i$ and potential output $\outputvarv \in \outputdomain_i$, the dual problem is given by
+\begin{align}
+    \label{eq:svmstruct_nslack_dual} % or do we prefer to write it as a maximization?
+    \min_{\substack{ \dualvarv\in\R^{m} \\  \dualvarv \geq 0}} \quad  f(\dualvarv) \;:=&  \;\;
+    \frac{\lambda}{2}
+    \big\| A\dualvarv \big\|^2
+    - \bv^T\dualvarv
+    \\[-2mm]
+    \text{s.t.} \quad &  \;
+      \textstyle\sum_{\outputvarv \in \outputdomain_i}  \dualvar_i(\outputvarv) = 1 ~~~\forall i\in[n] \ , \notag 
+\end{align}
+where the matrix $A\in\R^{d\times m}$ consists of the $m$ columns $A := \SetOf{\frac1{\lambda n} \featuremapdiffv_i(\outputvarv) \in\R^d}{i\in[n],\outputvarv \in \outputdomain_i}$, and the vector $\bv \in \R^m$ is given by 
+$\bv:= \left(\frac1n \errorterm_i(\outputvarv) \right)$$_{i\in[n],\outputvarv\in\outputdomain_i}$. %TODO: replace n by N
+Given a dual variable vector $\dualvarv$, we can use the Karush-Kuhn-Tucker optimality conditions  to obtain the corresponding primal variables~$
+\wv = A\dualvarv  = \sum_{i,\,\outputvarv \in \outputdomain_i} \dualvar_i(\outputvarv)  \frac{\featuremapdiffv_i(\outputvarv)}{\lambda n}
+$, see Appendix~\ref{sec:app_duals}.
+The gradient of $f$ then takes the simple form $\nabla f(\dualvarv) = \lambda A^TA\dualvarv - \bv = \lambda A^T\wv - \bv$; its \mbox{$(i,\outputvarv)$-th} component is $-\frac{1}{n} H_i(\outputvarv; \wv)$, cf.~\eqref{eq:subproblem_loss_augm}. 
+Finally, note that the domain $\domain \subset \R^m$ of~\eqref{eq:svmstruct_nslack_dual} is the product of $n$ probability simplices, $\domain := \simplex_{|\outputdomain_1|}\times\mathellipsis\times\simplex_{|\outputdomain_n|}$.
+
 
 \comment{
 Not sure we need this:
@@ -152,7 +239,7 @@ soft margin constraints~\cite{Tsochantaridis04}:
 %
 \begin{eqnarray}
 \label{eq:ssvm_primal}
-& & \min_{\w,\bm{\xi}\geq\mathbf{0}} \frac{\lambda}{2} \vectornorm{\w}^2 + 
+& & \min_{\wv,\bm{\xi}\geq\mathbf{0}} \frac{\lambda}{2} \vectornorm{\wv}^2 + 
 	\sum_{n=1}^N \xi_n 
 %\\
 %\nonumber
