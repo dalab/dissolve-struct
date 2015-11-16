@@ -22,6 +22,7 @@
 \usepackage{mathdots}
 \usepackage{subcaption}
 \usepackage{amsopn}
+\usepackage{amsmath}
 
 \definecolor{darkgreen}{rgb}{0,.4,.2}
 \definecolor{darkblue}{rgb}{.1,.2,.6}
@@ -42,12 +43,15 @@
 \newcommand{\spark}{\textsc{Spark}\xspace}
 \newcommand{\vectornorm}[1]{\left|\left|#1\right|\right|} 
 
+\newcommand{\comment}[1]{}
 \newcommand{\dataset}{{\cal D}}
 \newcommand{\fracpartial}[2]{\frac{\partial #1}{\partial  #2}}
 
 \newcommand{\w}{{\bf w}}
 
 \DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{\arg\!\min} % get rids of the ugly space!
+
 
 % Heading arguments are {volume}{year}{pages}{submitted}{published}{author-full-names}
 
@@ -117,7 +121,32 @@ where $\w$ are the model parameters and $\Psi(X,Y)$ is the \emph{feature map} co
 
 Given a set of $N$ training examples $\mathcal{D}=((X^1,Y^1), \dots, (X^N,Y^N))$ where $X^i \in \mathcal{X}$ and $Y^i \in \mathcal{Y}$ is the associated labeling, 
 the learning task consists in finding model parameters $\mathbf{w}$ that
-achieve low empirical loss subject to some regularization. This is usually formulated as a quadratic program (QP) with
+achieve low empirical loss subject to some regularization. In other words, we seek
+%
+\begin{align}
+\label{eq:obj}
+\nonumber
+\w^* &= \argmin_\w \mathcal{L}(\mathcal{D}, \w) \\
+& = \argmin_{\w} \sum_{n=1}^N l(X^n, Y^n, \w) + R(\w),
+\end{align}
+%
+where $l$ is the \emph{surrogate loss} function,
+a quantity that is usually related to and often upper-bounds the training error, 
+and $R(\mathbf{w})$ is the regularizer (such as the L2 norm of $\mathbf{w}$)
+that helps prevent overfitting. 
+The most common choice of $l$ is the hinge
+loss, as used in~\cite{Taskar03,Tsochantaridis04}, which is defined as
+\begin{equation}
+\label{eq:hinge-loss}
+l(Y^n, Y^*_\mathbf{w}, \w) = [S_\mathbf{w}(Y^*_\w) + \Delta(Y^n,Y^*_\w) - S_\w(Y^n)]_+
+\end{equation}
+
+
+The most popular method to solve problems of the form~\ref{eq:obj} is the stochastic subgradient method (SGD) TOOD: REF. Although this method has been quite successful it requires tuning parameters to achieve good performance (SAY SOMETHING about parallel SGD). We instead rely the COCOA framework (CITATION). WRITE DOWN DUAL and explain how step-size is selected...
+
+\comment{
+Not sure we need this:
+This is usually formulated as a quadratic program (QP) with
 soft margin constraints~\cite{Tsochantaridis04}:
 %
 \begin{eqnarray}
@@ -135,6 +164,7 @@ soft margin constraints~\cite{Tsochantaridis04}:
 where $\mathcal{Y}_n$ is the set of all possible labelings for example
 $n$, the constant $\lambda$ controls the trade-off between margin and
 training error, and the \emph{task loss} $\Delta$ measures the closeness of any inferred labeling $Y$ to the ground truth labeling $Y^n$.
+}
 
 {\bf TALK ABOUT DBCFW: description + pseudo-code}
 
@@ -155,9 +185,8 @@ TODO: Can we show a simple example like the pystruct paper?
 Run experiments on cov and other dataset. Compare to other frameworks...
 
 % Acknowledgements should go at the end, before appendices and references
-\acks{...}
+\acks{We would like to thank Jan Deriu, Bettina Messmer and Ruben Wolff for contributing to the code and discussions to improve readability.}
 
-Thank for all the students...
 
 % Manual newpage inserted to improve layout of sample file - not
 % needed in general before appendices/bibliography.
