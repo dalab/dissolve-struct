@@ -181,10 +181,10 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
 
         // 5, 6, 7, 8) Update the weights of the model
         val tempWeights1: Vector[Double] = model.getWeights() - wMat(::, i)
-        model.updateWeights(tempWeights1)
+        model.setWeights(tempWeights1)
         wMat(::, i) := (wMat(::, i) * (1.0 - gamma)) + (w_s * gamma)
         val tempWeights2: Vector[Double] = model.getWeights() + wMat(::, i)
-        model.updateWeights(tempWeights2)
+        model.setWeights(tempWeights2)
 
         ell = ell - ellMat(i)
         ellMat(i) = (ellMat(i) * (1.0 - gamma)) + (ell_s * gamma)
@@ -209,10 +209,10 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
 
         if (debugOn && k >= debugIter) {
           if (solverOptions.doWeightedAveraging) {
-            debugModel.updateWeights(wAvg)
+            debugModel.setWeights(wAvg)
             debugModel.updateEll(lAvg)
           } else {
-            debugModel.updateWeights(model.getWeights)
+            debugModel.setWeights(model.getWeights)
             debugModel.updateEll(ell)
           }
 
@@ -257,7 +257,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
     }
 
     if (solverOptions.doWeightedAveraging) {
-      model.updateWeights(wAvg)
+      model.setWeights(wAvg)
       model.updateEll(lAvg)
     } else {
       model.updateEll(ell)

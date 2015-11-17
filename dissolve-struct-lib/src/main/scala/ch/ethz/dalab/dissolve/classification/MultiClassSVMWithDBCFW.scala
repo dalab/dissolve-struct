@@ -120,7 +120,13 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
     val objectifiedData: RDD[LabeledObject[Vector[Double], MultiClassLabel]] =
       data.map {
         case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses), SparseVector(x.features.toArray))
+          val features:Vector[Double] =  x.features match{
+                case features:org.apache.spark.mllib.linalg.SparseVector =>
+                  val builder:VectorBuilder[Double] = new VectorBuilder(features.indices,features.values,features.indices.length,x.features.size)
+                  builder.toSparseVector
+                case _ => SparseVector(x.features.toArray)
+              } 
+          new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses), features)
       }
 
     val repartData =
@@ -183,9 +189,15 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
       data.map {
         case x: LabeledPoint =>
           new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses),
-            if (solverOptions.sparse)
-              SparseVector(x.features.toArray)
-            else
+            if (solverOptions.sparse){
+              val features:Vector[Double] =  x.features match{
+                case features:org.apache.spark.mllib.linalg.SparseVector =>
+                  val builder:VectorBuilder[Double] = new VectorBuilder(features.indices,features.values,features.indices.length,x.features.size)
+                  builder.toSparseVector
+                case _ => SparseVector(x.features.toArray)
+              } 
+              features  
+            } else
               Vector(x.features.toArray))
       }
 
