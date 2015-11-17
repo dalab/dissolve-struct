@@ -35,5 +35,4 @@ trait DissolveFunctions[X, Y] extends Serializable {
   def perClassAccuracy(yPredicted: Y, yTruth: Y): Array[(Int, Int)] = Array.empty[(Int, Int)]
   
   def classWeights(y:Y): Double = 1.0
-
 }

@@ -45,7 +45,7 @@ class SolverOptions[X, Y] extends Serializable {
   // In case of multi-class
   var numClasses = -1
 
-  var classWeights:HashMap[Y,Double] = HashMap()
+  var classWeights:Boolean = true
   
   // Cache params
   var enableOracleCache: Boolean = false
