@@ -10,7 +10,6 @@ import scala.util.Random
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import breeze.linalg._
 import breeze.numerics._
-import ch.ethz.dalab.dissolve.optimization.SolverUtils;
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 import java.io.File
@@ -238,16 +237,16 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
               if (solverOptions.testData.isDefined)
                 SolverUtils.averageLoss(solverOptions.testData.get, dissolveFunctions, debugModel)
               else
-                0.00
+                (0.00,0.00)
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
-              .format(passNum + 1, k, primal, f, gap, trainError, testError))
+              .format(passNum + 1, k, primal, f, gap, trainError._1, testError._1))
             if (solverOptions.debug)
-              debugSb ++= "%d,%f,%d,%s,%s,%s,%f,%f\n".format(passNum + 1, curTime, k, primal.toString(), f.toString(), gap.toString(), trainError, testError)
+              debugSb ++= "%d,%f,%d,%s,%s,%s,%f,%f\n".format(passNum + 1, curTime, k, primal.toString(), f.toString(), gap.toString(), trainError._1, testError._1)
           } else {
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
-              .format(passNum + 1, k, primal, f, gap, trainError))
+              .format(passNum + 1, k, primal, f, gap, trainError._1))
             if (solverOptions.debug)
-              debugSb ++= "%d,%f,%d,%s,%s,%s,%f\n".format(passNum + 1, curTime, k, primal.toString(), f.toString(), gap.toString(), trainError)
+              debugSb ++= "%d,%f,%d,%s,%s,%s,%f\n".format(passNum + 1, curTime, k, primal.toString(), f.toString(), gap.toString(), trainError._1)
           }
 
           debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
