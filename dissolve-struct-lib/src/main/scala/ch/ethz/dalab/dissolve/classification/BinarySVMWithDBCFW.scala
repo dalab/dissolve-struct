@@ -101,45 +101,7 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
     data: RDD[LabeledPoint],
     solverOptions: SolverOptions[Vector[Double], Double]): StructSVMModel[Vector[Double], Double] = {
 
-    // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
-    val objectifiedData: RDD[LabeledObject[Vector[Double], Double]] =
-      data.map {
-        case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], Double](x.label, SparseVector(x.features.toArray))
-      }
-
-    val repartData =
-      if (solverOptions.enableManualPartitionSize)
-        objectifiedData.repartition(solverOptions.NUM_PART)
-      else
-        objectifiedData
-
-    println("Running BinarySVMWithDBCFW solver")
-    println(solverOptions)
-
-    val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
-      repartData,
-      this,
-      solverOptions,
-      miniBatchEnabled = false).optimize()
-
-    println(debugInfo)
-
-    // Dump debug information into a file
-    val fw = new FileWriter(solverOptions.debugInfoPath)
-    // Write the current parameters being used
-    fw.write(solverOptions.toString())
-    fw.write("\n")
-
-    // Write spark-specific parameters
-    fw.write(SolverUtils.getSparkConfString(data.context.getConf))
-    fw.write("\n")
-
-    // Write values noted from the run
-    fw.write(debugInfo)
-    fw.close()
-
-    trainedModel
+    train(data, this, solverOptions)
 
   }
 
@@ -173,7 +135,7 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
 
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
       repartData,
-      this,
+      dissolveFunctions,
       solverOptions,
       miniBatchEnabled = false).optimize()
 
