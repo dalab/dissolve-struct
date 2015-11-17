@@ -23,6 +23,12 @@
 \usepackage{subcaption}
 \usepackage{amsopn}
 \usepackage{amsmath}
+\usepackage{multirow}
+\usepackage{amssymb}% http://ctan.org/pkg/amssymb
+\usepackage{pifont}% http://ctan.org/pkg/pifont
+
+\newcommand{\cmark}{\ding{51}}%
+\newcommand{\xmark}{\ding{55}}%
 
 \definecolor{darkgreen}{rgb}{0,.4,.2}
 \definecolor{darkblue}{rgb}{.1,.2,.6}
@@ -275,17 +281,17 @@ The use of the \algname requires users to implement the following functions:
 \caption{Comparison of structured prediction software packages}
 \label{tab:datasets}
    \begin{center}
-      \begin{tabular}{l| r | %
-      r | r | r}
+      \begin{tabular}{l l l c c c c}
        \vspace{.25em}
     {\small\textbf{Package}} & {\small\textbf{Language}} & %
-    {\small\textbf{License}} & {\small\textbf{Algorithms}} & {\small\textbf{Models}}\\
+    {\small\textbf{License}} & \small\textbf{Distributed} & \multicolumn{3}{c}{\small\textbf{Models}} \\
     \hline
-    \algname & Scala & ?\\
-    PyStruct & Python & BSD\\
-	SVM struct & C++ & non-free \\
-	Dlib & C++ & boost \\
-	CRFsuite & C++ & BSD \\
+    & & & & ML & Chain & Graph \\
+    \algname & Scala & ? & \checkmark & \xmark & \checkmark & \checkmark \\
+    PyStruct & Python & BSD & \checkmark & \xmark & \checkmark & \checkmark \\
+	SVM\textsuperscript{struct} & C++ & non-free & \checkmark & \xmark & \xmark & \xmark \\
+	Dlib & C++ & boost & \checkmark & \xmark & \checkmark & \checkmark \\
+	CRFsuite & C++ & BSD & \checkmark & \checkmark & \checkmark & \xmark \\
       \end{tabular}
    \end{center}\vspace{-2mm}
 \end{table}
