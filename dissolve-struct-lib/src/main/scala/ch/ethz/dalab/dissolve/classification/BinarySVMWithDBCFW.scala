@@ -186,7 +186,7 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
 
     val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
       repartData,
-      this,
+      dissolveFunctions,
       solverOptions,
       miniBatchEnabled = false).optimize()
 

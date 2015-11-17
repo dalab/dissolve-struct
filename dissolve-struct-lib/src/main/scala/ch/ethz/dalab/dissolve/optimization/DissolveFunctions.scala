@@ -2,6 +2,7 @@ package ch.ethz.dalab.dissolve.optimization
 
 import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import scala.collection.mutable.HashMap
 
 trait DissolveFunctions[X, Y] extends Serializable {
 
@@ -32,5 +33,7 @@ trait DissolveFunctions[X, Y] extends Serializable {
 
   // Returns: Label -> (TotalPixelCount, CorrectPixelCount)
   def perClassAccuracy(yPredicted: Y, yTruth: Y): Array[(Int, Int)] = Array.empty[(Int, Int)]
+  
+  def classWeights(y:Y): Double = 1.0
 
 }
