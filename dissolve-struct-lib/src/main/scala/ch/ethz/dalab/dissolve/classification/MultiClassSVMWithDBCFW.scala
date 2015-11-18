@@ -39,7 +39,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
       sum += clWeight
       labelToWeight.put(MultiClassLabel(label, labels.length), clWeight)
     }
-    
+
     //make sure the weights sum up to the number of classes k
     assert(sum == nClasses)
   }
