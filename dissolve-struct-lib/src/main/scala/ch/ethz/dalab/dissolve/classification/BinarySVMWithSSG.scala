@@ -1,51 +1,25 @@
-
-/**
- *
- */
 package ch.ethz.dalab.dissolve.classification
 
 import java.io.FileWriter
+
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+
 import breeze.linalg.DenseVector
 import breeze.linalg.SparseVector
 import breeze.linalg.Vector
-import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
+import ch.ethz.dalab.dissolve.optimization.SSGSolver
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import breeze.linalg.VectorBuilder
-import scala.collection.mutable.HashMap
-import org.apache.spark.rdd.PairRDDFunctions
 
 /**
- * @author tribhu
+ * @author thijs
+ * Adapted from BinarySVMWithDBCFW
  *
  */
-object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
-
-  val labelToWeight = HashMap[Double, Double]()
-
-  override def classWeights(label: Double): Double = {
-    labelToWeight.get(label).getOrElse(1.0)
-  }
-
-  def generateClassWeights(data: RDD[LabeledPoint]): Unit = {
-    val labels: Array[Double] = data.map { x => x.label }.distinct().collect()
-
-    val classOccur: PairRDDFunctions[Double, Double] = data.map(x => (x.label, 1.0))
-    val labelOccur: PairRDDFunctions[Double, Double] = classOccur.reduceByKey((x, y) => x + y)
-    val labelWeight: PairRDDFunctions[Double, Double] = labelOccur.mapValues { x => 1 / x }
-
-    val weightSum: Double = labelWeight.values.sum()
-    val nClasses: Int = 2
-    val scaleValue: Double = nClasses / weightSum
-
-    for ((label, weight) <- labelWeight.collectAsMap()) {
-      labelToWeight.put(label, scaleValue * weight)
-    }
-  }
+object BinarySVMWithSSG extends DissolveFunctions[Vector[Double], Double] {
 
   /**
    * Feature function
@@ -121,10 +95,10 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
    * Classifying with in-built functions
    */
   def train(
-    data: RDD[LabeledPoint],
+    data: Seq[LabeledPoint],
     solverOptions: SolverOptions[Vector[Double], Double]): StructSVMModel[Vector[Double], Double] = {
 
-    train(data, this, solverOptions)
+    train(data,this,solverOptions)
 
   }
 
@@ -132,45 +106,28 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
    * Classifying with user-submitted functions
    */
   def train(
-    data: RDD[LabeledPoint],
+    data: Seq[LabeledPoint],
     dissolveFunctions: DissolveFunctions[Vector[Double], Double],
     solverOptions: SolverOptions[Vector[Double], Double]): StructSVMModel[Vector[Double], Double] = {
 
-    if (solverOptions.classWeights) {
-      generateClassWeights(data)
-    }
-
     // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
-    val objectifiedData: RDD[LabeledObject[Vector[Double], Double]] =
+    val objectifiedData: Seq[LabeledObject[Vector[Double], Double]] =
       data.map {
         case x: LabeledPoint =>
           new LabeledObject[Vector[Double], Double](x.label,
-            if (solverOptions.sparse) {
-              val features: Vector[Double] = x.features match {
-                case features: org.apache.spark.mllib.linalg.SparseVector =>
-                  val builder: VectorBuilder[Double] = new VectorBuilder(features.indices, features.values, features.indices.length, x.features.size)
-                  builder.toSparseVector
-                case _ => SparseVector(x.features.toArray)
-              }
-              features
-            } else
+            if (solverOptions.sparse)
+              SparseVector(x.features.toArray)
+            else
               DenseVector(x.features.toArray))
       }
 
-    val repartData =
-      if (solverOptions.enableManualPartitionSize)
-        objectifiedData.repartition(solverOptions.NUM_PART)
-      else
-        objectifiedData
-
-    println("Running BinarySVMWithDBCFW solver")
+    println("Running BinarySVMWithSSGsolver")
     println(solverOptions)
 
-    val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], Double](
-      repartData,
+    val trainedModel = new SSGSolver[Vector[Double], Double](
+      objectifiedData,
       dissolveFunctions,
-      solverOptions,
-      miniBatchEnabled = false).optimize()
+      solverOptions).optimize()
 
     // Dump debug information into a file
     val fw = new FileWriter(solverOptions.debugInfoPath)
@@ -178,15 +135,10 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
     fw.write(solverOptions.toString())
     fw.write("\n")
 
-    // Write spark-specific parameters
-    fw.write(SolverUtils.getSparkConfString(data.context.getConf))
-    fw.write("\n")
 
     // Write values noted from the run
-    fw.write(debugInfo)
     fw.close()
 
-    println(debugInfo)
 
     trainedModel
 

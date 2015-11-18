@@ -83,3 +83,9 @@ ec2_config.json
 # tribhu's current directory
 benchmark-data/
 jars/
+
+% latex
+*.out
+*.synctex.gz
+*.blg
+*.aux

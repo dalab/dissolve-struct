@@ -1,4 +1,4 @@
-\begin{thebibliography}{2}
+\begin{thebibliography}{6}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -19,5 +19,30 @@ Simon Lacoste-Julien, Martin Jaggi, Mark Schmidt, and Patrick Pletscher.
 \newblock {Block-Coordinate Frank-Wolfe Optimization for Structural SVMs}.
 \newblock In \emph{ICML 2013 - Proceedings of the 30th International Conference
   on Machine Learning}, 2013.
+
+\bibitem[Ratliff et~al.(2007)Ratliff, Bagnell, and Zinkevich]{Ratliff:2007ti}
+Nathan~D Ratliff, J~Andrew Bagnell, and Martin~A Zinkevich.
+\newblock {(Online) Subgradient Methods for Structured Prediction}.
+\newblock In \emph{AISTATS}, 2007.
+
+\bibitem[Shalev-Shwartz et~al.(2010)Shalev-Shwartz, Singer, Srebro, and
+  Cotter]{ShalevShwartz:2010cg}
+Shai Shalev-Shwartz, Yoram Singer, Nathan Srebro, and Andrew Cotter.
+\newblock {Pegasos: Primal Estimated Sub-Gradient Solver for SVM}.
+\newblock \emph{Mathematical Programming}, 127\penalty0 (1):\penalty0 3--30,
+  October 2010.
+
+\bibitem[Taskar et~al.(2003)Taskar, Guestrin, and Koller]{Taskar:2003tt}
+Ben Taskar, Carlos Guestrin, and Daphne Koller.
+\newblock {Max-Margin Markov Networks}.
+\newblock In \emph{NIPS 2014 - Advances in Neural Information Processing
+  Systems 27}, 2003.
+
+\bibitem[Tsochantaridis et~al.(2005)Tsochantaridis, Joachims, Hofmann, and
+  Altun]{Tsochantaridis:2005ww}
+Ioannis Tsochantaridis, Thorsten Joachims, Thomas Hofmann, and Yasemin Altun.
+\newblock {Large Margin Methods for Structured and Interdependent Output
+  Variables}.
+\newblock \emph{The Journal of Machine Learning Research}, 6, December 2005.
 
 \end{thebibliography}
