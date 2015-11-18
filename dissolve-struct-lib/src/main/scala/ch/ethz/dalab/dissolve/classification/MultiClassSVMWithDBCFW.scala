@@ -9,10 +9,40 @@ import breeze.linalg._
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
+import scala.collection.mutable.HashMap
+import org.apache.spark.rdd.PairRDDFunctions
 
 case class MultiClassLabel(label: Double, numClasses: Int)
 
 object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiClassLabel] {
+
+  val labelToWeight = HashMap[MultiClassLabel, Double]()
+
+  override def classWeights(label: MultiClassLabel): Double = {
+    labelToWeight.get(label).getOrElse(1.0)
+  }
+
+  def generateClassWeights(data: RDD[LabeledPoint]): Unit = {
+    val labels: Array[Double] = data.map { x => x.label }.distinct().collect()
+
+    val classOccur: PairRDDFunctions[Double, Double] = data.map(x => (x.label, 1.0))
+    val labelOccur: PairRDDFunctions[Double, Double] = classOccur.reduceByKey((x, y) => x + y)
+    val labelWeight: PairRDDFunctions[Double, Double] = labelOccur.mapValues { x => 1 / x }
+
+    val weightSum: Double = labelWeight.values.sum()
+    val nClasses: Int = labels.length
+    val scaleValue: Double = nClasses / weightSum
+
+    var sum: Double = 0.0
+    for ((label, weight) <- labelWeight.collectAsMap()) {
+      val clWeight = scaleValue * weight
+      sum += clWeight
+      labelToWeight.put(MultiClassLabel(label, labels.length), clWeight)
+    }
+
+    //make sure the weights sum up to the number of classes k
+    assert(sum == nClasses)
+  }
 
   /**
    * Feature function
@@ -116,11 +146,21 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
 
     solverOptions.numClasses = numClasses
 
+    if (solverOptions.classWeights) {
+      generateClassWeights(data)
+    }
+
     // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
     val objectifiedData: RDD[LabeledObject[Vector[Double], MultiClassLabel]] =
       data.map {
         case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses), SparseVector(x.features.toArray))
+          val features: Vector[Double] = x.features match {
+            case features: org.apache.spark.mllib.linalg.SparseVector =>
+              val builder: VectorBuilder[Double] = new VectorBuilder(features.indices, features.values, features.indices.length, x.features.size)
+              builder.toSparseVector
+            case _ => SparseVector(x.features.toArray)
+          }
+          new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses), features)
       }
 
     val repartData =
@@ -183,9 +223,15 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
       data.map {
         case x: LabeledPoint =>
           new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses),
-            if (solverOptions.sparse)
-              SparseVector(x.features.toArray)
-            else
+            if (solverOptions.sparse) {
+              val features: Vector[Double] = x.features match {
+                case features: org.apache.spark.mllib.linalg.SparseVector =>
+                  val builder: VectorBuilder[Double] = new VectorBuilder(features.indices, features.values, features.indices.length, x.features.size)
+                  builder.toSparseVector
+                case _ => SparseVector(x.features.toArray)
+              }
+              features
+            } else
               Vector(x.features.toArray))
       }
 

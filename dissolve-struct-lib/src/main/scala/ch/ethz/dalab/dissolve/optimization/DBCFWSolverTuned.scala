@@ -61,7 +61,8 @@ class DBCFWSolverTuned[X, Y](
                                    oracleStreamFn: (StructSVMModel[X, Y], X, Y, Int) => Stream[Y],
                                    predictFn: (StructSVMModel[X, Y], X) => Y,
                                    fineOracleFn: (StructSVMModel[X, Y], X, Y) => Y,
-                                   xid: (X) => String)
+                                   xid: (X) => String,
+                                   classWeights: (Y) => Double)
 
   // Input to the mapper: idx -> DataShard
   case class InputDataShard[X, Y](labeledObject: LabeledObject[X, Y],
@@ -267,7 +268,8 @@ class DBCFWSolverTuned[X, Y](
       dissolveFunctions.oracleCandidateStream,
       dissolveFunctions.predictFn,
       dissolveFunctions.fineOracleFn,
-      dissolveFunctions.getImageID)
+      dissolveFunctions.getImageID,
+      dissolveFunctions.classWeights)
 
     data.unpersist()
 
@@ -568,12 +570,12 @@ class DBCFWSolverTuned[X, Y](
           kAccum += deltaK
 
           val newGlobalModel = globalModel.clone()
-          newGlobalModel.updateWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
+          newGlobalModel.setWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
           newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
 
           // Weighted Average model
           val newGlobalModelWAvg = globalModelWeightedAverage.clone()
-          newGlobalModelWAvg.updateWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
+          newGlobalModelWAvg.setWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
           newGlobalModelWAvg.updateEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * (beta / numPartitions))
 
           val w_t = globalModel.getWeights()
@@ -712,12 +714,14 @@ class DBCFWSolverTuned[X, Y](
       val lambda = solverOptions.lambda
       val lossFn = helperFunctions.lossFn
       val phi = helperFunctions.featureFn
+      val c_i = helperFunctions.classWeights
 
       val phi_i_label: Vector[Double] = time({ phi(pattern, label) }, "phi")
       val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
-      val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
+      val psi_i: Vector[Double] = (phi_i_label - phi_i_ystar)*c_i(label)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
-      val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta")
+      val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta")*c_i(label)
+      
       val ell_s: Double = (1.0 / n) * loss_i
 
       val gamma: Double =
@@ -738,6 +742,8 @@ class DBCFWSolverTuned[X, Y](
     val phi = helperFunctions.featureFn
     val lossFn = helperFunctions.lossFn
     val fineOracleFn = helperFunctions.fineOracleFn
+    val classWeights = helperFunctions.classWeights
+    
 
     val lambda = solverOptions.lambda
 
@@ -917,7 +923,7 @@ class DBCFWSolverTuned[X, Y](
       val phi_i_label: Vector[Double] = phi(pattern, label)
       val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
       val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
-      val energy = lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i)
+      val energy = (lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i))
 
       val gammaLogSb = new StringBuilder()
       gammaLogSb ++=
@@ -958,11 +964,11 @@ class DBCFWSolverTuned[X, Y](
 
       LAdap.log.info(gammaLogSb.toString())
 
-      val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
-      localModel.updateWeights(tempWeights1)
+//      val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
+      localModel.subtractFromWeight(w_i)
       val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)
-      val tempWeights2: Vector[Double] = localModel.getWeights() + w_i_prime
-      localModel.updateWeights(tempWeights2)
+//      val tempWeights2: Vector[Double] = localModel.getWeights() + w_i_prime
+      localModel.addToWeight( w_i_prime)
 
       ell = ell - ell_i
       val ell_i_prime = (ell_i * (1.0 - gamma)) + (ell_s * gamma)
@@ -972,7 +978,7 @@ class DBCFWSolverTuned[X, Y](
       val rho = 2.0 / (k + 2.0)
       val wAvg = (1.0 - rho) * localModelWeightedAverage.getWeights() + rho * localModel.getWeights()
       val ellAvg = (1.0 - rho) * localModelWeightedAverage.getEll() + rho * localModel.getEll()
-      localModelWeightedAverage.updateWeights(wAvg)
+      localModelWeightedAverage.setWeights(wAvg)
       localModelWeightedAverage.updateEll(ellAvg)
 
       k += 1
@@ -982,11 +988,11 @@ class DBCFWSolverTuned[X, Y](
         localModel.updateEll(ell)
 
         val deltaLocalModel = localModel.clone()
-        deltaLocalModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
+        deltaLocalModel.setWeights(localModel.getWeights() - prevModel.getWeights())
         deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
 
         val deltaLocalModelWeightedAverage = localModelWeightedAverage.clone()
-        deltaLocalModelWeightedAverage.updateWeights(localModelWeightedAverage.getWeights() - prevModelWeightedAverage.getWeights())
+        deltaLocalModelWeightedAverage.setWeights(localModelWeightedAverage.getWeights() - prevModelWeightedAverage.getWeights())
         deltaLocalModelWeightedAverage.updateEll(localModelWeightedAverage.getEll() - prevModelWeightedAverage.getEll())
 
         val deltaK = k - kAccum(partitionIdx)
