@@ -16,10 +16,10 @@ case class MultiClassLabel(label: Double, numClasses: Int)
 
 object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiClassLabel] {
 
-  val map = HashMap[MultiClassLabel, Double]()
+  val labelToWeight = HashMap[MultiClassLabel, Double]()
 
   override def classWeights(label: MultiClassLabel): Double = {
-    map.get(label).getOrElse(1.0)
+    labelToWeight.get(label).getOrElse(1.0)
   }
 
   def generateClassWeights(data: RDD[LabeledPoint]): Unit = {
@@ -37,9 +37,10 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
     for ((label, weight) <- labelWeight.collectAsMap()) {
       val clWeight = scaleValue * weight
       sum += clWeight
-      map.put(MultiClassLabel(label, labels.length), clWeight)
+      labelToWeight.put(MultiClassLabel(label, labels.length), clWeight)
     }
-
+    
+    //make sure the weights sum up to the number of classes k
     assert(sum == nClasses)
   }
 

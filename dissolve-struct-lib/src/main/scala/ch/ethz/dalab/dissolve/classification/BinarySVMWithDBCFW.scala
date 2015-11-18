@@ -25,10 +25,10 @@ import org.apache.spark.rdd.PairRDDFunctions
  */
 object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
 
-  val map = HashMap[Double, Double]()
+  val labelToWeight = HashMap[Double, Double]()
 
   override def classWeights(label: Double): Double = {
-    map.get(label).getOrElse(1.0)
+    labelToWeight.get(label).getOrElse(1.0)
   }
   
     def generateClassWeights(data: RDD[LabeledPoint]): Unit = {
@@ -43,7 +43,7 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
     val scaleValue:Double = nClasses/weightSum
 
     for ((label, weight) <- labelWeight.collectAsMap()) {
-      map.put(label, scaleValue*weight)
+      labelToWeight.put(label, scaleValue*weight)
     }
   }
     
