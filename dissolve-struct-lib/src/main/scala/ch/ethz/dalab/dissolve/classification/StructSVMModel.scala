@@ -31,36 +31,6 @@ class StructSVMModel[X, Y](
     dissolveFunctions: DissolveFunctions[X, Y]) =
     this(weights, ell, ellMat, dissolveFunctions, -1)
 
-  def addToWeight(delta:Vector[Double]): Unit = {
-    //if delta is sparse we can speedup the addition even more
-     delta match{
-       case delta:SparseVector[Double] => 
-         val indexes = delta.index
-         for(i <- 0 until indexes.length){
-           val idx = indexes(i)
-           weights(idx) += delta.data(i)
-         }
-       case _ => 
-         for(i <- 0 until delta.length){
-           weights(i) += delta(i)
-         }
-     }
-  }
-  
-  def subtractFromWeight(delta:Vector[Double]): Unit = {
-     delta match{
-       case delta:SparseVector[Double] => 
-         val indexes = delta.index
-         for(i <- 0 until indexes.length){
-           val idx = indexes(i)
-           weights(idx) -= delta.data(i)
-         }
-       case _ => 
-         for(i <- 0 until delta.length){
-           weights(i) -= delta(i)
-         }
-     }
-  }
     
   def getWeights(): Vector[Double] = {
     weights
