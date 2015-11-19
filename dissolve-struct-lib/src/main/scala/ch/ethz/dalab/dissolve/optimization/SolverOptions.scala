@@ -4,7 +4,6 @@ import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg.Vector
 import org.apache.spark.rdd.RDD
 import java.io.File
-import scala.collection.mutable.HashMap
 
 sealed trait StoppingCriterion
 
@@ -45,7 +44,6 @@ class SolverOptions[X, Y] extends Serializable {
   // In case of multi-class
   var numClasses = -1
 
-  var classWeights:HashMap[Y,Double] = HashMap()
   
   // Cache params
   var enableOracleCache: Boolean = false
