@@ -4,7 +4,6 @@ import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg.Vector
 import org.apache.spark.rdd.RDD
 import java.io.File
-import scala.collection.mutable.HashMap
 
 sealed trait StoppingCriterion
 
