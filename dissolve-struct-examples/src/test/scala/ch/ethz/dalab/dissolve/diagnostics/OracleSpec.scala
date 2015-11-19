@@ -50,7 +50,7 @@ class OracleSpec extends UnitSpec {
 
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.updateWeights(w)
+      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -80,7 +80,7 @@ class OracleSpec extends UnitSpec {
 
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.updateWeights(w)
+      model.setWeights(w)
 
       // Sample a random (x, y) pair
       val m = scala.util.Random.nextInt(M)
@@ -112,7 +112,7 @@ class OracleSpec extends UnitSpec {
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.updateWeights(w)
+      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -146,7 +146,7 @@ class OracleSpec extends UnitSpec {
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.updateWeights(w)
+      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -178,7 +178,7 @@ class OracleSpec extends UnitSpec {
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.updateWeights(w)
+      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -209,7 +209,7 @@ class OracleSpec extends UnitSpec {
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.updateWeights(w)
+      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)

@@ -481,6 +481,8 @@ class DBCFWSolverTuned[X, Y](
         roundNum =>
 
           println("[ROUND %d]".format(roundNum))
+          var currentTimeRound = System.currentTimeMillis()
+ 
           /**
            * Step 1 - Create a joint RDD containing all information of idx -> (data, primals, cache)
            */
@@ -500,6 +502,9 @@ class DBCFWSolverTuned[X, Y](
           println("indexedPrimalsRDD.count = " + indexedPrimalsRDD.count())
           println("indexedCacheRDD.count = " + indexedCacheRDD.count())*/
 
+        
+          
+          
           /**
            * Step 2 - Map each partition to produce: idx -> (newPrimals, newCache, optionalModel)
            * Note that the optionalModel column is sparse. There exist only `numPartitions` of them in the RDD.
@@ -519,6 +524,8 @@ class DBCFWSolverTuned[X, Y](
               preservesPartitioning = true)
               .cache()
 
+              
+      
           /**
            * Step 2.5 - A long lineage may cause a StackOverFlow error in the JVM.
            * So, trigger a checkpointing once in a while.
@@ -529,6 +536,8 @@ class DBCFWSolverTuned[X, Y](
             indexedLevelHistoryCacheRDD.checkpoint()
             indexedLocalProcessedData.checkpoint()
           }
+          
+        
 
           /**
            * Step 3a - Obtain the new global model
@@ -568,12 +577,12 @@ class DBCFWSolverTuned[X, Y](
           kAccum += deltaK
 
           val newGlobalModel = globalModel.clone()
-          newGlobalModel.updateWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
+          newGlobalModel.setWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
           newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
 
           // Weighted Average model
           val newGlobalModelWAvg = globalModelWeightedAverage.clone()
-          newGlobalModelWAvg.updateWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
+          newGlobalModelWAvg.setWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
           newGlobalModelWAvg.updateEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * (beta / numPartitions))
 
           val w_t = globalModel.getWeights()
@@ -597,6 +606,7 @@ class DBCFWSolverTuned[X, Y](
           globalModel = newGlobalModel
           globalModelWeightedAverage = newGlobalModelWAvg
 
+          
           /**
            * Step 3b - Obtain the new set of primals
            */
@@ -628,6 +638,7 @@ class DBCFWSolverTuned[X, Y](
               case (oldCache, None)           => oldCache
             }.cache()
 
+
           /**
            * Step 3d - Obtain the new Level History values
            */
@@ -640,6 +651,7 @@ class DBCFWSolverTuned[X, Y](
               case (oldLevelHistory, Some(newLevelHistory)) => newLevelHistory.get
               case (oldLevelHistory, None)                  => oldLevelHistory
             }.cache()
+
 
           /**
            * Debug info
@@ -680,6 +692,9 @@ class DBCFWSolverTuned[X, Y](
             }
 
           debugSb ++= roundEvaluation + "\n"
+
+          
+          //println("Time for this round " + (System.currentTimeMillis() - currentTimeRound))
       }
 
     (globalModel, debugSb.toString())
@@ -720,6 +735,7 @@ class DBCFWSolverTuned[X, Y](
       val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta")
       val ell_s: Double = (1.0 / n) * loss_i
 
+      
       val gamma: Double =
         if (solverOptions.doLineSearch) {
           val thisModel = model
@@ -752,6 +768,8 @@ class DBCFWSolverTuned[X, Y](
 
     for ((index, shard) <- dataIterator) yield {
 
+      
+      
       /*if (index < 10)
         println("Partition = %d, Index = %d".format(partitionNum, index))*/
 
@@ -764,7 +782,7 @@ class DBCFWSolverTuned[X, Y](
       val ell_i = shard.primalInfo._2
 
       // println("w_i is sparse - " + w_i.isInstanceOf[SparseVector[Double]])
-
+      
       // 2.a) Search for candidates
       val optionalCache_i: Option[BoundedCacheList[Y]] = shard.cache
       val bestCachedCandidateForI: Option[Y] =
@@ -792,7 +810,8 @@ class DBCFWSolverTuned[X, Y](
             Some(optionalCache_i.get(candidates.head._2))
           else None
         } else None
-
+ 
+      
       // 2.b) Solve loss-augmented inference for point i
       val startLevel =
         if (solverOptions.resumeMaxLevel && shard.levelHistory.isDefined)
@@ -857,6 +876,7 @@ class DBCFWSolverTuned[X, Y](
             println("argmaxCandidates.size = %d, argmax.head = %s, argmax.last = %s, Gammas = %s"
               .format(argmaxCandidates.size, List(argmaxCandidates.head._2.gamma), List(argmaxCandidates.last._2.gamma), argmaxCandidates.map(_._2.gamma).toList))*/
 
+          
           val maxLevel = startLevel + argmaxCandidates.size - 1 // Levels are 0-indexed
 
           val updatedCache: Option[BoundedCacheList[Y]] =
@@ -878,6 +898,7 @@ class DBCFWSolverTuned[X, Y](
           (bestCachedCandidateForI.get, optionalCache_i, startLevel)
         }
 
+      
       val ystar_i = yCacheMaxLevel._1
       val updatedCache = yCacheMaxLevel._2
       val maxLevel = yCacheMaxLevel._3
@@ -908,6 +929,7 @@ class DBCFWSolverTuned[X, Y](
         } else
           None
 
+      
       val updates = getUpdateQuantities(localModel, pattern, label, ystar_i, w_i, ell_i, k)
       val gamma = updates.gamma
       val w_s = updates.w_s
@@ -957,12 +979,10 @@ class DBCFWSolverTuned[X, Y](
       }
 
       LAdap.log.info(gammaLogSb.toString())
-
-      val tempWeights1: Vector[Double] = localModel.getWeights() - w_i
-      localModel.updateWeights(tempWeights1)
-      val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)
-      val tempWeights2: Vector[Double] = localModel.getWeights() + w_i_prime
-      localModel.updateWeights(tempWeights2)
+      
+      val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)    
+      localModel.getWeights() += (w_i_prime - w_i)
+      
 
       ell = ell - ell_i
       val ell_i_prime = (ell_i * (1.0 - gamma)) + (ell_s * gamma)
@@ -970,23 +990,27 @@ class DBCFWSolverTuned[X, Y](
 
       // Do Weighted Averaging
       val rho = 2.0 / (k + 2.0)
-      val wAvg = (1.0 - rho) * localModelWeightedAverage.getWeights() + rho * localModel.getWeights()
-      val ellAvg = (1.0 - rho) * localModelWeightedAverage.getEll() + rho * localModel.getEll()
-      localModelWeightedAverage.updateWeights(wAvg)
+      val ellAvg = (1.0 - rho) * localModelWeightedAverage.getEll() + rho * localModel.getEll()   
+      
+      // replace wAvg
+      var weightedLocalModel = localModel.getWeights() * rho
+      localModelWeightedAverage.getWeights() *= (1.0 - rho)
+      localModelWeightedAverage.getWeights() += weightedLocalModel
+      
       localModelWeightedAverage.updateEll(ellAvg)
 
       k += 1
-
+      
       if (!dataIterator.hasNext) {
 
         localModel.updateEll(ell)
 
         val deltaLocalModel = localModel.clone()
-        deltaLocalModel.updateWeights(localModel.getWeights() - prevModel.getWeights())
+        deltaLocalModel.getWeights() -= prevModel.getWeights()
         deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
 
         val deltaLocalModelWeightedAverage = localModelWeightedAverage.clone()
-        deltaLocalModelWeightedAverage.updateWeights(localModelWeightedAverage.getWeights() - prevModelWeightedAverage.getWeights())
+        deltaLocalModelWeightedAverage.getWeights() -= prevModelWeightedAverage.getWeights()
         deltaLocalModelWeightedAverage.updateEll(localModelWeightedAverage.getEll() - prevModelWeightedAverage.getEll())
 
         val deltaK = k - kAccum(partitionIdx)

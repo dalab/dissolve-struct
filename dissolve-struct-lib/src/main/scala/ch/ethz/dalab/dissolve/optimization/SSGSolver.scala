@@ -108,7 +108,7 @@ class SSGSolver[X, Y](
 
         // 5) Update the weights of the model
         val newWeights: Vector[Double] = (model.getWeights() :* (1 - gamma)) + (w_s :* (gamma * n))
-        model.updateWeights(newWeights)
+        model.setWeights(newWeights)
 
         k = k + 1
 
@@ -120,9 +120,9 @@ class SSGSolver[X, Y](
         if (debugOn && k >= debugIter) {
 
           if (solverOptions.doWeightedAveraging) {
-            debugModel.updateWeights(wAvg)
+            debugModel.setWeights(wAvg)
           } else {
-            debugModel.updateWeights(model.getWeights)
+            debugModel.setWeights(model.getWeights)
           }
 
           val primal = SolverUtils.primalObjective(data, dissolveFunctions, debugModel, lambda)

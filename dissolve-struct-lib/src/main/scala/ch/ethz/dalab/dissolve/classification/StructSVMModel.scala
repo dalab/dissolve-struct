@@ -31,11 +31,12 @@ class StructSVMModel[X, Y](
     dissolveFunctions: DissolveFunctions[X, Y]) =
     this(weights, ell, ellMat, dissolveFunctions, -1)
 
+    
   def getWeights(): Vector[Double] = {
     weights
   }
 
-  def updateWeights(newWeights: Vector[Double]) = {
+  def setWeights(newWeights: Vector[Double]) = {
     weights = newWeights
   }
 

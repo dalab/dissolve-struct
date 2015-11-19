@@ -44,6 +44,7 @@ class SolverOptions[X, Y] extends Serializable {
   // In case of multi-class
   var numClasses = -1
 
+  
   // Cache params
   var enableOracleCache: Boolean = false
   var oracleCacheSize: Int = 10
