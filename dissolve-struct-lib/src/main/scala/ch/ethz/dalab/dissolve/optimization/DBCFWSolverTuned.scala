@@ -694,7 +694,7 @@ class DBCFWSolverTuned[X, Y](
           debugSb ++= roundEvaluation + "\n"
 
           
-          println("Time for this round " + (System.currentTimeMillis() - currentTimeRound))
+          //println("Time for this round " + (System.currentTimeMillis() - currentTimeRound))
       }
 
     (globalModel, debugSb.toString())
