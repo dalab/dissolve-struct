@@ -21,6 +21,14 @@
 \usepackage{bm,color}
 \usepackage{mathdots}
 \usepackage{subcaption}
+\usepackage{amsopn}
+\usepackage{amsmath}
+\usepackage{multirow}
+\usepackage{amssymb}% http://ctan.org/pkg/amssymb
+\usepackage{pifont}% http://ctan.org/pkg/pifont
+
+\newcommand{\cmark}{\ding{51}}%
+\newcommand{\xmark}{\ding{55}}%
 
 \definecolor{darkgreen}{rgb}{0,.4,.2}
 \definecolor{darkblue}{rgb}{.1,.2,.6}
@@ -39,9 +47,88 @@
 \newcommand{\svmstruct}{\textsc{SVM}$\,^{\textsf{\tiny struct}}$\xspace}
 \newcommand{\cocoa}{\textsc{CoCoA}\xspace}
 \newcommand{\spark}{\textsc{Spark}\xspace}
+\newcommand{\vectornorm}[1]{\left|\left|#1\right|\right|} 
 
+\newcommand{\comment}[1]{}
 \newcommand{\dataset}{{\cal D}}
 \newcommand{\fracpartial}[2]{\frac{\partial #1}{\partial  #2}}
+
+\newcommand{\av}{\bm{\alpha}}
+\newcommand{\xv}{{\bf x}}
+\newcommand{\yv}{{\bf y}}
+
+\DeclareMathOperator*{\E}{\rm E}
+\newcommand{\simplex}{\Delta}
+
+% general math
+\newcommand{\argmax}{\operatornamewithlimits{argmax}}
+\newcommand{\argmin}{\operatornamewithlimits{argmin}}
+\newcommand{\kroneckerdelta}[2]{\delta_{#2}(#1)}
+\newcommand{\realnumbers}{\mathbb{R}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\transpose}{\mathsf{T}}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\floor}[1]{\left\lfloor#1\right\rfloor}
+\newcommand{\ceil}[1]{\left\lceil#1\right\rceil}
+\newcommand\SetOf[2]{\left\{#1\,\vphantom{#2}\right.\left|\vphantom{#1}\,#2\right\}}
+
+%vectors
+\newcommand{\id}{\mathbf{I}} % big i for identity
+\newcommand{\ind}{\mathbf{1}} % indicator vectors
+\newcommand{\0}{\mathbf{0}} % the origin
+\newcommand{\unit}{\mathbf{e}} % unit basis vectors
+\newcommand{\one}{\mathbf{1}} % all one vector
+
+\newcommand{\bv}{\bm{b}}
+
+% structured output prediction
+\newcommand{\inputvar}{x}
+\newcommand{\inputvarv}{\bm{\inputvar}}
+\newcommand{\inputdomain}{\mathcal{X}}
+\newcommand{\outputvar}{y}
+\newcommand{\outputvarv}{\bm{\outputvar}}
+\newcommand{\outputdomain}{\mathcal{Y}}
+%\newcommand{\hiddenvar}{z}
+%\newcommand{\hiddenvarv}{\bm{\hiddenvar}}
+%\newcommand{\hiddendomain}{\mathcal{Z}}
+\newcommand{\inputoutputdomain}{\mathcal{H}}
+\newcommand{\featuremap}{\phi}
+\newcommand{\featuremapv}{\bm{\featuremap}}
+\newcommand{\featuremapdiff}{\psi}
+\newcommand{\featuremapdiffv}{\bm{\featuremapdiff}}
+\newcommand{\errorterm}{L}
+\newcommand{\weight}{w}
+\newcommand{\weightv}{\bm{\weight}}
+\newcommand{\wv}{{\bm{\weight}}}
+\newcommand{\dualvar}{\alpha}
+\newcommand{\dualvarv}{\bm{\alpha}}
+\newcommand{\kernelmatrix}{K}
+\newcommand{\kernelmatrixv}{\bm{\kernelmatrix}}
+\newcommand{\Lmax}{L_{\text{\tiny{max}}}}
+
+% Frank-Wolfe
+\newcommand{\sv}{\bm{s}}
+\newcommand{\x}{{\bm{x}}} %not to be confused with SVM x
+\newcommand{\y}{{\bm{y}}} %not to be confused with SVM y
+\newcommand{\e}{{\bm{e}}} % appears in proof of linear convergence...
+\newcommand{\stepsize}{\gamma}
+\newcommand{\domain}{\mathcal{D}} %TODO: be careful!
+%\newcommand{\CfTotal}{C_f^{\text{\tiny{prod}}}}
+\newcommand{\CfTotal}{C_{\hspace{-0.1em}f}^\otimes}
+\newcommand{\Cf}{C_{\hspace{-0.08em}f}}
+\DeclareMathOperator{\approxLin}{\textsc{ApproxLinearMin}}
+\DeclareMathOperator{\exactLin}{\textsc{LinearMin}}
+\newcommand{\approxArgMin}{\operatornamewithlimits{[approx]\argmin}}
+\newcommand{\X}{\mathcal{X}}
+\newcommand{\vv}{{\bm{v}}}
+\newcommand{\ww}{{\bm{w}}}
+\newcommand{\zz}{{\bm{z}}}
+\newcommand{\mapprox}{\nu} % multiplicative approximation quality
+\newcommand{\addFactor}{\tilde{\gamma}} % constant appearing in the additive approximatoin quality
+
+\newcommand{\note}[1]{{\color{red}#1}}
+\newcommand{\ignore}[1]{}
+
 
 % Heading arguments are {volume}{year}{pages}{submitted}{published}{author-full-names}
 
@@ -89,13 +176,136 @@ The framework allows approximate inference, and provides a similar standard inte
 
 \section{Introduction}
 
-Bla bla...\\
+Structured prediction has gained a lot of popularity over the past few years due to its ability to process structured objects such as images or text documents.
+
+The structured support vector machine (SSVM) is a particularly successful variant of this approach that can be optimized in various ways, including a cutting-plane, stochastic gradient descent or a primal-dual scheme such as MARTIN's paper. The latter is especially appropriate for large-scale problems ...
 
 {\noindent \em Remainder omitted in this sample. See http://www.jmlr.org/papers/ for full paper.}
 
-% Acknowledgements should go at the end, before appendices and references
+\section{Structured SVM formulation}
 
-\acks{...}
+A structured model predicts the labeling $\yv$ for a given input $\xv$ by maximizing some score function
+$S_\wv:\mathcal{X} \times \mathcal{Y} \rightarrow \mathbb{R}$,
+i.e.,
+%
+\begin{equation}
+\label{eq:inference}
+\hat{\yv} = \argmax_{\yv \in \mathcal{Y}} S_\wv(Y) = \argmax_{Y \in \mathcal{Y}} \wv^T\Psi(\xv,\yv),
+\end{equation}
+%
+where $\wv$ are the model parameters and $\Psi(\xv,\yv)$ is the \emph{feature map} corresponding to the input $\xv$ and the labeling $\yv$.
+
+
+Given a set of $n$ training examples $\dataset=\{(\xv_i,\yv_i), \dots, (\xv_n, \yv_n)\}$ where $\xv_i \in \mathcal{X}$ and $\yv_i \in \mathcal{Y}$ is the associated labeling, 
+the learning task consists in finding model parameters $\wv$ that achieve low empirical loss subject to some regularization. In other words, we seek
+%
+\begin{align}
+\label{eq:obj}
+%\wv^* &= \argmin_\wv \mathcal{L}(\dataset, \wv) \nonumber \\
+\wv^* = \argmin_{\wv} \sum_{n=1}^n l(\xv_i, \yv_i, \wv) + R(\wv),
+\end{align}
+%
+where $l$ is the \emph{surrogate loss} function,
+a quantity that is usually related to and often upper-bounds the training error, 
+and $R(\wv)$ is the regularizer (such as the L2 norm of $\wv$)
+that helps prevent overfitting. 
+The most common choice of $l$ is the hinge loss, as used in~\cite{Taskar:2003tt,Tsochantaridis:2005ww}, which is defined as
+\begin{equation}
+\label{eq:hinge-loss}
+l(\yv_i, \yv^*_\wv, \wv) = [S_\wv(\yv^*_\wv) + \Delta(\yv_i, \yv^*_\wv) - S_\wv(\yv_i)]_+
+\end{equation}
+
+
+The most popular method to solve problems of the form~\eqref{eq:obj}
+is the stochastic subgradient method (SGD)~\citep{Ratliff:2007ti,ShalevShwartz:2010cg}. Although this method has
+been quite successful it requires tuning parameters to achieve good
+performance (SAY SOMETHING about parallel SGD).We also implemented the
+COCOA framework~\cite{Jaggi:2014vi} which we briefly summarized here.
+
+
+The Lagrange dual of the above $n$-slack-formulation (\ref{eq:svmstruct_nslack_primal}) has $m := \sum_i |\outputdomain_i|$ variables or potential `support vectors'.
+Writing $\dualvar_i(\outputvarv)$ for the dual variable associated with the training example $i$ and potential output $\outputvarv \in \outputdomain_i$, the dual problem is given by
+\begin{align}
+    \label{eq:svmstruct_nslack_dual} % or do we prefer to write it as a maximization?
+    \min_{\substack{ \dualvarv\in\R^{m} \\  \dualvarv \geq 0}} \quad  f(\dualvarv) \;:=&  \;\;
+    \frac{\lambda}{2}
+    \big\| A\dualvarv \big\|^2
+    - \bv^T\dualvarv
+    \\[-2mm]
+    \text{s.t.} \quad &  \;
+      \textstyle\sum_{\outputvarv \in \outputdomain_i}  \dualvar_i(\outputvarv) = 1 ~~~\forall i\in[n] \ , \notag 
+\end{align}
+where the matrix $A\in\R^{d\times m}$ consists of the $m$ columns $A := \SetOf{\frac1{\lambda n} \featuremapdiffv_i(\outputvarv) \in\R^d}{i\in[n],\outputvarv \in \outputdomain_i}$, and the vector $\bv \in \R^m$ is given by 
+$\bv:= \left(\frac1n \errorterm_i(\outputvarv) \right)$$_{i\in[n],\outputvarv\in\outputdomain_i}$. %TODO: replace n by N
+Given a dual variable vector $\dualvarv$, we can use the Karush-Kuhn-Tucker optimality conditions  to obtain the corresponding primal variables~$
+\wv = A\dualvarv  = \sum_{i,\,\outputvarv \in \outputdomain_i} \dualvar_i(\outputvarv)  \frac{\featuremapdiffv_i(\outputvarv)}{\lambda n}
+$, see Appendix~\ref{sec:app_duals}.
+The gradient of $f$ then takes the simple form $\nabla f(\dualvarv) = \lambda A^TA\dualvarv - \bv = \lambda A^T\wv - \bv$; its \mbox{$(i,\outputvarv)$-th} component is $-\frac{1}{n} H_i(\outputvarv; \wv)$, cf.~\eqref{eq:subproblem_loss_augm}. 
+Finally, note that the domain $\domain \subset \R^m$ of~\eqref{eq:svmstruct_nslack_dual} is the product of $n$ probability simplices, $\domain := \simplex_{|\outputdomain_1|}\times\mathellipsis\times\simplex_{|\outputdomain_n|}$.
+
+\comment{
+This approach exploits the associated conjugate \emph{dual} problem of \eqref{eq:sdcaPrimal} defined over one dual variable per each example in
+the training set.
+\begin{equation}
+    \label{eq:sdcaDual}
+    \max_{\av \in \R^n} \quad \Big[ \ 
+    D(\av) := - \frac{\lambda}{2} \norm{ A\av }^2
+    - \frac1n \sum_{i=1}^n \ell_i^*(-\alpha_i) \ \Big],
+\end{equation}
+where $\ell_i^*$ is the conjugate (Fenchel dual) of the loss function
+$\ell_i$%
+, and the data matrix $A\in\R^{d\times n}$ collects the (normalized) data
+examples $A_i := \frac{1}{\lambda n} X^i$ in its columns. The duality comes with the convenient mapping from dual to primal variables
+$\wv(\av) := A\av$ as given by the optimality
+conditions~\cite{ShalevShwartz:2013wl}.
+For any configuration of the dual variables $\av$, we have the duality gap
+defined as $P(\wv(\av)) - D(\av)$. This gap is a computable certificate of
+the approximation quality to the unknown true optimum $P(\wv^*) = D(\av^*)$,
+and therefore serves as a useful stopping criteria as well as a way to automatically set the stepsize. We refer the reader to~\cite{Jaggi:2014vi} for further details.
+}
+
+{\bf TODO: Explain main steps}
+
+\section{Software package}
+
+The use of the \algname requires users to implement the following functions:
+\begin{itemize}
+\item The joint feature map $\Psi(X,Y)$ which encodes the input/output pairs.
+\item The structured loss function $\Delta(Y_i,Y)$.
+\item A maximization oracle which computes the most violating constraint by solving Eq. X.
+\item A prediction function that computes $X$. This operation is usually performed with the maximization oracle.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{table}[h]
+\caption{Comparison of structured prediction software packages}
+\label{tab:datasets}
+   \begin{center}
+      \begin{tabular}{l l l c c c c}
+       \vspace{.25em}
+    {\small\textbf{Package}} & {\small\textbf{Language}} & %
+    {\small\textbf{License}} & \small\textbf{Distributed} & \multicolumn{3}{c}{\small\textbf{Models}} \\
+    \hline
+    & & & & ML & Chain & Graph \\
+    \algname & Scala & ? & \checkmark & \xmark & \checkmark & \checkmark \\
+    PyStruct & Python & BSD & \checkmark & \xmark & \checkmark & \checkmark \\
+	SVM\textsuperscript{struct} & C++ & non-free & \checkmark & \xmark & \xmark & \xmark \\
+	Dlib & C++ & boost & \checkmark & \xmark & \checkmark & \checkmark \\
+	CRFsuite & C++ & BSD & \checkmark & \checkmark & \checkmark & \xmark \\
+      \end{tabular}
+   \end{center}\vspace{-2mm}
+\end{table}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+TODO: Can we show a simple example like the pystruct paper?
+
+\section{Experiments}
+
+Run experiments on cov and other dataset. Compare to other frameworks...
+
+% Acknowledgements should go at the end, before appendices and references
+\acks{We would like to thank Jan Deriu, Bettina Messmer, Thijs Vogels and Ruben Wolff for contributing to the code and discussions to improve readability.}
+
 
 % Manual newpage inserted to improve layout of sample file - not
 % needed in general before appendices/bibliography.
@@ -141,6 +351,6 @@ by $H$. We aim to show that $\fracpartial{I_{uv}}{P_{v0}} < 0$....\\
 
 
 \vskip 0.2in
-\bibliography{bibliography}
+\bibliography{references}
 
 \end{document}

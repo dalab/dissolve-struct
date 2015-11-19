@@ -3,9 +3,11 @@ package ch.ethz.dalab.dissolve.optimization
 import java.io.File
 import java.io.PrintWriter
 
+import breeze.linalg._
 import breeze.linalg.DenseVector
 import breeze.linalg.Vector
 import breeze.linalg.csvwrite
+import breeze.numerics._
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 
@@ -29,9 +31,11 @@ class SSGSolver[X, Y](
   val roundLimit = solverOptions.roundLimit
   val lambda = solverOptions.lambda
   val debugOn: Boolean = solverOptions.debug
+  val gamma0 = solverOptions.ssg_gamma0
 
   val maxOracle = dissolveFunctions.oracleFn _
   val phi = dissolveFunctions.featureFn _
+  val lossFn = dissolveFunctions.lossFn _
   // Number of dimensions of \phi(x, y)
   val ndims: Int = phi(data(0).pattern, data(0).label).size
 
@@ -100,7 +104,7 @@ class SSGSolver[X, Y](
           csvwrite(new File("data/debug/scala-w-%d.csv".format(passNum + 1)), w_s.toDenseVector.toDenseMatrix)
 
         // 4) Step size gamma
-        val gamma: Double = 1.0 / (k + 1.0)
+        val gamma: Double = 1.0 / (gamma0*(k + 1.0))
 
         // 5) Update the weights of the model
         val newWeights: Vector[Double] = (model.getWeights() :* (1 - gamma)) + (w_s :* (gamma * n))
@@ -113,21 +117,26 @@ class SSGSolver[X, Y](
           wAvg = wAvg * (1.0 - rho) + model.getWeights() * rho
         }
 
-        /*if (debugOn && k >= debugIter) {
+        if (debugOn && k >= debugIter) {
+
           if (solverOptions.doWeightedAveraging) {
             debugModel.setWeights(wAvg)
           } else {
             debugModel.setWeights(model.getWeights)
           }
 
-          val primal = SolverUtils.primalObjective(data, featureFn, lossFn, oracleFn, debugModel, lambda)
-          val trainError = SolverUtils.averageLoss(data, lossFn, predictFn, debugModel)
-
+          val primal = SolverUtils.primalObjective(data, dissolveFunctions, debugModel, lambda)
+          val trainError = SolverUtils.averageLoss(data, dissolveFunctions, debugModel)._1
+          
           if (solverOptions.testData != null) {
-            val testError = SolverUtils.averageLoss(solverOptions.testData, lossFn, predictFn, debugModel)
+            val testError =
+              if (solverOptions.testData.isDefined)
+                SolverUtils.averageLoss(solverOptions.testData.get, dissolveFunctions, debugModel)._1
+              else
+                0.00
             println("Pass %d Iteration %d, SVM primal = %f, Train error = %f, Test error = %f"
               .format(passNum + 1, k, primal, trainError, testError))
-
+   
             if (solverOptions.debug)
               lossWriter.write("%d,%d,%f,%f,%f\n".format(passNum + 1, k, primal, trainError, testError))
           } else {
@@ -138,7 +147,8 @@ class SSGSolver[X, Y](
           }
 
           debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
-        }*/
+
+        }
 
       }
       if (debugOn)
