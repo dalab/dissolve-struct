@@ -2,7 +2,6 @@ package ch.ethz.dalab.dissolve.optimization
 
 import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import scala.collection.mutable.HashMap
 
 trait DissolveFunctions[X, Y] extends Serializable {
 
