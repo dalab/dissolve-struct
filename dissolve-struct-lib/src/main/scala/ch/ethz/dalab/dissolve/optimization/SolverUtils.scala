@@ -165,8 +165,8 @@ object SolverUtils {
     var hingeLosses: Double = 0.0
     for (i <- 0 until data.size) {
       val yStar_i = oracleFn(model, data(i).pattern, data(i).label)
-      val loss_i = lossFn(yStar_i, data(i).label)*classWeight(data(i).label)
-      val psi_i = featureFn(data(i).pattern, data(i).label) - featureFn(data(i).pattern, yStar_i)*classWeight(data(i).label)
+      val loss_i = lossFn(yStar_i, data(i).label)//*classWeight(data(i).label)
+      val psi_i = featureFn(data(i).pattern, data(i).label) - featureFn(data(i).pattern, yStar_i)//*classWeight(data(i).label)
 
       val hingeloss_i = loss_i - model.getWeights().t * psi_i
       // println("loss_i = %f, other_loss = %f".format(loss_i, model.getWeights().t * psi_i))
