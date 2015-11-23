@@ -28,7 +28,7 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
   val labelToWeight = HashMap[Double, Double]()
 
   override def classWeights(label: Double): Double = {
-    labelToWeight.get(label).getOrElse(1.0)
+    labelToWeight.get(label).getOrElse(3.0)
   }
 
   def generateClassWeights(data: RDD[LabeledPoint]): Unit = {
