@@ -945,7 +945,7 @@ class DBCFWSolverTuned[X, Y](
       val phi_i_label: Vector[Double] = phi(pattern, label)
       val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
       val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
-      val energy = (lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i))
+      val energy = (lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i))*classWeights(label)
 
       val gammaLogSb = new StringBuilder()
       gammaLogSb ++=
@@ -969,7 +969,7 @@ class DBCFWSolverTuned[X, Y](
 
         val phi_i_ystar_fine: Vector[Double] = phi(pattern, ystar_i_fine)
         val psi_i_fine: Vector[Double] = phi_i_label - phi_i_ystar_fine
-        val energy_fine = lossFn(label, ystar_i_fine) - (localModel.getWeights() dot psi_i_fine)
+        val energy_fine = (lossFn(label, ystar_i_fine) - (localModel.getWeights() dot psi_i_fine))*classWeights(label)
 
         gammaLogSb ++= "," +
           gamma_fine + "," +
