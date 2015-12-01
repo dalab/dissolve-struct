@@ -28,15 +28,6 @@ object RCV1Binary {
     val appname = kwargs.getOrElse("appname", "rcv1_binary")
     val debugPath = kwargs.getOrElse("debug_file", "rcv1_binary-%d.csv".format(System.currentTimeMillis() / 1000))
     solverOptions.debugInfoPath = debugPath
-    solverOptions.sparse = true
-    solverOptions.classWeights = true
-    
-    solverOptions.stoppingCriterion = GapThresholdCriterion
-    solverOptions.gapThreshold = 1e-3
-    solverOptions.gapCheck = 10 // Checks for gap every gapCheck rounds
-    
-    solverOptions.debug  = true
-    solverOptions.debugMultiplier = 2
     
     println(rcv1Path)
     println(kwargs)
@@ -46,12 +37,9 @@ object RCV1Binary {
 
     println(solverOptions.toString())
 
-    val conf = new SparkConf().setAppName(appname).setMaster("local")
-    conf.set("spark.driver.memory", "12g")
+    val conf = new SparkConf().setAppName(appname)
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
-    
-    System.setProperty("hadoop.home.dir", "C:/winutil/")
 
     // Labels needs to be in a +1/-1 format
     val data = MLUtils.loadLibSVMFile(sc, rcv1Path)
