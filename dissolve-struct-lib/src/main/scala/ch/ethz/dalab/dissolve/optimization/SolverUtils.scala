@@ -178,31 +178,14 @@ object SolverUtils {
 
   }
 
-  type TotalPixelCount = Int
-  type CorrectLabelingCount = Int
   case class DataEval(gap: Double,
                       avgDelta: Double,
-                      avgHLoss: Double,
-                      perClassAccuracy: Array[Double],
-                      globalAccuracy: Double)
+                      avgHLoss: Double)
 
   case class PartialTrainDataEval(sum_w_s: Vector[Double],
                                   sum_ell_s: Double,
                                   sum_Delta: Double,
-                                  sum_HLoss: Double,
-                                  sum_PerClassAccuracy: Array[(TotalPixelCount, CorrectLabelingCount)]) {
-    def twoTupArraySum(arrA: Array[(Int, Int)],
-                       arrB: Array[(Int, Int)]): Array[(Int, Int)] =
-      {
-        assert(arrA.size == arrB.size)
-
-        arrA
-          .zip(arrB)
-          .map {
-            case ((totCountA, correctCountA), (totCountB, correctCountB)) =>
-              (totCountA + totCountB, correctCountA + correctCountB)
-          }
-      }
+                                  sum_HLoss: Double) {
 
     def +(that: PartialTrainDataEval): PartialTrainDataEval = {
 
@@ -210,15 +193,11 @@ object SolverUtils {
       val sum_ell_s: Double = this.sum_ell_s + that.sum_ell_s
       val sum_Delta: Double = this.sum_Delta + that.sum_Delta
       val sum_HLoss: Double = this.sum_HLoss + that.sum_HLoss
-      val sum_PerClassError: Array[(TotalPixelCount, CorrectLabelingCount)] =
-        twoTupArraySum(this.sum_PerClassAccuracy,
-          that.sum_PerClassAccuracy)
 
       PartialTrainDataEval(sum_w_s,
         sum_ell_s,
         sum_Delta,
-        sum_HLoss,
-        sum_PerClassError)
+        sum_HLoss)
 
     }
   }
@@ -240,9 +219,6 @@ object SolverUtils {
     val maxOracle = dissolveFunctions.oracleFn _
     val lossFn = dissolveFunctions.lossFn _
     val predictFn = dissolveFunctions.predictFn _
-    val perClassAccuracy = dissolveFunctions.perClassAccuracy _
-
-    val numClasses = dissolveFunctions.numClasses()
 
     val n: Int = dataSize.toInt
     val d: Int = model.getWeights().size
@@ -253,8 +229,7 @@ object SolverUtils {
       PartialTrainDataEval(DenseVector.zeros[Double](d),
         0.0,
         0.0,
-        0.0,
-        Array.fill(numClasses)((0, 0)))
+        0.0)
 
     val partialEval = data.map {
       case datapoint =>
@@ -280,14 +255,11 @@ object SolverUtils {
          */
         val y_truth = datapoint.label
         val y_predicted = predict_yStar
-        val y_perClassLoss: Array[(TotalPixelCount, CorrectLabelingCount)] =
-          perClassAccuracy(y_predicted, y_truth)
 
         PartialTrainDataEval(w_s,
           ell_s,
           loss,
-          structuredHingeLoss,
-          y_perClassLoss)
+          structuredHingeLoss)
 
     }.reduce(_ + _)
     
@@ -304,37 +276,9 @@ object SolverUtils {
     val avgLoss = partialEval.sum_Delta / n
     val avgHLoss = partialEval.sum_HLoss / n
 
-    // Per-pixel errors
-    // A. Per Class Errors
-    val backgroundLabel = numClasses - 1 // Assumes black is last label
-    val avgPerClassError = partialEval.sum_PerClassAccuracy.map {
-      case (totalPixelCount, correctLabelCount) =>
-        if (totalPixelCount > 0)
-          correctLabelCount.toDouble / totalPixelCount.toDouble
-        else
-          // Represent unencountered classes as 0.0
-          // Then, when calculating the accuracy, drop these with 0-accuracy
-          0.0
-    }
-    // B. Global error
-    val numPixels: Long = partialEval
-      .sum_PerClassAccuracy
-      .dropRight(1) // Assumes Background label is the last one
-      .map(_._1.toLong)
-      .sum
-    val numCorrectLabels = partialEval
-      .sum_PerClassAccuracy
-      .dropRight(1) // Assumes Background label is the last one
-      .map(_._2.toLong)
-      .sum
-
-    val globalError = numCorrectLabels.toDouble / numPixels
-
     DataEval(gap,
       avgLoss,
-      avgHLoss,
-      avgPerClassError,
-      globalError)
+      avgHLoss)
   }
 
   /**

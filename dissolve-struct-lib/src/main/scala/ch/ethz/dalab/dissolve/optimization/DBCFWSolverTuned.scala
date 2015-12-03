@@ -59,9 +59,7 @@ class DBCFWSolverTuned[X, Y](
                                    lossFn: (Y, Y) => Double,
                                    oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
                                    oracleStreamFn: (StructSVMModel[X, Y], X, Y, Int) => Stream[Y],
-                                   predictFn: (StructSVMModel[X, Y], X) => Y,
-                                   fineOracleFn: (StructSVMModel[X, Y], X, Y) => Y,
-                                   xid: (X) => String)
+                                   predictFn: (StructSVMModel[X, Y], X) => Y)
 
   // Input to the mapper: idx -> DataShard
   case class InputDataShard[X, Y](labeledObject: LabeledObject[X, Y],
@@ -92,65 +90,14 @@ class DBCFWSolverTuned[X, Y](
                              testStructHingeLoss: Double,
                              w_t_norm: Double,
                              w_update_norm: Double,
-                             cos_w_update: Double,
-                             perClassAccuracyTrain: Array[Double],
-                             globalAccuracyTrain: Double,
-                             perClassAccuracyTest: Array[Double],
-                             globalAccuracyTest: Double) {
+                             cos_w_update: Double) {
 
     override def toString(): String = {
 
-      // Average per-class accuracy WITHOUT incomplete labels
-      val numClasses = dissolveFunctions.numClasses()
-      /**
-       * Train
-       */
-      // assert(perClassAccuracyTrain.size == numClasses)
-      // Assume background label is the last class
-      val candidateLabelsTrain = perClassAccuracyTrain.dropRight(1)
-      // Compute only over non-zero candidates. (To handle unencountered classes)
-      val nonZeroTrainCandidates = candidateLabelsTrain.filter(_ > 0.0)
-      val averagePerClassAccuracyTrain =
-        nonZeroTrainCandidates.sum / nonZeroTrainCandidates.size
-
-      // Format: <class 0>, <class 1>, ... , <average>, <global> 
-      val perClassAccuracyStringTrain =
-        perClassAccuracyTrain
-          .foldLeft("") {
-            (accum, next) =>
-              "%s,%f".format(accum, next)
-          }.drop(1) // Drop the first comma, when accum is empty
-      val accuracyStringTrain = "%s,%f,%f".format(perClassAccuracyStringTrain,
-        averagePerClassAccuracyTrain,
-        globalAccuracyTrain)
-
-      /**
-       * Test
-       */
-      // assert(perClassAccuracyTest.size == numClasses)
-      // Assume background label is the last class
-      val candidateLabelsTest = perClassAccuracyTest.dropRight(1)
-      // Compute only over non-zero candidates. (To handle unencountered classes)
-      val nonZeroTestCandidates = candidateLabelsTest.filter(_ > 0.0)
-      val averagePerClassAccuracyTest =
-        nonZeroTestCandidates.sum / nonZeroTestCandidates.size
-
-      // Format: <class 0>, <class 1>, ... , <average>, <global> 
-      val perClassAccuracyStringTest =
-        perClassAccuracyTest
-          .foldLeft("") {
-            (accum, next) =>
-              "%s,%f".format(accum, next)
-          }.drop(1) // Drop the first comma, when accum is empty
-      val accuracyStringTest = "%s,%f,%f".format(perClassAccuracyStringTest,
-        averagePerClassAccuracyTest,
-        globalAccuracyTest)
-
-      "%d,%f,%f,%s,%s,%s,%f,%f,%f,%f,%f,%f,%f,%s,%s"
+      "%d,%f,%f,%s,%s,%s,%f,%f,%f,%f,%s,%s,%s"
         .format(roundNum, elapsedTime, wallTime, primal.toString(), dual.toString(), dualityGap.toString(),
           trainError, testError, trainStructHingeLoss, testStructHingeLoss,
-          w_t_norm, w_update_norm, cos_w_update,
-          accuracyStringTrain, accuracyStringTest)
+          w_t_norm, w_update_norm, cos_w_update)
     }
   }
 
@@ -161,31 +108,8 @@ class DBCFWSolverTuned[X, Y](
   val DEBUG_STEP: Int = 50
   var nextDebugRound: Int = 1
 
-  val header: String = {
-
-    def getAccuracyHeaderWithPrefix(prefix: String): String = {
-      val accuracyHeader = new StringBuilder()
-
-      // Per class headers
-      for (i <- 0 until dissolveFunctions.numClasses()) {
-        accuracyHeader ++= "%s_%d,".format(prefix, i)
-      }
-
-      // Average Per-class accuracy
-      accuracyHeader ++= "%s_average,".format(prefix)
-
-      // Global
-      accuracyHeader ++= "%s_global".format(prefix)
-
-      accuracyHeader.toString()
-    }
-
-    if (dissolveFunctions.numClasses() < 0)
-      "round,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos\n"
-    else
-      "round,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos,%s,%s\n"
-        .format(getAccuracyHeaderWithPrefix("train"), getAccuracyHeaderWithPrefix("test"))
-  }
+  val header: String =
+    "round,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos\n"
 
   /**
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
@@ -265,9 +189,7 @@ class DBCFWSolverTuned[X, Y](
       dissolveFunctions.lossFn,
       dissolveFunctions.oracleFn,
       dissolveFunctions.oracleCandidateStream,
-      dissolveFunctions.predictFn,
-      dissolveFunctions.fineOracleFn,
-      dissolveFunctions.getImageID)
+      dissolveFunctions.predictFn)
 
     data.unpersist()
 
@@ -398,32 +320,17 @@ class DBCFWSolverTuned[X, Y](
       val dual = -SolverUtils.objectiveFunction(model.getWeights(), model.getEll(), solverOptions.lambda)
       val dualityGap = trainDataEval.gap
       val primal = dual + dualityGap
-      val (trainError,
-        trainStructHingeLoss,
-        trainPerClassAccuracy,
-        trainGlobalAccuracy) =
-        (trainDataEval.avgDelta,
-          trainDataEval.avgHLoss,
-          trainDataEval.perClassAccuracy,
-          trainDataEval.globalAccuracy)
+      val (trainError, trainStructHingeLoss) =
+        (trainDataEval.avgDelta, trainDataEval.avgHLoss)
 
       val testDataEval = if (indexedTestDataRDD.isDefined)
         SolverUtils.trainDataEval(indexedTestDataRDD.get.values, dissolveFunctions, model, solverOptions.lambda, dataSize)
       else null
-      val (testError,
-        testStructHingeLoss,
-        testPerClassAccuracy,
-        testGlobalAccuracy) =
+      val (testError, testStructHingeLoss) =
         if (indexedTestDataRDD.isDefined)
-          (testDataEval.avgDelta,
-            testDataEval.avgHLoss,
-            testDataEval.perClassAccuracy,
-            testDataEval.globalAccuracy)
+          (testDataEval.avgDelta, testDataEval.avgHLoss)
         else
-          (Double.NaN,
-            Double.NaN,
-            Array.fill(dissolveFunctions.numClasses())(Double.NaN),
-            0.0)
+          (Double.NaN, Double.NaN)
 
       val endEvaluateTime = System.currentTimeMillis()
       evaluateModelTimeMillis += (endEvaluateTime - startEvaluateTime)
@@ -437,8 +344,7 @@ class DBCFWSolverTuned[X, Y](
 
       val roundEval = RoundEvaluation(roundNum, elapsedTime, wallTime, primal, dual, dualityGap,
         trainError, testError, trainStructHingeLoss, testStructHingeLoss,
-        w_t_norm, w_update_norm, cos_w_update,
-        trainPerClassAccuracy, trainGlobalAccuracy, testPerClassAccuracy, testGlobalAccuracy)
+        w_t_norm, w_update_norm, cos_w_update)
 
       roundEval
     }
@@ -446,8 +352,6 @@ class DBCFWSolverTuned[X, Y](
     println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
 
     debugSb ++= header
-    LAdap.log.info("[D] %s,%s,%s,%s,%s,%s,%s,%s".format("expt_name", "ts", "level", "nNodes", "nSupernodes", "filename", "ts_decode", "ts_oracle_init"))
-    LAdap.log.info("[G] %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s".format("k", "ts", "level", "filename", "gamma", "w_s", "ell_s", "energy", "gamma_f", "w_s_f", "ell_s_f", "energy_f", "ell_i"))
 
     def getElapsedTimeSecs(): Double = ((System.currentTimeMillis() - startTime) / 1000.0)
 
@@ -482,7 +386,7 @@ class DBCFWSolverTuned[X, Y](
 
           println("[ROUND %d]".format(roundNum))
           var currentTimeRound = System.currentTimeMillis()
- 
+
           /**
            * Step 1 - Create a joint RDD containing all information of idx -> (data, primals, cache)
            */
@@ -502,9 +406,6 @@ class DBCFWSolverTuned[X, Y](
           println("indexedPrimalsRDD.count = " + indexedPrimalsRDD.count())
           println("indexedCacheRDD.count = " + indexedCacheRDD.count())*/
 
-        
-          
-          
           /**
            * Step 2 - Map each partition to produce: idx -> (newPrimals, newCache, optionalModel)
            * Note that the optionalModel column is sparse. There exist only `numPartitions` of them in the RDD.
@@ -524,8 +425,6 @@ class DBCFWSolverTuned[X, Y](
               preservesPartitioning = true)
               .cache()
 
-              
-      
           /**
            * Step 2.5 - A long lineage may cause a StackOverFlow error in the JVM.
            * So, trigger a checkpointing once in a while.
@@ -536,8 +435,6 @@ class DBCFWSolverTuned[X, Y](
             indexedLevelHistoryCacheRDD.checkpoint()
             indexedLocalProcessedData.checkpoint()
           }
-          
-        
 
           /**
            * Step 3a - Obtain the new global model
@@ -606,7 +503,6 @@ class DBCFWSolverTuned[X, Y](
           globalModel = newGlobalModel
           globalModelWeightedAverage = newGlobalModelWAvg
 
-          
           /**
            * Step 3b - Obtain the new set of primals
            */
@@ -638,7 +534,6 @@ class DBCFWSolverTuned[X, Y](
               case (oldCache, None)           => oldCache
             }.cache()
 
-
           /**
            * Step 3d - Obtain the new Level History values
            */
@@ -651,7 +546,6 @@ class DBCFWSolverTuned[X, Y](
               case (oldLevelHistory, Some(newLevelHistory)) => newLevelHistory.get
               case (oldLevelHistory, None)                  => oldLevelHistory
             }.cache()
-
 
           /**
            * Debug info
@@ -684,17 +578,14 @@ class DBCFWSolverTuned[X, Y](
               val elapsedTime = getElapsedTimeSecs()
 
               val wallTime = elapsedTime - (evaluateModelTimeMillis / 1000.0)
-              val scoreFiller = Array.fill(dissolveFunctions.numClasses())(Double.NaN)
               RoundEvaluation(roundNum,
                 elapsedTime, wallTime, Double.NaN, dual,
                 Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN,
-                w_t_norm, w_diff_norm, cos_w, scoreFiller, 0.0, scoreFiller, 0.0)
+                w_t_norm, w_diff_norm, cos_w)
             }
 
           debugSb ++= roundEvaluation + "\n"
 
-          
-          //println("Time for this round " + (System.currentTimeMillis() - currentTimeRound))
       }
 
     (globalModel, debugSb.toString())
@@ -735,7 +626,6 @@ class DBCFWSolverTuned[X, Y](
       val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta")
       val ell_s: Double = (1.0 / n) * loss_i
 
-      
       val gamma: Double =
         if (solverOptions.doLineSearch) {
           val thisModel = model
@@ -753,7 +643,6 @@ class DBCFWSolverTuned[X, Y](
     val oracleStreamFn = helperFunctions.oracleStreamFn
     val phi = helperFunctions.featureFn
     val lossFn = helperFunctions.lossFn
-    val fineOracleFn = helperFunctions.fineOracleFn
 
     val lambda = solverOptions.lambda
 
@@ -768,8 +657,6 @@ class DBCFWSolverTuned[X, Y](
 
     for ((index, shard) <- dataIterator) yield {
 
-      
-      
       /*if (index < 10)
         println("Partition = %d, Index = %d".format(partitionNum, index))*/
 
@@ -782,7 +669,7 @@ class DBCFWSolverTuned[X, Y](
       val ell_i = shard.primalInfo._2
 
       // println("w_i is sparse - " + w_i.isInstanceOf[SparseVector[Double]])
-      
+
       // 2.a) Search for candidates
       val optionalCache_i: Option[BoundedCacheList[Y]] = shard.cache
       val bestCachedCandidateForI: Option[Y] =
@@ -810,8 +697,7 @@ class DBCFWSolverTuned[X, Y](
             Some(optionalCache_i.get(candidates.head._2))
           else None
         } else None
- 
-      
+
       // 2.b) Solve loss-augmented inference for point i
       val startLevel =
         if (solverOptions.resumeMaxLevel && shard.levelHistory.isDefined)
@@ -876,7 +762,6 @@ class DBCFWSolverTuned[X, Y](
             println("argmaxCandidates.size = %d, argmax.head = %s, argmax.last = %s, Gammas = %s"
               .format(argmaxCandidates.size, List(argmaxCandidates.head._2.gamma), List(argmaxCandidates.last._2.gamma), argmaxCandidates.map(_._2.gamma).toList))*/
 
-          
           val maxLevel = startLevel + argmaxCandidates.size - 1 // Levels are 0-indexed
 
           val updatedCache: Option[BoundedCacheList[Y]] =
@@ -898,7 +783,6 @@ class DBCFWSolverTuned[X, Y](
           (bestCachedCandidateForI.get, optionalCache_i, startLevel)
         }
 
-      
       val ystar_i = yCacheMaxLevel._1
       val updatedCache = yCacheMaxLevel._2
       val maxLevel = yCacheMaxLevel._3
@@ -929,7 +813,6 @@ class DBCFWSolverTuned[X, Y](
         } else
           None
 
-      
       val updates = getUpdateQuantities(localModel, pattern, label, ystar_i, w_i, ell_i, k)
       val gamma = updates.gamma
       val w_s = updates.w_s
@@ -941,48 +824,8 @@ class DBCFWSolverTuned[X, Y](
       val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
       val energy = lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i)
 
-      val gammaLogSb = new StringBuilder()
-      gammaLogSb ++=
-        "[G] " + k + "," +
-        System.currentTimeMillis() + "," +
-        maxLevel + "," +
-        helperFunctions.xid(pattern) + "," +
-        gamma + "," +
-        norm(w_s, 2) + "," +
-        ell_s + "," +
-        energy + "," +
-        ell
-
-      // Obtain oracle decoding for last-level, in order to compare the gamma
-      val ystar_i_fine = fineOracleFn(localModel, pattern, label)
-      if (ystar_i_fine != null) {
-        val updates_fine = getUpdateQuantities(localModel, pattern, label, ystar_i_fine, w_i, ell_i, k)
-        val gamma_fine = updates_fine.gamma
-        val w_s_fine = updates.w_s
-        val ell_s_fine = updates_fine.ell_s
-
-        val phi_i_ystar_fine: Vector[Double] = phi(pattern, ystar_i_fine)
-        val psi_i_fine: Vector[Double] = phi_i_label - phi_i_ystar_fine
-        val energy_fine = lossFn(label, ystar_i_fine) - (localModel.getWeights() dot psi_i_fine)
-
-        gammaLogSb ++= "," +
-          gamma_fine + "," +
-          norm(w_s_fine, 2) + "," +
-          ell_s_fine + "," +
-          energy_fine
-      } else {
-        gammaLogSb ++= "," +
-          Double.NaN + "," +
-          Double.NaN + "," +
-          Double.NaN + "," +
-          Double.NaN
-      }
-
-      LAdap.log.info(gammaLogSb.toString())
-      
-      val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)    
+      val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)
       localModel.getWeights() += (w_i_prime - w_i)
-      
 
       ell = ell - ell_i
       val ell_i_prime = (ell_i * (1.0 - gamma)) + (ell_s * gamma)
@@ -990,17 +833,17 @@ class DBCFWSolverTuned[X, Y](
 
       // Do Weighted Averaging
       val rho = 2.0 / (k + 2.0)
-      val ellAvg = (1.0 - rho) * localModelWeightedAverage.getEll() + rho * localModel.getEll()   
-      
+      val ellAvg = (1.0 - rho) * localModelWeightedAverage.getEll() + rho * localModel.getEll()
+
       // replace wAvg
       var weightedLocalModel = localModel.getWeights() * rho
       localModelWeightedAverage.getWeights() *= (1.0 - rho)
       localModelWeightedAverage.getWeights() += weightedLocalModel
-      
+
       localModelWeightedAverage.updateEll(ellAvg)
 
       k += 1
-      
+
       if (!dataIterator.hasNext) {
 
         localModel.updateEll(ell)
