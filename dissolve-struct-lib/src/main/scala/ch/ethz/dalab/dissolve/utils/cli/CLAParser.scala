@@ -89,14 +89,6 @@ object CLAParser {
         c.copy(debugPath = x)
       } text ("Path to debug file. Default = current-dir")
       
-      opt[Unit]("resumelevel") action { (_, c) =>
-        c.copy(resumeMaxLevel = true)
-      } text ("Resumes decoding at previous level. Default = false")
-      
-      opt[Unit]("stubrepeat") action { (_, c) =>
-        c.copy(stubRepetitions = true)
-      } text ("Keeps track of previous 10 decodings. Decodes at next level in case a decoding is repeated. Default = false")
-
       opt[Map[String, String]]("kwargs") valueName ("k1=v1,k2=v2...") action { (x, c) =>
         c.copy(kwargs = x)
       } text ("other arguments")
@@ -137,9 +129,6 @@ object CLAParser {
         solverOptions.debugMultiplier = config.debugMultiplier
         solverOptions.debugInfoPath = config.debugPath
         
-        solverOptions.resumeMaxLevel = config.resumeMaxLevel
-        solverOptions.stubRepetitions = config.stubRepetitions
-
         (solverOptions, config.kwargs)
 
       case None =>

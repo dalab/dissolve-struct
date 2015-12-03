@@ -64,13 +64,11 @@ class DBCFWSolverTuned[X, Y](
   // Input to the mapper: idx -> DataShard
   case class InputDataShard[X, Y](labeledObject: LabeledObject[X, Y],
                                   primalInfo: PrimalInfo,
-                                  cache: Option[BoundedCacheList[Y]],
-                                  levelHistory: Option[LevelHistory[Y]])
+                                  cache: Option[BoundedCacheList[Y]])
 
   // Output of the mapper: idx -> ProcessedDataShard
   case class ProcessedDataShard[X, Y](primalInfo: PrimalInfo,
                                       cache: Option[BoundedCacheList[Y]],
-                                      levelHistory: Option[LevelHistory[Y]],
                                       localSummary: Option[LocalSummary[X, Y]])
 
   case class LocalSummary[X, Y](deltaLocalModel: StructSVMModel[X, Y],
@@ -227,22 +225,6 @@ class DBCFWSolverTuned[X, Y](
         .cache()
 
     /**
-     * LevelHistoryCache
-     */
-    val indexedlevelHistoryCache: Array[(Index, LevelHistory[Y])] =
-      if (solverOptions.resumeMaxLevel || solverOptions.stubRepetitions)
-        (0 until dataSize).toArray.zip(
-          Array.fill(dataSize)(
-            (0, MutableList[Y]())) // (InitialLevel, PastDecodingList)
-            )
-      else
-        Array[(Index, LevelHistory[Y])]()
-    var indexedLevelHistoryCacheRDD: RDD[(Index, LevelHistory[Y])] =
-      sc.parallelize(indexedlevelHistoryCache)
-        .partitionBy(new HashPartitioner(numPartitions))
-        .cache()
-
-    /**
      * IndexedProcessedData
      */
     var indexedLocalProcessedData: RDD[(Index, ProcessedDataShard[X, Y])] = null
@@ -395,10 +377,9 @@ class DBCFWSolverTuned[X, Y](
               .sample(solverOptions.sampleWithReplacement, sampleFrac)
               .join(indexedPrimalsRDD)
               .leftOuterJoin(indexedCacheRDD)
-              .leftOuterJoin(indexedLevelHistoryCacheRDD)
               .mapValues { // Because mapValues preserves partitioning
-                case (((labeledObject, primalInfo), cache), levelHistory) =>
-                  InputDataShard(labeledObject, primalInfo, cache, levelHistory)
+                case ((labeledObject, primalInfo), cache) =>
+                  InputDataShard(labeledObject, primalInfo, cache)
               }
 
           /*println("indexedTrainDataRDD = " + indexedTrainDataRDD.count())
@@ -432,7 +413,6 @@ class DBCFWSolverTuned[X, Y](
           if (roundNum % solverOptions.checkpointFreq == 0) {
             indexedPrimalsRDD.checkpoint()
             indexedCacheRDD.checkpoint()
-            indexedLevelHistoryCacheRDD.checkpoint()
             indexedLocalProcessedData.checkpoint()
           }
 
@@ -534,18 +514,6 @@ class DBCFWSolverTuned[X, Y](
               case (oldCache, None)           => oldCache
             }.cache()
 
-          /**
-           * Step 3d - Obtain the new Level History values
-           */
-          val newLevelHistoryRDD = indexedLocalProcessedData
-            .mapValues(_.levelHistory)
-
-          indexedLevelHistoryCacheRDD = indexedLevelHistoryCacheRDD
-            .leftOuterJoin(newLevelHistoryRDD)
-            .mapValues {
-              case (oldLevelHistory, Some(newLevelHistory)) => newLevelHistory.get
-              case (oldLevelHistory, None)                  => oldLevelHistory
-            }.cache()
 
           /**
            * Debug info
@@ -699,10 +667,7 @@ class DBCFWSolverTuned[X, Y](
         } else None
 
       // 2.b) Solve loss-augmented inference for point i
-      val startLevel =
-        if (solverOptions.resumeMaxLevel && shard.levelHistory.isDefined)
-          shard.levelHistory.get._1
-        else 0
+      val startLevel = 0
       val yCacheMaxLevel =
         if (bestCachedCandidateForI.isEmpty) {
 
@@ -725,30 +690,16 @@ class DBCFWSolverTuned[X, Y](
                 /**
                  *  Continue requesting for candidate argmax, till a good candidate is found
                  *  A "good" candidate meets the following criteria:
-                 *  a. Step-size (gamma) > EPS
-                 *  b. Candidate is unique in the past 10 decodings
+                 *  [a] Step-size (gamma) > GAMMA_THRESHOLD (epsilon)
                  */
                 case argmax_y =>
                   val updates = getUpdateQuantities(localModel, pattern, label, argmax_y, w_i, ell_i, k)
                   argmaxCandidates.enqueue((argmax_y, updates))
 
-                  // Criterion (a)
+                  // Criterion [a] check
                   val consumeNextGamma = (updates.gamma <= GAMMA_THRESHOLD)
 
-                  // Criterion (b)
-                  val consumeNextUnique =
-                    if (solverOptions.stubRepetitions && shard.levelHistory.isDefined) {
-                      val prevDecodings = shard.levelHistory.get._2
-                      // In order to check uniqueness, reuse the struct. loss function
-                      // Because we know \Delta(y_i, y_j) = 0 => y_i \equiv y_j
-                      prevDecodings.exists { yPrev => lossFn(yPrev, argmax_y) == 0.0 }
-                    } else
-                      false // Disabled
-
-                  /*if (consumeNextUnique)
-                    println("%d - Decoding repeated".format(index))*/
-
-                  consumeNextGamma || consumeNextUnique
+                  consumeNextGamma
               }.foreach { // Streams are lazy, force an `action` on them. Otherwise, subsequent elements
                 // do not get computed
                 identity // Do nothing, just consume the argmax and move on
@@ -757,12 +708,6 @@ class DBCFWSolverTuned[X, Y](
 
           val (ystar, updates): (Y, UpdateQuantities) =
             time({ argmaxCandidates.head }, "argmax-head")
-
-          /*if (argmaxCandidates.size > 1)
-            println("argmaxCandidates.size = %d, argmax.head = %s, argmax.last = %s, Gammas = %s"
-              .format(argmaxCandidates.size, List(argmaxCandidates.head._2.gamma), List(argmaxCandidates.last._2.gamma), argmaxCandidates.map(_._2.gamma).toList))*/
-
-          val maxLevel = startLevel + argmaxCandidates.size - 1 // Levels are 0-indexed
 
           val updatedCache: Option[BoundedCacheList[Y]] =
             if (solverOptions.enableOracleCache) {
@@ -777,41 +722,13 @@ class DBCFWSolverTuned[X, Y](
               Some(nonTruncatedCache.takeRight(solverOptions.oracleCacheSize))
             } else None
 
-          (ystar, updatedCache, maxLevel)
+          (ystar, updatedCache)
         } else {
-          // println("%d - Cache hit".format(index))
-          (bestCachedCandidateForI.get, optionalCache_i, startLevel)
+          (bestCachedCandidateForI.get, optionalCache_i)
         }
 
       val ystar_i = yCacheMaxLevel._1
       val updatedCache = yCacheMaxLevel._2
-      val maxLevel = yCacheMaxLevel._3
-
-      // Level History related tracking
-      val updatedLevelHistory: Option[LevelHistory[Y]] =
-        if (shard.levelHistory.isDefined) {
-          // Max Level
-          val previousLevel = shard.levelHistory.get._1
-          val updatedMaxLevel =
-            if (solverOptions.resumeMaxLevel && maxLevel > previousLevel)
-              maxLevel
-            else
-              previousLevel
-
-          /*if (updatedMaxLevel != previousLevel)
-            println("%d - Level upgrade %d -> %d".format(index, previousLevel, updatedMaxLevel))*/
-
-          // Previous Decodings
-          val updatedPrevDecodings =
-            if (solverOptions.stubRepetitions) {
-              val prevDecodings = shard.levelHistory.get._2
-              prevDecodings += ystar_i
-              prevDecodings.takeRight(10)
-            } else
-              shard.levelHistory.get._2
-          Some((maxLevel, updatedPrevDecodings))
-        } else
-          None
 
       val updates = getUpdateQuantities(localModel, pattern, label, ystar_i, w_i, ell_i, k)
       val gamma = updates.gamma
@@ -862,12 +779,10 @@ class DBCFWSolverTuned[X, Y](
 
         (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i),
           updatedCache,
-          updatedLevelHistory,
           Some(LocalSummary(deltaLocalModel, kAccumLocalDelta, deltaLocalModelWeightedAverage))))
       } else
         (index, ProcessedDataShard((w_i_prime - w_i, ell_i_prime - ell_i),
           updatedCache,
-          updatedLevelHistory,
           None))
     }
   }
