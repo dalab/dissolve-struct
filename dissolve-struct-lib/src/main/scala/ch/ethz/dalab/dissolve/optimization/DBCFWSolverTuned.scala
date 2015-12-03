@@ -61,7 +61,8 @@ class DBCFWSolverTuned[X, Y](
                                    oracleStreamFn: (StructSVMModel[X, Y], X, Y, Int) => Stream[Y],
                                    predictFn: (StructSVMModel[X, Y], X) => Y,
                                    fineOracleFn: (StructSVMModel[X, Y], X, Y) => Y,
-                                   xid: (X) => String)
+                                   xid: (X) => String,
+                                   classWeights: (Y) => Double)
 
   // Input to the mapper: idx -> DataShard
   case class InputDataShard[X, Y](labeledObject: LabeledObject[X, Y],
@@ -267,7 +268,8 @@ class DBCFWSolverTuned[X, Y](
       dissolveFunctions.oracleCandidateStream,
       dissolveFunctions.predictFn,
       dissolveFunctions.fineOracleFn,
-      dissolveFunctions.getImageID)
+      dissolveFunctions.getImageID,
+      dissolveFunctions.classWeights)
 
     data.unpersist()
 
@@ -727,12 +729,14 @@ class DBCFWSolverTuned[X, Y](
       val lambda = solverOptions.lambda
       val lossFn = helperFunctions.lossFn
       val phi = helperFunctions.featureFn
+      val c_i = helperFunctions.classWeights
 
       val phi_i_label: Vector[Double] = time({ phi(pattern, label) }, "phi")
       val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
-      val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
+      val psi_i: Vector[Double] = (phi_i_label - phi_i_ystar)*c_i(label)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
-      val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta")
+      val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta")*c_i(label)
+      
       val ell_s: Double = (1.0 / n) * loss_i
 
       
@@ -754,6 +758,8 @@ class DBCFWSolverTuned[X, Y](
     val phi = helperFunctions.featureFn
     val lossFn = helperFunctions.lossFn
     val fineOracleFn = helperFunctions.fineOracleFn
+    val classWeights = helperFunctions.classWeights
+    
 
     val lambda = solverOptions.lambda
 
@@ -939,7 +945,7 @@ class DBCFWSolverTuned[X, Y](
       val phi_i_label: Vector[Double] = phi(pattern, label)
       val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
       val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
-      val energy = lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i)
+      val energy = (lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i))*classWeights(label)
 
       val gammaLogSb = new StringBuilder()
       gammaLogSb ++=
@@ -963,7 +969,7 @@ class DBCFWSolverTuned[X, Y](
 
         val phi_i_ystar_fine: Vector[Double] = phi(pattern, ystar_i_fine)
         val psi_i_fine: Vector[Double] = phi_i_label - phi_i_ystar_fine
-        val energy_fine = lossFn(label, ystar_i_fine) - (localModel.getWeights() dot psi_i_fine)
+        val energy_fine = (lossFn(label, ystar_i_fine) - (localModel.getWeights() dot psi_i_fine))*classWeights(label)
 
         gammaLogSb ++= "," +
           gamma_fine + "," +

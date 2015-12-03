@@ -17,12 +17,35 @@ import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg.VectorBuilder
 import scala.collection.mutable.HashMap
+import org.apache.spark.rdd.PairRDDFunctions
 
 /**
  * @author tribhu
  *
  */
 object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
+
+  val labelToWeight = HashMap[Double, Double]()
+
+  override def classWeights(label: Double): Double = {
+    labelToWeight.get(label).getOrElse(3.0)
+  }
+
+  def generateClassWeights(data: RDD[LabeledPoint]): Unit = {
+    val labels: Array[Double] = data.map { x => x.label }.distinct().collect()
+
+    val classOccur: PairRDDFunctions[Double, Double] = data.map(x => (x.label, 1.0))
+    val labelOccur: PairRDDFunctions[Double, Double] = classOccur.reduceByKey((x, y) => x + y)
+    val labelWeight: PairRDDFunctions[Double, Double] = labelOccur.mapValues { x => 1 / x }
+
+    val weightSum: Double = labelWeight.values.sum()
+    val nClasses: Int = 2
+    val scaleValue: Double = nClasses / weightSum
+
+    for ((label, weight) <- labelWeight.collectAsMap()) {
+      labelToWeight.put(label, scaleValue * weight)
+    }
+  }
 
   /**
    * Feature function
@@ -34,7 +57,6 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
   def featureFn(x: Vector[Double], y: Double): Vector[Double] = {
     x * y
   }
- 
 
   /**
    * Loss function
@@ -114,20 +136,24 @@ object BinarySVMWithDBCFW extends DissolveFunctions[Vector[Double], Double] {
     dissolveFunctions: DissolveFunctions[Vector[Double], Double],
     solverOptions: SolverOptions[Vector[Double], Double]): StructSVMModel[Vector[Double], Double] = {
 
+    if (solverOptions.classWeights) {
+      generateClassWeights(data)
+    }
+
     // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
     val objectifiedData: RDD[LabeledObject[Vector[Double], Double]] =
       data.map {
         case x: LabeledPoint =>
           new LabeledObject[Vector[Double], Double](x.label,
-            if (solverOptions.sparse){
-              val features:Vector[Double] =  x.features match{
-                case features:org.apache.spark.mllib.linalg.SparseVector =>
-                  val builder:VectorBuilder[Double] = new VectorBuilder(features.indices,features.values,features.indices.length,x.features.size)
+            if (solverOptions.sparse) {
+              val features: Vector[Double] = x.features match {
+                case features: org.apache.spark.mllib.linalg.SparseVector =>
+                  val builder: VectorBuilder[Double] = new VectorBuilder(features.indices, features.values, features.indices.length, x.features.size)
                   builder.toSparseVector
                 case _ => SparseVector(x.features.toArray)
-              } 
-              features  
-            }else
+              }
+              features
+            } else
               DenseVector(x.features.toArray))
       }
 

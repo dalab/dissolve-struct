@@ -9,11 +9,24 @@ import breeze.linalg._
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.optimization.DBCFWSolverTuned
+import scala.collection.mutable.HashMap
+import org.apache.spark.rdd.PairRDDFunctions
+import ch.ethz.dalab.dissolve.optimization.SSGSolver
+import ch.ethz.dalab.dissolve.optimization.SSGSolver
+import ch.ethz.dalab.dissolve.optimization.UseDBCFWSolver
+import ch.ethz.dalab.dissolve.optimization.UseSSGSolver
 
 case class MultiClassLabel(label: Double, numClasses: Int)
 
 object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiClassLabel] {
 
+  var labelToWeight = HashMap[MultiClassLabel, Double]()
+  
+
+  override def classWeights(label: MultiClassLabel): Double = {
+    labelToWeight.get(label).getOrElse(1.0)
+  }
+  
   /**
    * Feature function
    *
@@ -112,23 +125,26 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
   def train(
     data: RDD[LabeledPoint],
     numClasses: Int,
-    solverOptions: SolverOptions[Vector[Double], MultiClassLabel]): StructSVMModel[Vector[Double], MultiClassLabel] = {
+    solverOptions: SolverOptions[Vector[Double], MultiClassLabel],
+    customWeights:Option[HashMap[MultiClassLabel,Double]]=None): StructSVMModel[Vector[Double], MultiClassLabel] = {
 
-    solverOptions.numClasses = numClasses
+    solverOptions.numClasses = numClasses  
 
     // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
     val objectifiedData: RDD[LabeledObject[Vector[Double], MultiClassLabel]] =
       data.map {
         case x: LabeledPoint =>
-          val features:Vector[Double] =  x.features match{
-                case features:org.apache.spark.mllib.linalg.SparseVector =>
-                  val builder:VectorBuilder[Double] = new VectorBuilder(features.indices,features.values,features.indices.length,x.features.size)
-                  builder.toSparseVector
-                case _ => SparseVector(x.features.toArray)
-              } 
+          val features: Vector[Double] = x.features match {
+            case features: org.apache.spark.mllib.linalg.SparseVector =>
+              val builder: VectorBuilder[Double] = new VectorBuilder(features.indices, features.values, features.indices.length, x.features.size)
+              builder.toSparseVector
+            case _ => SparseVector(x.features.toArray)
+          }
           new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses), features)
       }
 
+    labelToWeight = ClassificationUtils.generateClassWeights(objectifiedData,solverOptions.classWeights,customWeights)
+    
     val repartData =
       if (solverOptions.enableManualPartitionSize)
         objectifiedData.repartition(solverOptions.NUM_PART)
@@ -136,15 +152,23 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
         objectifiedData
 
     println(solverOptions)
-
-    val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
-      repartData,
-      this,
-      solverOptions,
-      miniBatchEnabled = false).optimize()
-
+    
+    
+    val (trainedModel,debugInfo) = solverOptions.solver match {
+      case UseDBCFWSolver => new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
+        repartData,
+        this,
+        solverOptions,
+        miniBatchEnabled = false).optimize()
+      case UseSSGSolver => (new SSGSolver[Vector[Double], MultiClassLabel](
+        repartData.collect(),
+        this,
+        solverOptions
+        ).optimize(),"")
+    }
+        
     println(debugInfo)
-
+  
     // Dump debug information into a file
     val fw = new FileWriter(solverOptions.debugInfoPath)
     // Write the current parameters being used
@@ -169,10 +193,6 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
   def train(
     data: RDD[LabeledPoint],
     dissolveFunctions: DissolveFunctions[Vector[Double], MultiClassLabel],
-    //featureFn: (Vector[Double], MultiClassLabel) => Vector[Double], // (y, x) => FeatureVector
-    //lossFn: (MultiClassLabel, MultiClassLabel) => Double, // (yTruth, yPredict) => LossValue
-    //oracleFn: (StructSVMModel[Vector[Double], MultiClassLabel], Vector[Double], MultiClassLabel) => MultiClassLabel, // (model, y_i, x_i) => Label
-    //predictFn: (StructSVMModel[Vector[Double], MultiClassLabel], Vector[Double]) => MultiClassLabel,
     solverOptions: SolverOptions[Vector[Double], MultiClassLabel]): StructSVMModel[Vector[Double], MultiClassLabel] = {
 
     val numClasses = solverOptions.numClasses
@@ -189,14 +209,14 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
       data.map {
         case x: LabeledPoint =>
           new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses),
-            if (solverOptions.sparse){
-              val features:Vector[Double] =  x.features match{
-                case features:org.apache.spark.mllib.linalg.SparseVector =>
-                  val builder:VectorBuilder[Double] = new VectorBuilder(features.indices,features.values,features.indices.length,x.features.size)
+            if (solverOptions.sparse) {
+              val features: Vector[Double] = x.features match {
+                case features: org.apache.spark.mllib.linalg.SparseVector =>
+                  val builder: VectorBuilder[Double] = new VectorBuilder(features.indices, features.values, features.indices.length, x.features.size)
                   builder.toSparseVector
                 case _ => SparseVector(x.features.toArray)
-              } 
-              features  
+              }
+              features
             } else
               Vector(x.features.toArray))
       }
@@ -209,11 +229,19 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
 
     println(solverOptions)
 
-    val (trainedModel, debugInfo) = new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
-      repartData,
-      dissolveFunctions,
-      solverOptions,
-      miniBatchEnabled = false).optimize()
+    //choose optimizer
+    val (trainedModel,debugInfo) = solverOptions.solver match {
+      case UseDBCFWSolver => new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
+        repartData,
+        dissolveFunctions,
+        solverOptions,
+        miniBatchEnabled = false).optimize()
+      case UseSSGSolver => (new SSGSolver[Vector[Double], MultiClassLabel](
+        repartData.collect(),
+        dissolveFunctions,
+        solverOptions
+        ).optimize(),"")
+    }
 
     // Dump debug information into a file
     val fw = new FileWriter(solverOptions.debugInfoPath)

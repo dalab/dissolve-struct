@@ -22,6 +22,16 @@ case object TimeLimitCriterion extends StoppingCriterion {
   override def toString(): String = { "TimeLimitCriterion" }
 }
 
+sealed trait Solver
+
+case object UseDBCFWSolver extends Solver{
+  override def toString(): String = {"DBCFWSolver"}
+}
+
+case object UseSSGSolver extends Solver{
+  override def toString(): String = {"SSGSolver"}
+}
+
 class SolverOptions[X, Y] extends Serializable {
   var doWeightedAveraging: Boolean = false
 
@@ -44,6 +54,7 @@ class SolverOptions[X, Y] extends Serializable {
   // In case of multi-class
   var numClasses = -1
 
+  var classWeights:Boolean = true
   
   // Cache params
   var enableOracleCache: Boolean = false
@@ -92,6 +103,8 @@ class SolverOptions[X, Y] extends Serializable {
   // already suggested. If it has, move to next level (if exists)
   var stubRepetitions: Boolean = false
 
+  var solver: Solver = UseDBCFWSolver
+  
   override def toString(): String = {
     val sb: StringBuilder = new StringBuilder()
 
@@ -125,12 +138,17 @@ class SolverOptions[X, Y] extends Serializable {
       case TimeLimitCriterion    => sb ++= "# timeLimit=%d\n".format(timeLimit)
       case _                     => throw new Exception("Unrecognized Stopping Criterion")
     }
-
+    
+    sb ++="# solver=%s\n".format(solver)
+    
+    sb ++="# class weighting=%s\n".format(classWeights)
+    
     sb ++= "# debugMultiplier=%d\n".format(debugMultiplier)
     
     sb ++= "# resumeMaxLevel=%s\n".format(resumeMaxLevel)
     sb ++= "# stubRepetitions=%s\n".format(stubRepetitions)
 
+    
     sb.toString()
   }
 
