@@ -76,12 +76,12 @@ object ChainTestAdapter {
    */
   val data = {
     val dataDir = "../data/generated"
-    val trainDataSeq: Vector[LabeledObject[Matrix[Double], Vector[Double]]] =
+    val trainDataSeq: Array[LabeledObject[Matrix[Double], Vector[Double]]] =
       ChainDemo.loadData(dataDir + "/patterns_train.csv",
         dataDir + "/labels_train.csv",
         dataDir + "/folds_train.csv")
 
-    trainDataSeq.toArray
+    trainDataSeq
   }
   /**
    * A dummy model

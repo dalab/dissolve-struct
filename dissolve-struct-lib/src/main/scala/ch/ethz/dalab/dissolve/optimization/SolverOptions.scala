@@ -22,13 +22,13 @@ case object TimeLimitCriterion extends StoppingCriterion {
   override def toString(): String = { "TimeLimitCriterion" }
 }
 
-sealed trait Solver
+sealed trait SolverType
 
-case object UseDBCFWSolver extends Solver{
+case object UseDBCFWSolver extends SolverType{
   override def toString(): String = {"DBCFWSolver"}
 }
 
-case object UseSSGSolver extends Solver{
+case object UseSSGSolver extends SolverType{
   override def toString(): String = {"SSGSolver"}
 }
 
@@ -96,7 +96,7 @@ class SolverOptions[X, Y] extends Serializable {
   // Path to write the CSVs
   var debugInfoPath: String = new File(".").getCanonicalPath() + "/debugInfo-%d.csv".format(System.currentTimeMillis())
 
-  var solver: Solver = UseDBCFWSolver
+  var solver: SolverType = UseDBCFWSolver
   
   override def toString(): String = {
     val sb: StringBuilder = new StringBuilder()

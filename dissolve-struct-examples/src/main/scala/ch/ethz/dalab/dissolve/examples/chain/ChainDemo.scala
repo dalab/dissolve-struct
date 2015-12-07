@@ -22,6 +22,9 @@ import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import ch.ethz.dalab.dissolve.utils.cli.CLAParser
+import ch.ethz.dalab.dissolve.optimization.DistBCFW
+import ch.ethz.dalab.dissolve.models.LinearChainCRF
+import ch.ethz.dalab.dissolve.optimization.DistributedSolver
 
 /**
  * How to generate the input data:
@@ -39,7 +42,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
    *  TODO
    *  * Take foldNumber as a parameter and return training and test set
    */
-  def loadData(patternsFilename: String, labelsFilename: String, foldFilename: String): DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = {
+  def loadData(patternsFilename: String, labelsFilename: String, foldFilename: String): Array[LabeledObject[Matrix[Double], Vector[Double]]] = {
     val patterns: Array[String] = scala.io.Source.fromFile(patternsFilename).getLines().toArray[String]
     val labels: Array[String] = scala.io.Source.fromFile(labelsFilename).getLines().toArray[String]
     val folds: Array[String] = scala.io.Source.fromFile(foldFilename).getLines().toArray[String]
@@ -49,7 +52,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     assert(patterns.size == labels.size, "#Patterns=%d, but #Labels=%d".format(patterns.size, labels.size))
     assert(patterns.size == folds.size, "#Patterns=%d, but #Folds=%d".format(patterns.size, folds.size))
 
-    val data: DenseVector[LabeledObject[Matrix[Double], Vector[Double]]] = DenseVector.fill(n) { null }
+    val data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = Array.fill(n) { null }
 
     for (i <- 0 until n) {
       // Expected format: id, #rows, #cols, (pixels_i_j,)* pixels_n_m
@@ -298,18 +301,8 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
     val dataDir: String = "../data/generated";
 
-    val train_data_unord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
-    val test_data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
-
-    // Read order from the file and permute the Vector accordingly
-    val trainOrder: String = "/chain_train.csv"
-    val permLine: Array[String] = scala.io.Source.fromURL(getClass.getResource(trainOrder)).getLines().toArray[String]
-    assert(permLine.size == 1)
-    val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
-    // val train_data = train_data_unord(List.fromArray(perm))
-    val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = train_data_unord(List.fromArray(perm).slice(0, (PERC_TRAIN * train_data_unord.size).toInt)).toArray
-    // val temp: DenseVector[LabeledObject] = train_data_unord(List.fromArray(perm).slice(0, 1)).toDenseVector
-    // val train_data = DenseVector.fill(5){temp(0)}
+    val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
+    val test_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
 
     if (debugOn) {
       println("Running chainBCFW (single worker). Loaded %d training examples, pattern:%dx%d and labels:%dx1"
@@ -331,7 +324,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     solverOptions.doWeightedAveraging = false
     solverOptions.doLineSearch = true
     solverOptions.debug = true
-    solverOptions.testData = Some(test_data.toArray)
+    solverOptions.testData = Some(test_data)
 
     solverOptions.enableOracleCache = false
     solverOptions.oracleCacheSize = 10
@@ -371,19 +364,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
   }
 
-  /**
-   * ****************************************************************
-   *    ___        ___   _____ ____ _      __
-   *   / _ \ ____ / _ ) / ___// __/| | /| / /
-   *  / // //___// _  |/ /__ / _/  | |/ |/ /
-   * /____/     /____/ \___//_/    |__/|__/
-   *
-   * (CoCoA)
-   * ****************************************************************
-   */
-  def chainDBCFWCoCoA(args: Array[String]): Unit = {
-
-    val PERC_TRAIN = 1.0
+  def chainDBCFWSolver(args: Array[String]): Unit = {
 
     /**
      * Load all options
@@ -394,63 +375,60 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     val debugPath = kwargs.getOrElse("debug_file", "chain-%d.csv".format(System.currentTimeMillis() / 1000))
     solverOptions.debugInfoPath = debugPath
 
-    println(dataDir)
-    println(kwargs)
-
     /**
-     * Begin execution
+     * Set and configure Spark
      */
-    val trainDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
-    val testDataUnord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
-
-    println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
-
     val conf = new SparkConf().setAppName(appname).setMaster("local")
-
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    println(SolverUtils.getSparkConfString(sc.getConf))
+    /**
+     * Load Data
+     */
+    val trainData: Array[LabeledObject[Matrix[Double], Vector[Double]]] =
+      loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
+    val testData: Array[LabeledObject[Matrix[Double], Vector[Double]]] =
+      loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
 
-    // Read order from the file and permute the Vector accordingly
-    val trainOrder: String = "/chain_train.csv"
-    val permLine: Array[String] = scala.io.Source.fromURL(getClass.getResource(trainOrder)).getLines().toArray[String]
-    assert(permLine.size == 1)
-    val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
-    val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
-
-    solverOptions.testDataRDD =
+    val testDataRDD =
       if (solverOptions.enableManualPartitionSize)
-        Some(sc.parallelize(testDataUnord.toArray, solverOptions.NUM_PART))
+        Some(sc.parallelize(testData, solverOptions.NUM_PART))
       else
-        Some(sc.parallelize(testDataUnord.toArray))
+        Some(sc.parallelize(testData))
 
     val trainDataRDD =
       if (solverOptions.enableManualPartitionSize)
-        sc.parallelize(train_data, solverOptions.NUM_PART)
+        sc.parallelize(trainData, solverOptions.NUM_PART)
       else
-        sc.parallelize(train_data)
+        sc.parallelize(trainData)
 
-    val trainer: StructSVMWithDBCFW[Matrix[Double], Vector[Double]] = new StructSVMWithDBCFW[Matrix[Double], Vector[Double]](
-      trainDataRDD,
-      ChainDemo,
-      solverOptions)
+    /**
+     * Train model
+     */
+    val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
+      new DistBCFW(LinearChainCRF, solverOptions)
 
-    val model: StructSVMModel[Matrix[Double], Vector[Double]] = trainer.trainModel()
+    println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1"
+      .format(trainData.size, trainData(0).pattern.rows, trainData(0).pattern.cols, trainData(0).label.size))
 
+    val model: StructSVMModel[Matrix[Double], Vector[Double]] = solver.train(trainDataRDD, testDataRDD)
+
+    /**
+     * Post-training statistics
+     */
     var avgTrainLoss: Double = 0.0
-    for (item <- train_data) {
+    for (item <- trainData) {
       val prediction = model.predict(item.pattern)
       avgTrainLoss += lossFn(item.label, prediction)
     }
-    println("Average loss on training set = %f".format(avgTrainLoss / train_data.size))
+    println("Average loss on training set = %f".format(avgTrainLoss / trainData.size))
 
     var avgTestLoss: Double = 0.0
-    for (item <- testDataUnord) {
+    for (item <- testData) {
       val prediction = model.predict(item.pattern)
       avgTestLoss += lossFn(item.label, prediction)
     }
-    println("Average loss on test set = %f".format(avgTestLoss / testDataUnord.size))
+    println("Average loss on test set = %f".format(avgTestLoss / testData.size))
 
   }
 
@@ -461,7 +439,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
     System.setProperty("spark.akka.frameSize", "512")
 
-    chainDBCFWCoCoA(args)
+    chainDBCFWSolver(args)
 
     // chainBCFW()
   }
