@@ -36,6 +36,7 @@ class SSGSolver[X, Y](
   val maxOracle = dissolveFunctions.oracleFn _
   val phi = dissolveFunctions.featureFn _
   val lossFn = dissolveFunctions.lossFn _
+  val cWeight = dissolveFunctions.classWeights _
   // Number of dimensions of \phi(x, y)
   val ndims: Int = phi(data(0).pattern, data(0).label).size
 
@@ -97,7 +98,7 @@ class SSGSolver[X, Y](
         val ystar_i: Y = maxOracle(model, pattern, label)
 
         // 3) Get the subgradient
-        val psi_i: Vector[Double] = phi(pattern, label) - phi(pattern, ystar_i)
+        val psi_i: Vector[Double] = (phi(pattern, label) - phi(pattern, ystar_i))*cWeight(label)
         val w_s: Vector[Double] = psi_i :* (1 / (n * lambda))
 
         if (debugOn && dummy == (n - 1))

@@ -23,7 +23,6 @@ import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import ch.ethz.dalab.dissolve.utils.cli.CLAParser
 
-
 /**
  * How to generate the input data:
  * While in the data directory, run
@@ -33,8 +32,6 @@ import ch.ethz.dalab.dissolve.utils.cli.CLAParser
 object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
   val debugOn = true
-  
-  override def numClasses(): Int = -1
 
   /**
    * Reads data produced by the convert-ocr-data.py script and loads into memory as a vector of Labeled objects
@@ -82,7 +79,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
     data
   }
-  
+
   /**
    * Returns a vector, capturing unary, bias and pairwise features of the word
    *
@@ -235,10 +232,10 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
    * Readable representation of the weight vector
    */
   class Weight(
-    val unary: DenseMatrix[Double],
-    val firstBias: DenseVector[Double],
-    val lastBias: DenseVector[Double],
-    val pairwise: DenseMatrix[Double]) {
+      val unary: DenseMatrix[Double],
+      val firstBias: DenseVector[Double],
+      val lastBias: DenseVector[Double],
+      val pairwise: DenseMatrix[Double]) {
   }
 
   /**
@@ -300,7 +297,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     val PERC_TRAIN: Double = 0.05 // Restrict to using a fraction of data for training (Used to overcome OutOfMemory exceptions while testing locally)
 
     val dataDir: String = "../data/generated";
-    
+
     val train_data_unord: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
     val test_data: Vector[LabeledObject[Matrix[Double], Vector[Double]]] = loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
 
@@ -335,12 +332,12 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     solverOptions.doLineSearch = true
     solverOptions.debug = true
     solverOptions.testData = Some(test_data.toArray)
-    
+
     solverOptions.enableOracleCache = false
     solverOptions.oracleCacheSize = 10
-    
+
     solverOptions.debugInfoPath = "../debug/debug-bcfw-%d.csv".format(System.currentTimeMillis())
-    
+
     /*val trainer: StructSVMWithSSG = new StructSVMWithSSG(train_data,
       featureFn,
       lossFn,
@@ -385,7 +382,7 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
    * ****************************************************************
    */
   def chainDBCFWCoCoA(args: Array[String]): Unit = {
-    
+
     val PERC_TRAIN = 1.0
 
     /**
@@ -396,10 +393,10 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     val appname = kwargs.getOrElse("appname", "chain")
     val debugPath = kwargs.getOrElse("debug_file", "chain-%d.csv".format(System.currentTimeMillis() / 1000))
     solverOptions.debugInfoPath = debugPath
-    
+
     println(dataDir)
     println(kwargs)
-    
+
     /**
      * Begin execution
      */
@@ -409,10 +406,10 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1".format(trainDataUnord.size, trainDataUnord(0).pattern.rows, trainDataUnord(0).pattern.cols, trainDataUnord(0).label.size))
 
     val conf = new SparkConf().setAppName(appname).setMaster("local")
-        
+
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
-    
+
     println(SolverUtils.getSparkConfString(sc.getConf))
 
     // Read order from the file and permute the Vector accordingly
@@ -421,15 +418,15 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
     assert(permLine.size == 1)
     val perm = permLine(0).split(",").map(x => x.toInt - 1) // Reduce by 1 because of order is Matlab indexed
     val train_data: Array[LabeledObject[Matrix[Double], Vector[Double]]] = trainDataUnord(List.fromArray(perm).slice(0, (PERC_TRAIN * trainDataUnord.size).toInt)).toArray
-    
-    solverOptions.testDataRDD = 
-      if(solverOptions.enableManualPartitionSize)
+
+    solverOptions.testDataRDD =
+      if (solverOptions.enableManualPartitionSize)
         Some(sc.parallelize(testDataUnord.toArray, solverOptions.NUM_PART))
       else
         Some(sc.parallelize(testDataUnord.toArray))
-        
-    val trainDataRDD = 
-      if(solverOptions.enableManualPartitionSize)
+
+    val trainDataRDD =
+      if (solverOptions.enableManualPartitionSize)
         sc.parallelize(train_data, solverOptions.NUM_PART)
       else
         sc.parallelize(train_data)
@@ -457,14 +454,15 @@ object ChainDemo extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
   }
 
-  
+  override def classWeights(y: Vector[Double]): Double = 1.0
+
   def main(args: Array[String]): Unit = {
     PropertyConfigurator.configure("conf/log4j.properties")
-    
+
     System.setProperty("spark.akka.frameSize", "512")
-    
+
     chainDBCFWCoCoA(args)
-    
+
     // chainBCFW()
   }
 

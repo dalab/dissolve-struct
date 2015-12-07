@@ -17,5 +17,7 @@ trait DissolveFunctions[X, Y] extends Serializable {
     oracleFn(model, x, y) #:: Stream.empty
 
   def predictFn(model: StructSVMModel[X, Y], x: X): Y
+  
+  def classWeights(y:Y): Double = 1.0
 
 }
