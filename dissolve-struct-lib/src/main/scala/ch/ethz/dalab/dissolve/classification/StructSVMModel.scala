@@ -43,7 +43,7 @@ class StructSVMModel[X, Y](
   def getEll(): Double =
     ell
 
-  def updateEll(newEll: Double) =
+  def setEll(newEll: Double) = 
     ell = newEll
 
   def predict(pattern: X): Y = {

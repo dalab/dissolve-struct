@@ -455,12 +455,12 @@ class DBCFWSolverTuned[X, Y](
 
           val newGlobalModel = globalModel.clone()
           newGlobalModel.setWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
-          newGlobalModel.updateEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
+          newGlobalModel.setEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
 
           // Weighted Average model
           val newGlobalModelWAvg = globalModelWeightedAverage.clone()
           newGlobalModelWAvg.setWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
-          newGlobalModelWAvg.updateEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * (beta / numPartitions))
+          newGlobalModelWAvg.setEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * (beta / numPartitions))
 
           val w_t = globalModel.getWeights()
           val w_tp1 = newGlobalModel.getWeights()
@@ -757,21 +757,21 @@ class DBCFWSolverTuned[X, Y](
       localModelWeightedAverage.getWeights() *= (1.0 - rho)
       localModelWeightedAverage.getWeights() += weightedLocalModel
 
-      localModelWeightedAverage.updateEll(ellAvg)
+      localModelWeightedAverage.setEll(ellAvg)
 
       k += 1
 
       if (!dataIterator.hasNext) {
 
-        localModel.updateEll(ell)
+        localModel.setEll(ell)
 
         val deltaLocalModel = localModel.clone()
         deltaLocalModel.getWeights() -= prevModel.getWeights()
-        deltaLocalModel.updateEll(localModel.getEll() - prevModel.getEll())
+        deltaLocalModel.setEll(localModel.getEll() - prevModel.getEll())
 
         val deltaLocalModelWeightedAverage = localModelWeightedAverage.clone()
         deltaLocalModelWeightedAverage.getWeights() -= prevModelWeightedAverage.getWeights()
-        deltaLocalModelWeightedAverage.updateEll(localModelWeightedAverage.getEll() - prevModelWeightedAverage.getEll())
+        deltaLocalModelWeightedAverage.setEll(localModelWeightedAverage.getEll() - prevModelWeightedAverage.getEll())
 
         val deltaK = k - kAccum(partitionIdx)
         val kAccumLocalDelta = DenseVector.zeros[Int](numPartitions)

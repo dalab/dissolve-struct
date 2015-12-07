@@ -210,10 +210,10 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
         if (debugOn && k >= debugIter) {
           if (solverOptions.doWeightedAveraging) {
             debugModel.setWeights(wAvg)
-            debugModel.updateEll(lAvg)
+            debugModel.setEll(lAvg)
           } else {
             debugModel.setWeights(model.getWeights)
-            debugModel.updateEll(ell)
+            debugModel.setEll(ell)
           }
 
           val f = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), lambda)
@@ -258,9 +258,9 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
 
     if (solverOptions.doWeightedAveraging) {
       model.setWeights(wAvg)
-      model.updateEll(lAvg)
+      model.setEll(lAvg)
     } else {
-      model.updateEll(ell)
+      model.setEll(ell)
     }
 
     return (model, debugSb.toString())
