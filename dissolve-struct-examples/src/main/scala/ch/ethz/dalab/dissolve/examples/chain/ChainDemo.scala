@@ -193,8 +193,8 @@ object ChainDemo {
     /**
      * Train model
      */
-    val crfModel = new LinearChainCRF()
-    
+    val crfModel = new LinearChainCRF(disablePairwise = false, useBPDecoding = false)
+
     val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
       new DistBCFW(crfModel, solverOptions)
 

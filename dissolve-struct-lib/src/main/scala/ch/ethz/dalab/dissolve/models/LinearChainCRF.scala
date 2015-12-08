@@ -21,6 +21,18 @@ import cc.factorie.variable.DiscreteVariable
 class LinearChainCRF(disablePairwise: Boolean = false,
                      useBPDecoding: Boolean = false) extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
+  val ENABLE_PERF_METRICS = false
+
+  def time[R](block: => R, blockName: String = ""): R = {
+    if (ENABLE_PERF_METRICS) {
+      val t0 = System.currentTimeMillis()
+      val result = block // call-by-name
+      val t1 = System.currentTimeMillis()
+      println("%25s %d ms".format(blockName, (t1 - t0)))
+      result
+    } else block
+  }
+
   /**
    * Returns a vector, capturing unary, bias and pairwise features of the word
    *
@@ -34,7 +46,11 @@ class LinearChainCRF(disablePairwise: Boolean = false,
     val numVars = x.cols
     // First term for unaries, Second term for first and last letter biases, Third term for Pairwise features
     // Unaries are row-major ordered, i.e., [0,129) positions for 'a', [129, 258) for 'b' and so on 
-    val phi: DenseVector[Double] = DenseVector.zeros[Double]((numStates * numDims) + (2 * numStates) + (numStates * numStates))
+    val phi: DenseVector[Double] =
+      if (!disablePairwise)
+        DenseVector.zeros[Double]((numStates * numDims) + (2 * numStates) + (numStates * numStates))
+      else
+        DenseVector.zeros[Double]((numStates * numDims) + (2 * numStates))
 
     /* Unaries */
     for (i <- 0 until numVars) {
@@ -47,10 +63,12 @@ class LinearChainCRF(disablePairwise: Boolean = false,
     phi(numStates * numDims + numStates + y(-1).toInt) = 1.0
 
     /* Pairwise */
-    val offset = (numStates * numDims) + (2 * numStates)
-    for (i <- 0 until (numVars - 1)) {
-      val idx = y(i).toInt + numStates * y(i + 1).toInt
-      phi(offset + idx) = phi(offset + idx) + 1.0
+    if (!disablePairwise) {
+      val offset = (numStates * numDims) + (2 * numStates)
+      for (i <- 0 until (numVars - 1)) {
+        val idx = y(i).toInt + numStates * y(i + 1).toInt
+        phi(offset + idx) = phi(offset + idx) + 1.0
+      }
     }
 
     phi
@@ -79,6 +97,15 @@ class LinearChainCRF(disablePairwise: Boolean = false,
       colMax(1, col) = argmax(mat(::, col))
     }
     colMax
+  }
+
+  def unaryOnlyDecode(logNodePotMat: Matrix[Double]): Vector[Double] = {
+    val maxUnaryPotChainMat = columnwiseMax(logNodePotMat)
+    // First row contains potentials
+    // Second row contains indices
+    val decodedChain = maxUnaryPotChainMat(1, ::).t
+
+    decodedChain
   }
 
   /**
@@ -210,7 +237,13 @@ class LinearChainCRF(disablePairwise: Boolean = false,
     }
 
     // Solve inference problem
-    val label: Vector[Double] = decodeFn(thetaUnary.t, thetaPairwise) // - 1.0
+    val label: Vector[Double] =
+      time({
+        if (!disablePairwise)
+          decodeFn(thetaUnary.t, thetaPairwise) // - 1.0
+        else
+          unaryOnlyDecode(thetaUnary)
+      }, "Decode ")
 
     label
   }
@@ -237,16 +270,23 @@ class LinearChainCRF(disablePairwise: Boolean = false,
       .reshape(numDims, numStates)
     val firstBias: Vector[Double] = weightVec(idx until (idx + numStates))
     val lastBias: Vector[Double] = weightVec((idx + numStates) until (idx + 2 * numStates))
-    val pairwise: DenseMatrix[Double] = weightVec((idx + 2 * numStates) until weightVec.size)
-      .toDenseVector
-      .toDenseMatrix
-      .reshape(numStates, numStates)
+    val pairwise: DenseMatrix[Double] =
+      if (!disablePairwise)
+        weightVec((idx + 2 * numStates) until weightVec.size)
+          .toDenseVector
+          .toDenseMatrix
+          .reshape(numStates, numStates)
+      else
+        null
 
     new Weight(unary, firstBias.toDenseVector, lastBias.toDenseVector, pairwise)
   }
 
   override def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] =
-    oracleFnWithDecode(model, xi, yi, viterbiDecode)
+    if (useBPDecoding)
+      oracleFnWithDecode(model, xi, yi, bpDecode)
+    else
+      oracleFnWithDecode(model, xi, yi, viterbiDecode)
 
   /**
    * Predict function.
