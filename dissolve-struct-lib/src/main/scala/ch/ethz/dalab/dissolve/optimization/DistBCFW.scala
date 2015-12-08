@@ -106,12 +106,6 @@ class DistBCFW[X, Y](
     "round,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos\n"
 
   /**
-   * Train without test data (for additional debug statistics)
-   */
-  def train(data: RDD[LabeledObject[X, Y]])(implicit m: ClassTag[Y]): StructSVMModel[X, Y] =
-    train(data, Option.empty)
-
-  /**
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
    */
   def train(data: RDD[LabeledObject[X, Y]],

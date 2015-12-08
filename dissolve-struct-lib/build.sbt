@@ -14,6 +14,10 @@ libraryDependencies += "org.scalanlp" %% "breeze" % "0.11.1"
 
 libraryDependencies += "org.scalanlp" %% "breeze-natives" % "0.11.1"
 
+resolvers += "IESL Release" at "http://dev-iesl.cs.umass.edu/nexus/content/groups/public"
+
+libraryDependencies += "cc.factorie" % "factorie" % "1.0"
+
 libraryDependencies += "org.scalatest" % "scalatest_2.10" % "2.0" % "test"
 
 libraryDependencies += "com.github.scopt" %% "scopt" % "3.3.0"

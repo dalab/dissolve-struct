@@ -18,6 +18,7 @@ import ch.ethz.dalab.dissolve.examples.imageseg.QuantizedLabel
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import breeze.linalg.max
+import ch.ethz.dalab.dissolve.models.LinearChainCRF
 
 object ImageTestAdapter {
   type X = QuantizedImage
@@ -70,7 +71,7 @@ object ChainTestAdapter {
   /**
    * Dissolve Functions
    */
-  val dissolveFunctions: DissolveFunctions[X, Y] = ChainDemo
+  val dissolveFunctions: DissolveFunctions[X, Y] = new LinearChainCRF()
   /**
    * Some Data
    */
@@ -87,7 +88,7 @@ object ChainTestAdapter {
    * A dummy model
    */
   val lo = data(0)
-  val numd = ChainDemo.featureFn(lo.pattern, lo.label).size
+  val numd = dissolveFunctions.featureFn(lo.pattern, lo.label).size
   val model: StructSVMModel[X, Y] =
     new StructSVMModel[X, Y](DenseVector.zeros(numd), 0.0,
       DenseVector.zeros(numd), dissolveFunctions, 1)

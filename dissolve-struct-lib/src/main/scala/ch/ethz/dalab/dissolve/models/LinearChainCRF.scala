@@ -4,8 +4,23 @@ import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import breeze.linalg._
 import ch.ethz.dalab.dissolve.classification.StructSVMModel
 
-object LinearChainCRF extends DissolveFunctions[Matrix[Double], Vector[Double]] {
-  
+import cc.factorie.infer.MaximizeByMPLP
+import cc.factorie.model.Factor
+import cc.factorie.model.Factor1
+import cc.factorie.model.Factor2
+import cc.factorie.model.ItemizedModel
+import cc.factorie.variable.DiscreteDomain
+import cc.factorie.variable.DiscreteVariable
+
+/**
+ * A Linear Chain CRF model with observed data `x` and hidden labels `y`
+ *
+ * @param disablePairwise Disable pairwise interactions between labels. Default = false.
+ * @param useBPDecoding Use Belief Propagation from Factorie for decoding. Default = Viterbi decoding.
+ */
+class LinearChainCRF(disablePairwise: Boolean = false,
+                     useBPDecoding: Boolean = false) extends DissolveFunctions[Matrix[Double], Vector[Double]] {
+
   /**
    * Returns a vector, capturing unary, bias and pairwise features of the word
    *
@@ -17,7 +32,7 @@ object LinearChainCRF extends DissolveFunctions[Matrix[Double], Vector[Double]] 
     val numStates = 26
     val numDims = x.rows // 129 in case of Chain OCR
     val numVars = x.cols
-    // First term for unaries, Second term for first and last letter baises, Third term for Pairwise features
+    // First term for unaries, Second term for first and last letter biases, Third term for Pairwise features
     // Unaries are row-major ordered, i.e., [0,129) positions for 'a', [129, 258) for 'b' and so on 
     val phi: DenseVector[Double] = DenseVector.zeros[Double]((numStates * numDims) + (2 * numStates) + (numStates * numStates))
 
@@ -67,11 +82,10 @@ object LinearChainCRF extends DissolveFunctions[Matrix[Double], Vector[Double]] 
   }
 
   /**
-   * Log decode, with forward and backward passes
+   * Viterbi decoding, with forward and backward passes
    * (works for both loss-augmented or not, just takes the given potentials)
-   * Was ist das?
    */
-  def logDecode(logNodePotMat: Matrix[Double], logEdgePotMat: Matrix[Double]): Vector[Double] = {
+  def viterbiDecode(logNodePotMat: Matrix[Double], logEdgePotMat: Matrix[Double]): Vector[Double] = {
 
     val logNodePot: DenseMatrix[Double] = logNodePotMat.toDenseMatrix
     val logEdgePot: DenseMatrix[Double] = logEdgePotMat.toDenseMatrix
@@ -105,6 +119,53 @@ object LinearChainCRF extends DissolveFunctions[Matrix[Double], Vector[Double]] 
       y(n) = mxState(n + 1, y(n + 1).toInt)
     }
     y
+  }
+
+  /**
+   * Chain Belief Propagation Decoding
+   * Alternate decoding function using belief propagation on the factor graph,
+   * using the Factorie library.
+   */
+  def bpDecode(thetaUnary: Matrix[Double], thetaPairwise: Matrix[Double]): Vector[Double] = {
+    // thetaUnary is a (lengthOfChain x 26) dimensional matrix
+    val nNodes: Int = thetaUnary.rows
+    val nStates: Int = thetaUnary.cols
+
+    val label: DenseVector[Double] = DenseVector.zeros[Double](nNodes)
+
+    object LetterDomain extends DiscreteDomain(nStates)
+
+    class LetterVar(i: Int) extends DiscreteVariable(i) {
+      def domain = LetterDomain
+    }
+
+    def getUnaryFactor(yi: LetterVar, posInChain: Int): Factor = {
+      new Factor1(yi) {
+        def score(i: LetterVar#Value) = thetaUnary(posInChain, i.intValue)
+      }
+    }
+
+    def getPairwiseFactor(yi: LetterVar, yj: LetterVar): Factor = {
+      new Factor2(yi, yj) {
+        def score(i: LetterVar#Value, j: LetterVar#Value) = thetaPairwise(i.intValue, j.intValue)
+      }
+    }
+
+    val letterChain: IndexedSeq[LetterVar] = for (i <- 0 until nNodes) yield new LetterVar(0)
+
+    val unaries: IndexedSeq[Factor] = for (i <- 0 until nNodes) yield getUnaryFactor(letterChain(i), i)
+    val pairwise: IndexedSeq[Factor] = for (i <- 0 until nNodes - 1) yield getPairwiseFactor(letterChain(i), letterChain(i + 1))
+
+    val model = new ItemizedModel
+    model ++= unaries
+    model ++= pairwise
+
+    // val m = BP.inferChainMax(letterChain, model)
+    val assgn = MaximizeByMPLP.infer(letterChain, model).mapAssignment
+    for (i <- 0 until nNodes)
+      label(i) = assgn(letterChain(i)).intValue.toDouble
+
+    label
   }
 
   /**
@@ -185,7 +246,7 @@ object LinearChainCRF extends DissolveFunctions[Matrix[Double], Vector[Double]] 
   }
 
   override def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] =
-    oracleFnWithDecode(model, xi, yi, logDecode)
+    oracleFnWithDecode(model, xi, yi, viterbiDecode)
 
   /**
    * Predict function.
@@ -208,5 +269,5 @@ object LinearChainCRF extends DissolveFunctions[Matrix[Double], Vector[Double]] 
       (vec(0).toInt + 97).toChar + ""
     else
       (vec(0).toInt + 97).toChar + labelVectorToString(vec(1 until vec.size))
-  
+
 }
