@@ -1,16 +1,17 @@
 package ch.ethz.dalab.dissolve.models
 
-import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import breeze.linalg._
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-
-import cc.factorie.infer.MaximizeByMPLP
+import cc.factorie.infer.MaximizeByBPChain
+import cc.factorie.la.DenseTensor1
+import cc.factorie.la.Tensor
 import cc.factorie.model.Factor
 import cc.factorie.model.Factor1
 import cc.factorie.model.Factor2
 import cc.factorie.model.ItemizedModel
 import cc.factorie.variable.DiscreteDomain
 import cc.factorie.variable.DiscreteVariable
+import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 
 /**
  * A Linear Chain CRF model with observed data `x` and hidden labels `y`
@@ -160,6 +161,9 @@ class LinearChainCRF(disablePairwise: Boolean = false,
 
     val label: DenseVector[Double] = DenseVector.zeros[Double](nNodes)
 
+    val unaryPot = thetaUnary.toDenseMatrix.t
+    val pairwisePot = thetaPairwise.toDenseMatrix
+
     object LetterDomain extends DiscreteDomain(nStates)
 
     class LetterVar(i: Int) extends DiscreteVariable(i) {
@@ -168,13 +172,21 @@ class LinearChainCRF(disablePairwise: Boolean = false,
 
     def getUnaryFactor(yi: LetterVar, posInChain: Int): Factor = {
       new Factor1(yi) {
-        def score(i: LetterVar#Value) = thetaUnary(posInChain, i.intValue)
+        val weights: DenseTensor1 = new DenseTensor1(unaryPot(::, posInChain).toArray)
+        def score(i: LetterVar#Value) = unaryPot(posInChain, i.intValue)
+        override def valuesScore(tensor: Tensor): Double = {
+          weights dot tensor
+        }
       }
     }
 
     def getPairwiseFactor(yi: LetterVar, yj: LetterVar): Factor = {
       new Factor2(yi, yj) {
-        def score(i: LetterVar#Value, j: LetterVar#Value) = thetaPairwise(i.intValue, j.intValue)
+        val weights: DenseTensor1 = new DenseTensor1(pairwisePot.toArray)
+        def score(i: LetterVar#Value, j: LetterVar#Value) = pairwisePot(i.intValue, j.intValue)
+        override def valuesScore(tensor: Tensor): Double = {
+          weights dot tensor
+        }
       }
     }
 
@@ -187,10 +199,9 @@ class LinearChainCRF(disablePairwise: Boolean = false,
     model ++= unaries
     model ++= pairwise
 
-    // val m = BP.inferChainMax(letterChain, model)
-    val assgn = MaximizeByMPLP.infer(letterChain, model).mapAssignment
+    val bpMapSummary = MaximizeByBPChain(letterChain, model)
     for (i <- 0 until nNodes)
-      label(i) = assgn(letterChain(i)).intValue.toDouble
+      label(i) = letterChain(i).intValue.toDouble
 
     label
   }
