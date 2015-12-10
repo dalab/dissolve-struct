@@ -28,13 +28,41 @@ import ch.ethz.dalab.dissolve.regression.LabeledObject
  * @param <X> type for the data examples
  * @param <Y> type for the labels of each example
  */
-class LocalBCFW[X, Y] /*extends Optimizer*/ (
-    val dissolveFunctions: DissolveFunctions[X, Y],
-    val solverOptions: SolverOptions[X, Y]) extends LocalSolver[X, Y] {
+class LocalBCFW[X, Y](
+    dissolveFunctions: DissolveFunctions[X, Y],
+    numPasses: Int = 200,
+    doLineSearch: Boolean = true,
+    doWeightedAveraging: Boolean = true,
+    timeBudget: Int = Integer.MAX_VALUE, // TODO
+    debug: Boolean = false,
+    debugMultiplier: Int = 100,
+    debugOutPath: String = "debug-%d.csv".format(System.currentTimeMillis()),
+    randSeed: Long = 1,
+    randomSampling: Boolean = false,
+    lambda: Double = 0.01,
+    gapThreshold: Double = 0.1, // TODO
+    gapCheck: Int = 0, // TODO
+    enableOracleCache: Boolean = false,
+    oracleCacheSize: Int = 10) extends LocalSolver[X, Y] {
 
-  val roundLimit = solverOptions.roundLimit
-  val lambda = solverOptions.lambda
-  val debugOn: Boolean = solverOptions.debug
+  /*def this(dissolveFunctions: DissolveFunctions[X, Y],
+           numPasses: Int = 200,
+           doLineSearch: Boolean = true,
+           doWeightedAveraging: Boolean = true,
+           timeBudget: Int = Integer.MAX_VALUE, // TODO
+           debug: Boolean = false,
+           debugMultiplier: Int = 100,
+           debugOutPath: String = "debug-%d.csv".format(System.currentTimeMillis()),
+           randSeed: Long = 1,
+           randomSampling: Boolean = false,
+           lambda: Double = 0.01,
+           gapThreshold: Double = 0.1, // TODO
+           gapCheck: Int = 0, // TODO
+           enableOracleCache: Boolean = false,
+           oracleCacheSize: Int = 10) =
+    this(dissolveFunctions,
+      numPasses,
+      doLineSearch)*/
 
   val debugSb: StringBuilder = new StringBuilder()
 
@@ -44,6 +72,33 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
 
   val eps: Double = 2.2204E-16
 
+  val solverParamsStr: String = {
+
+    val sb: StringBuilder = new StringBuilder()
+
+    sb ++= "# numPasses=%s\n".format(numPasses)
+    sb ++= "# doLineSearch=%s\n".format(doLineSearch)
+    sb ++= "# doWeightedAveraging=%s\n".format(doWeightedAveraging)
+    sb ++= "# timeBudget=%s\n".format(timeBudget)
+
+    sb ++= "# debug=%s\n".format(debug)
+    sb ++= "# debugMultiplier=%s\n".format(debugMultiplier)
+    sb ++= "# debugOutPath=%s\n".format(debugOutPath)
+
+    sb ++= "# randSeed=%s\n".format(randSeed)
+    sb ++= "# randomSampling=%s\n".format(randomSampling)
+
+    sb ++= "# lambda=%s\n".format(lambda)
+
+    sb ++= "# gapThreshold=%s\n".format(gapThreshold)
+    sb ++= "# gapCheck=%s\n".format(gapCheck)
+
+    sb ++= "# enableOracleCache=%s\n".format(enableOracleCache)
+    sb ++= "# oracleCacheSize=%s\n".format(oracleCacheSize)
+
+    sb.toString()
+  }
+
   /**
    * BCFW optimizer
    */
@@ -52,6 +107,8 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
 
     val verboseDebug: Boolean = false
     val debugWeights: Boolean = false
+
+    util.Random.setSeed(randSeed)
 
     // Number of dimensions of \phi(x, y)
     val ndims: Int = phi(data(0).pattern, data(0).label).size
@@ -68,20 +125,16 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
 
     // Initialization in case of Weighted Averaging
     var wAvg: DenseVector[Double] =
-      if (solverOptions.doWeightedAveraging)
+      if (doWeightedAveraging)
         DenseVector.zeros(d)
       else null
     var lAvg: Double = 0.0
 
-    var debugIter = if (solverOptions.debugMultiplier == 0) {
-      solverOptions.debugMultiplier = 100
-      n
-    } else {
-      1
-    }
+    val debugMultiplierCor = if (debugMultiplier == 0) 100 else debugMultiplier
+    var debugIter = if (debugMultiplier == 0) n else 1
     val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), dissolveFunctions)
 
-    if (solverOptions.debug) {
+    if (debug) {
       if (testData != null)
         debugSb ++= "round,time,iter,primal,dual,gap,train_error,test_error\n"
       else
@@ -89,14 +142,14 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
     }
     val startTime = System.currentTimeMillis()
 
-    if (debugOn) {
-      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, roundLimit, lambda))
+    if (debug) {
+      println("Beginning training of %d data points in %d passes with lambda=%f".format(n, numPasses, lambda))
     }
 
     // Initialize the cache: Index -> List of precomputed ystar_i's
     var oracleCache = collection.mutable.Map[Int, MutableList[Y]]()
 
-    for (passNum <- 0 until roundLimit) {
+    for (passNum <- 0 until numPasses) {
 
       if (verboseDebug) {
         println("wMat before pass: " + model.getWeights()(0 to 10).toDenseVector)
@@ -104,16 +157,19 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
         println("Ell before pass = " + ell)
       }
 
+      val idxSeq = (0 until n).toList
+      val perm = util.Random.shuffle(idxSeq)
+
       for (dummy <- 0 until n) {
         // 1) Pick example
-        val i: Int = dummy
+        val i: Int = if (randomSampling) util.Random.nextInt(n) else perm(dummy)
         val pattern: X = data(i).pattern
         val label: Y = data(i).label
 
         // 2) Solve loss-augmented inference for point i
         // 2.a) If cache is enabled, check if any of the previous ystar_i's for this i can be used
         val bestCachedCandidateForI: Option[Y] =
-          if (solverOptions.enableOracleCache && oracleCache.contains(i)) {
+          if (enableOracleCache && oracleCache.contains(i)) {
             val candidates: Seq[(Double, Int)] =
               oracleCache(i)
                 .map(y_i => (((phi(pattern, label) - phi(pattern, y_i)) :* (1 / (n * lambda))),
@@ -143,10 +199,10 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
           if (bestCachedCandidateForI.isEmpty) {
             val ystar = maxOracle(model, pattern, label)
 
-            if (solverOptions.enableOracleCache)
+            if (enableOracleCache)
               // Add this newly computed ystar to the cache of this i
-              oracleCache.update(i, if (solverOptions.oracleCacheSize > 0)
-                { oracleCache.getOrElse(i, MutableList[Y]()) :+ ystar }.takeRight(solverOptions.oracleCacheSize)
+              oracleCache.update(i, if (oracleCacheSize > 0)
+                { oracleCache.getOrElse(i, MutableList[Y]()) :+ ystar }.takeRight(oracleCacheSize)
               else { oracleCache.getOrElse(i, MutableList[Y]()) :+ ystar })
             // kick out oldest if max size reached
             ystar
@@ -166,7 +222,7 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
 
         // 4) Get step-size gamma
         val gamma: Double =
-          if (solverOptions.doLineSearch) {
+          if (doLineSearch) {
             val gamma_opt = (model.getWeights().t * (wMat(::, i) - w_s) - ((ellMat(i) - ell_s) * (1 / lambda))) /
               ((wMat(::, i) - w_s).t * (wMat(::, i) - w_s) + eps)
             max(0.0, min(1.0, gamma_opt))
@@ -186,7 +242,7 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
         ell = ell + ellMat(i)
 
         // 9) Optionally update the weighted average
-        if (solverOptions.doWeightedAveraging) {
+        if (doWeightedAveraging) {
           val rho: Double = 2.0 / (k + 2.0)
           wAvg = (wAvg * (1.0 - rho)) + (model.getWeights * rho)
           lAvg = (lAvg * (1.0 - rho)) + (ell * rho)
@@ -198,12 +254,12 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
         // If this is the last pass and debugWeights flag is true, dump weight vector to CSV
         if (debugWeights && dummy == (n - 1))
           csvwrite(new File("data/debug/debugWeights/scala-w-%d.csv".format(passNum + 1)),
-            { if (solverOptions.doWeightedAveraging) wAvg else model.getWeights }.toDenseVector.toDenseMatrix)
+            { if (doWeightedAveraging) wAvg else model.getWeights }.toDenseVector.toDenseMatrix)
 
         k = k + 1
 
-        if (debugOn && k >= debugIter) {
-          if (solverOptions.doWeightedAveraging) {
+        if (debug && k >= debugIter) {
+          if (doWeightedAveraging) {
             debugModel.setWeights(wAvg)
             debugModel.setEll(lAvg)
           } else {
@@ -235,23 +291,23 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
                 (0.00, 0.00)
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError._1, testError._1))
-            if (solverOptions.debug)
+            if (debug)
               debugSb ++= "%d,%f,%d,%s,%s,%s,%f,%f\n".format(passNum + 1, curTime, k, primal.toString(), f.toString(), gap.toString(), trainError._1, testError._1)
           } else {
             println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f"
               .format(passNum + 1, k, primal, f, gap, trainError._1))
-            if (solverOptions.debug)
+            if (debug)
               debugSb ++= "%d,%f,%d,%s,%s,%s,%f\n".format(passNum + 1, curTime, k, primal.toString(), f.toString(), gap.toString(), trainError._1)
           }
 
-          debugIter = min(debugIter + n, ceil(debugIter * (1 + solverOptions.debugMultiplier / 100)))
+          debugIter = min(debugIter + n, ceil(debugIter * (1 + debugMultiplierCor / 100)))
         }
 
       }
 
     }
 
-    if (solverOptions.doWeightedAveraging) {
+    if (doWeightedAveraging) {
       model.setWeights(wAvg)
       model.setEll(lAvg)
     } else {
@@ -262,7 +318,7 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
      * Write debug stats
      */
     // Create intermediate directories if necessary
-    val outFile = new java.io.File(solverOptions.debugInfoPath)
+    val outFile = new java.io.File(debugOutPath)
     val outDir = outFile.getAbsoluteFile().getParentFile()
     if (!outDir.exists()) {
       println("Directory %s does not exist. Creating required path.")
@@ -272,7 +328,7 @@ class LocalBCFW[X, Y] /*extends Optimizer*/ (
     // Dump debug information into a file
     val fw = new FileWriter(outFile)
     // Write the current parameters being used
-    fw.write(solverOptions.toString())
+    fw.write(solverParamsStr)
     fw.write("\n")
 
     // Write values noted from the run
