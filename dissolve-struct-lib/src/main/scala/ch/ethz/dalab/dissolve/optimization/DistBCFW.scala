@@ -31,8 +31,24 @@ import ch.ethz.dalab.dissolve.regression.LabeledObject
  * @param <Y> type for the labels of each example
  */
 class DistBCFW[X, Y](
-  val dissolveFunctions: DissolveFunctions[X, Y],
-  val solverOptions: SolverOptions[X, Y])
+  dissolveFunctions: DissolveFunctions[X, Y],
+  numPasses: Int = 200, // TODO
+  roundLimit: Int = 200,
+  doLineSearch: Boolean = true,
+  doWeightedAveraging: Boolean = true,
+  timeBudget: Int = Integer.MAX_VALUE,
+  debug: Boolean = false,
+  debugMultiplier: Int = 100,
+  debugOutPath: String = "debug-%d.csv".format(System.currentTimeMillis()),
+  lambda: Double = 0.01,
+  gapThreshold: Double = 0.1,
+  gapCheck: Int = 0,
+  enableOracleCache: Boolean = false,
+  oracleCacheSize: Int = 10,
+  samplePerRound: Double = 0.5,
+  sparse: Boolean = false,
+  numClasses: Int = 0,
+  checkpointFreq: Int = 50)
     extends Serializable with DistributedSolver[X, Y] {
 
   val ENABLE_PERF_METRICS: Boolean = false
@@ -95,6 +111,30 @@ class DistBCFW[X, Y](
     }
   }
 
+  val solverParamsStr: String = {
+
+    val sb: StringBuilder = new StringBuilder()
+
+    sb ++= "# numPasses=%s\n".format(numPasses)
+    sb ++= "# doLineSearch=%s\n".format(doLineSearch)
+    sb ++= "# doWeightedAveraging=%s\n".format(doWeightedAveraging)
+    sb ++= "# timeBudget=%s\n".format(timeBudget)
+
+    sb ++= "# debug=%s\n".format(debug)
+    sb ++= "# debugMultiplier=%s\n".format(debugMultiplier)
+    sb ++= "# debugOutPath=%s\n".format(debugOutPath)
+
+    sb ++= "# lambda=%s\n".format(lambda)
+
+    sb ++= "# gapThreshold=%s\n".format(gapThreshold)
+    sb ++= "# gapCheck=%s\n".format(gapCheck)
+
+    sb ++= "# enableOracleCache=%s\n".format(enableOracleCache)
+    sb ++= "# oracleCacheSize=%s\n".format(oracleCacheSize)
+
+    sb.toString()
+  }
+
   val EPS: Double = 2.2204E-16
 
   // Beyond `DEBUG_THRESH` rounds, debug calculations occur every `DEBUG_STEP`-th round
@@ -119,12 +159,11 @@ class DistBCFW[X, Y](
     val debugSb: StringBuilder = new StringBuilder()
 
     /**
-     *  Create five RDDs:
+     *  Create four RDDs:
      *  1. indexedTrainData = (Index, LabeledObject) and
      *  2. indexedPrimals (Index, Primal) where Primal = (w_i, l_i) <- This changes in each round
      *  3. indexedCacheRDD (Index, BoundedCacheList)
-     *  4. indexedLevelHistoryCache (Index, LevelHistory)
-     *  5. indexedLocalProcessedData (Index, LocallyProcessedData)
+     *  4. indexedLocalProcessedData (Index, LocallyProcessedData)
      *  all of which are partitioned similarly
      */
 
@@ -174,9 +213,9 @@ class DistBCFW[X, Y](
     // Let the initial model contain zeros for all weights
     // Global model uses Dense Vectors by default
     var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
-      DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
+      DenseVector.zeros(d), dissolveFunctions, numClasses)
     var globalModelWeightedAverage: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
-      DenseVector.zeros(d), dissolveFunctions, solverOptions.numClasses)
+      DenseVector.zeros(d), dissolveFunctions, numClasses)
 
     val beta: Double = 1.0
 
@@ -194,7 +233,7 @@ class DistBCFW[X, Y](
     val indexedPrimals: Array[(Index, PrimalInfo)] = (0 until dataSize).toArray.zip(
       // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
       Array.fill(dataSize)((
-        if (solverOptions.sparse) // w_i can be either Sparse or Dense 
+        if (sparse) // w_i can be either Sparse or Dense 
           SparseVector.zeros[Double](d)
         else
           DenseVector.zeros[Double](d),
@@ -210,7 +249,7 @@ class DistBCFW[X, Y](
     // For each Primal (i.e, Index), cache a list of Decodings (i.e, Y's)
     // If cache is disabled, add an empty array. This immediately drops the joins later on and saves time in communicating an unnecessary RDD.
     val indexedCache: Array[(Index, BoundedCacheList[Y])] =
-      if (solverOptions.enableOracleCache)
+      if (enableOracleCache)
         (0 until dataSize).toArray.zip(
           Array.fill(dataSize)(MutableList[Y]()) // Fill up a list of (ZeroVector, 0.0) - the initial w_i and l_i
           )
@@ -233,28 +272,11 @@ class DistBCFW[X, Y](
     debugSb ++= "# sc.getExecutorStorageStatus.size=%d\n".format(sc.getExecutorStorageStatus.size)
 
     /**
-     * Fix parameters to perform sampling.
-     * Use can either specify:
-     * a) "count" - Eqv. to 'H' in paper. Number of points to sample in each round.
-     * or b) "perc" - Fraction of dataset to sample \in [0.0, 1.0]
-     */
-    val sampleFrac: Double = {
-      if (solverOptions.sample == "frac")
-        solverOptions.sampleFrac
-      else if (solverOptions.sample == "count")
-        math.min(solverOptions.H / dataSize, 1.0)
-      else {
-        println("[WARNING] %s is not a valid option. Reverting to sampleFrac = 0.5".format(solverOptions.sample))
-        0.5
-      }
-    }
-
-    /**
      * In case of weighted averaging, start off with an all-zero (wAvg, lAvg)
      */
     var wAvg: Vector[Double] =
-      if (solverOptions.doWeightedAveraging)
-        DenseVector.zeros(d)
+      if (doWeightedAveraging)
+        DenseVector.zeros(d) // TODO Support sparse
       else null
     var lAvg: Double = 0.0
 
@@ -265,7 +287,7 @@ class DistBCFW[X, Y](
     var evaluateModelTimeMillis: Long = 0
 
     def getLatestModel(): StructSVMModel[X, Y] = {
-      if (solverOptions.doWeightedAveraging)
+      if (doWeightedAveraging)
         globalModelWeightedAverage.clone()
       else
         globalModel.clone()
@@ -274,7 +296,7 @@ class DistBCFW[X, Y](
     def getLatestGap(): Double = {
       val debugModel: StructSVMModel[X, Y] = getLatestModel()
       val trainingData = indexedTrainDataRDD.values
-      val gap = SolverUtils.dualityGap(trainingData, dissolveFunctions, debugModel, solverOptions.lambda, dataSize)
+      val gap = SolverUtils.dualityGap(trainingData, dissolveFunctions, debugModel, lambda, dataSize)
       gap._1
     }
 
@@ -283,27 +305,16 @@ class DistBCFW[X, Y](
 
       val startEvaluateTime = System.currentTimeMillis()
 
-      /*val dual = -SolverUtils.objectiveFunction(model.getWeights(), model.getEll(), solverOptions.lambda)
-      val dualityGap = SolverUtils.dualityGap(data, dissolveFunctions, model, solverOptions.lambda, dataSize)._1
-      val primal = dual + dualityGap
-
-      val (trainError, trainStructHingeLoss) = SolverUtils.averageLoss(data, dissolveFunctions, model, dataSize)
-      val (testError, testStructHingeLoss) =
-        if (solverOptions.testDataRDD.isDefined)
-          SolverUtils.averageLoss(solverOptions.testDataRDD.get, dissolveFunctions, model, testDataSize)
-        else
-          (Double.NaN, Double.NaN)*/
-
       val trainingData = indexedTrainDataRDD.values
-      val trainDataEval = SolverUtils.trainDataEval(trainingData, dissolveFunctions, model, solverOptions.lambda, dataSize)
-      val dual = -SolverUtils.objectiveFunction(model.getWeights(), model.getEll(), solverOptions.lambda)
+      val trainDataEval = SolverUtils.trainDataEval(trainingData, dissolveFunctions, model, lambda, dataSize)
+      val dual = -SolverUtils.objectiveFunction(model.getWeights(), model.getEll(), lambda)
       val dualityGap = trainDataEval.gap
       val primal = dual + dualityGap
       val (trainError, trainStructHingeLoss) =
         (trainDataEval.avgDelta, trainDataEval.avgHLoss)
 
       val testDataEval = if (indexedTestDataRDD.isDefined)
-        SolverUtils.trainDataEval(indexedTestDataRDD.get.values, dissolveFunctions, model, solverOptions.lambda, dataSize)
+        SolverUtils.trainDataEval(indexedTestDataRDD.get.values, dissolveFunctions, model, lambda, dataSize)
       else null
       val (testError, testStructHingeLoss) =
         if (indexedTestDataRDD.isDefined)
@@ -328,7 +339,7 @@ class DistBCFW[X, Y](
       roundEval
     }
 
-    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, solverOptions.roundLimit, solverOptions.lambda))
+    println("Beginning training of %d data points in %d passes with lambda=%f".format(dataSize, roundLimit, lambda))
 
     debugSb ++= header
 
@@ -337,23 +348,20 @@ class DistBCFW[X, Y](
     /**
      * ==== Begin Training rounds ====
      */
-    Stream.from(1)
+    (0 until roundLimit).toStream
       .takeWhile {
         roundNum =>
-          val continueExecution =
-            solverOptions.stoppingCriterion match {
-              case RoundLimitCriterion => roundNum <= solverOptions.roundLimit
-              case TimeLimitCriterion  => getElapsedTimeSecs() < solverOptions.timeLimit
-              case GapThresholdCriterion =>
-                // Calculating duality gap is really expensive. So, check ever gapCheck rounds
-                if (roundNum % solverOptions.gapCheck == 0)
-                  getLatestGap() > solverOptions.gapThreshold
-                else
-                  true
-              case _ => throw new Exception("Unrecognized Stopping Criterion")
-            }
 
-          if (solverOptions.debug && (!(continueExecution || (roundNum - 1 % solverOptions.debugMultiplier == 0)) || roundNum == 1)) {
+          val timeLimitExceeded = (getElapsedTimeSecs() / 60.0) > timeBudget
+
+          val gapSatisfied =
+            if (gapCheck > 0 && (roundNum + 1) % gapCheck == 0) {
+              getLatestGap() <= gapThreshold
+            } else false
+
+          val continueExecution = !timeLimitExceeded && !gapSatisfied
+
+          if (debug && (!(continueExecution || (roundNum - 1 % debugMultiplier == 0)) || roundNum == 1)) {
             // Force evaluation of model in 2 cases - Before beginning the very first round, and after the last round
             debugSb ++= evaluateModel(getLatestModel(), if (roundNum == 1) 0 else roundNum, Double.NaN, Double.NaN, Double.NaN) + "\n"
           }
@@ -371,7 +379,7 @@ class DistBCFW[X, Y](
            */
           val indexedJointData: RDD[(Index, InputDataShard[X, Y])] =
             indexedTrainDataRDD
-              .sample(solverOptions.sampleWithReplacement, sampleFrac)
+              .sample(withReplacement = false, fraction = samplePerRound)
               .join(indexedPrimalsRDD)
               .leftOuterJoin(indexedCacheRDD)
               .mapValues { // Because mapValues preserves partitioning
@@ -395,7 +403,6 @@ class DistBCFW[X, Y](
                 mapper((idx, numPartitions),
                   dataIterator,
                   helperFunctions,
-                  solverOptions,
                   globalModel,
                   globalModelWeightedAverage,
                   dataSize,
@@ -407,7 +414,7 @@ class DistBCFW[X, Y](
            * Step 2.5 - A long lineage may cause a StackOverFlow error in the JVM.
            * So, trigger a checkpointing once in a while.
            */
-          if (roundNum % solverOptions.checkpointFreq == 0) {
+          if (roundNum % checkpointFreq == 0) {
             indexedPrimalsRDD.checkpoint()
             indexedCacheRDD.checkpoint()
             indexedLocalProcessedData.checkpoint()
@@ -516,16 +523,16 @@ class DistBCFW[X, Y](
            */
           // Obtain duality gap after each communication round
           val debugModel: StructSVMModel[X, Y] =
-            if (solverOptions.doWeightedAveraging)
+            if (doWeightedAveraging)
               globalModelWeightedAverage.clone()
             else globalModel.clone()
 
           // Is criteria for debugging met?
           val doDebugCalc: Boolean =
-            if (solverOptions.debugMultiplier == 1) {
+            if (debugMultiplier == 1) {
               true
             } else if (roundNum <= DEBUG_THRESH && roundNum == nextDebugRound) {
-              nextDebugRound = nextDebugRound * solverOptions.debugMultiplier
+              nextDebugRound = nextDebugRound * debugMultiplier
               true
             } else if (roundNum > DEBUG_THRESH && roundNum % DEBUG_STEP == 0) {
               nextDebugRound += DEBUG_STEP
@@ -534,11 +541,11 @@ class DistBCFW[X, Y](
               false
 
           val roundEvaluation =
-            if (solverOptions.debug && doDebugCalc) {
+            if (debug && doDebugCalc) {
               evaluateModel(debugModel, roundNum, w_t_norm, w_diff_norm, cos_w)
             } else {
               // If debug flag isn't on, perform calculations that don't trigger a shuffle
-              val dual = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), solverOptions.lambda)
+              val dual = -SolverUtils.objectiveFunction(debugModel.getWeights(), debugModel.getEll(), lambda)
               val elapsedTime = getElapsedTimeSecs()
 
               val wallTime = elapsedTime - (evaluateModelTimeMillis / 1000.0)
@@ -556,7 +563,7 @@ class DistBCFW[X, Y](
      * Write debug stats
      */
     // Create intermediate directories if necessary
-    val outFile = new java.io.File(solverOptions.debugInfoPath)
+    val outFile = new java.io.File(debugOutPath)
     val outDir = outFile.getAbsoluteFile().getParentFile()
     if (!outDir.exists()) {
       println("Directory %s does not exist. Creating required path.")
@@ -566,7 +573,7 @@ class DistBCFW[X, Y](
     // Dump debug information into a file
     val fw = new FileWriter(outFile)
     // Write the current parameters being used
-    fw.write(solverOptions.toString())
+    fw.write(solverParamsStr)
     fw.write("\n")
 
     // Write spark-specific parameters
@@ -588,7 +595,6 @@ class DistBCFW[X, Y](
   def mapper(partitionInfo: (Int, Int), // (partitionIdx, numPartitions)
              dataIterator: Iterator[(Index, InputDataShard[X, Y])],
              helperFunctions: HelperFunctions[X, Y],
-             solverOptions: SolverOptions[X, Y],
              localModel: StructSVMModel[X, Y],
              localModelWeightedAverage: StructSVMModel[X, Y],
              n: Int,
@@ -609,7 +615,6 @@ class DistBCFW[X, Y](
                             w_i: Vector[Double],
                             ell_i: Double,
                             k: Int): UpdateQuantities = {
-      val lambda = solverOptions.lambda
       val lossFn = helperFunctions.lossFn
       val phi = helperFunctions.featureFn
       val c_i = helperFunctions.classWeights
@@ -623,7 +628,7 @@ class DistBCFW[X, Y](
       val ell_s: Double = (1.0 / n) * loss_i
 
       val gamma: Double =
-        if (solverOptions.doLineSearch) {
+        if (doLineSearch) {
           val thisModel = model
           val gamma_opt = (thisModel.getWeights().t * (w_i - w_s) - ((ell_i - ell_s) * (1.0 / lambda))) /
             ((w_i - w_s).t * (w_i - w_s) + EPS)
@@ -640,8 +645,6 @@ class DistBCFW[X, Y](
     val phi = helperFunctions.featureFn
     val lossFn = helperFunctions.lossFn
     val classWeights = helperFunctions.classWeights
-
-    val lambda = solverOptions.lambda
 
     val (partitionIdx, numPartitions) = partitionInfo
     var k = kAccum(partitionIdx)
@@ -670,7 +673,7 @@ class DistBCFW[X, Y](
       // 2.a) Search for candidates
       val optionalCache_i: Option[BoundedCacheList[Y]] = shard.cache
       val bestCachedCandidateForI: Option[Y] =
-        if (solverOptions.enableOracleCache && optionalCache_i.isDefined) {
+        if (enableOracleCache && optionalCache_i.isDefined) {
           // val fixedGamma: Double = (2.0 * n) / (k + 2.0 * n)
           val CACHE_THRESH: Double = EPS
 
@@ -739,7 +742,7 @@ class DistBCFW[X, Y](
             time({ argmaxCandidates.head }, "argmax-head")
 
           val updatedCache: Option[BoundedCacheList[Y]] =
-            if (solverOptions.enableOracleCache) {
+            if (enableOracleCache) {
 
               val nonTruncatedCache =
                 if (optionalCache_i.isDefined)
@@ -748,7 +751,7 @@ class DistBCFW[X, Y](
                   MutableList[Y]() :+ ystar
 
               // Truncate cache to given size and pack it as an Option
-              Some(nonTruncatedCache.takeRight(solverOptions.oracleCacheSize))
+              Some(nonTruncatedCache.takeRight(oracleCacheSize))
             } else None
 
           (ystar, updatedCache)
