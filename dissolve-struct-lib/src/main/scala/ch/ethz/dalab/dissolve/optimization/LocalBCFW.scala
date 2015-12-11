@@ -45,25 +45,6 @@ class LocalBCFW[X, Y](
     enableOracleCache: Boolean = false,
     oracleCacheSize: Int = 10) extends LocalSolver[X, Y] {
 
-  /*def this(dissolveFunctions: DissolveFunctions[X, Y],
-           numPasses: Int = 200,
-           doLineSearch: Boolean = true,
-           doWeightedAveraging: Boolean = true,
-           timeBudget: Int = Integer.MAX_VALUE, // TODO
-           debug: Boolean = false,
-           debugMultiplier: Int = 100,
-           debugOutPath: String = "debug-%d.csv".format(System.currentTimeMillis()),
-           randSeed: Long = 1,
-           randomSampling: Boolean = false,
-           lambda: Double = 0.01,
-           gapThreshold: Double = 0.1, // TODO
-           gapCheck: Int = 0, // TODO
-           enableOracleCache: Boolean = false,
-           oracleCacheSize: Int = 10) =
-    this(dissolveFunctions,
-      numPasses,
-      doLineSearch)*/
-
   val debugSb: StringBuilder = new StringBuilder()
 
   val maxOracle = dissolveFunctions.oracleFn _
