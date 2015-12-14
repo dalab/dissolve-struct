@@ -88,6 +88,7 @@ class DistBCFW[X, Y](
 
   // Experimental data
   case class RoundEvaluation(roundNum: Int,
+                             passNum: Double,
                              elapsedTime: Double,
                              wallTime: Double,
                              primal: Double,
@@ -103,8 +104,8 @@ class DistBCFW[X, Y](
 
     override def toString(): String = {
 
-      "%d,%f,%f,%s,%s,%s,%f,%f,%f,%f,%s,%s,%s"
-        .format(roundNum, elapsedTime, wallTime, primal.toString(), dual.toString(), dualityGap.toString(),
+      "%d,%f,%f,%f,%s,%s,%s,%f,%f,%f,%f,%s,%s,%s"
+        .format(roundNum, passNum, elapsedTime, wallTime, primal.toString(), dual.toString(), dualityGap.toString(),
           trainError, testError, trainStructHingeLoss, testStructHingeLoss,
           w_t_norm, w_update_norm, cos_w_update)
     }
@@ -141,7 +142,7 @@ class DistBCFW[X, Y](
   var nextDebugRound: Int = 1
 
   val header: String =
-    "round,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos\n"
+    "round,pass,time,wall_time,primal,dual,gap,train_error,test_error,train_loss,test_loss,w_t,w_diff,w_cos\n"
 
   /**
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
@@ -340,7 +341,7 @@ class DistBCFW[X, Y](
       println("[%.3f] WallTime = %.3f, Round = %d, Gap = %s, Primal = %s, Dual = %s, TrainLoss = %f, TestLoss = %f, TrainSHLoss = %f, TestSHLoss = %f"
         .format(elapsedTime, wallTime, roundNum, dualityGap.toString(), primal.toString(), dual.toString(), trainError, testError, trainStructHingeLoss, testStructHingeLoss))
 
-      val roundEval = RoundEvaluation(roundNum, elapsedTime, wallTime, primal, dual, dualityGap,
+      val roundEval = RoundEvaluation(roundNum, roundNum * samplePerRound, elapsedTime, wallTime, primal, dual, dualityGap,
         trainError, testError, trainStructHingeLoss, testStructHingeLoss,
         w_t_norm, w_update_norm, cos_w_update)
 
@@ -558,7 +559,7 @@ class DistBCFW[X, Y](
               val elapsedTime = getElapsedTimeSecs()
 
               val wallTime = elapsedTime - (evaluateModelTimeMillis / 1000.0)
-              RoundEvaluation(roundNum,
+              RoundEvaluation(roundNum, roundNum * samplePerRound,
                 elapsedTime, wallTime, Double.NaN, dual,
                 Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN,
                 w_t_norm, w_diff_norm, cos_w)
