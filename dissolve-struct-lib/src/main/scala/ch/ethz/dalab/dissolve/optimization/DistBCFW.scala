@@ -23,7 +23,7 @@ import ch.ethz.dalab.dissolve.classification.Types.PrimalInfo
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 /**
- * Train a structured SVM using the actual distributed dissolve^struct solver.
+ * Train a structured SVM using the distributed dissolve^struct solver.
  * This uses primal dual Block-Coordinate Frank-Wolfe solver (BCFW), distributed
  * via the CoCoA framework (Communication-Efficient Distributed Dual Coordinate Ascent)
  *
@@ -32,7 +32,6 @@ import ch.ethz.dalab.dissolve.regression.LabeledObject
  */
 class DistBCFW[X, Y](
   dissolveFunctions: DissolveFunctions[X, Y],
-  numPasses: Int = 200, // TODO
   roundLimit: Int = 200,
   doLineSearch: Boolean = true,
   doWeightedAveraging: Boolean = true,
@@ -115,7 +114,6 @@ class DistBCFW[X, Y](
 
     val sb: StringBuilder = new StringBuilder()
 
-    sb ++= "# numPasses=%s\n".format(numPasses)
     sb ++= "# doLineSearch=%s\n".format(doLineSearch)
     sb ++= "# doWeightedAveraging=%s\n".format(doWeightedAveraging)
     sb ++= "# timeBudget=%s\n".format(timeBudget)
@@ -212,10 +210,18 @@ class DistBCFW[X, Y](
     val d: Int = dissolveFunctions.featureFn(samplePoint.pattern, samplePoint.label).size
     // Let the initial model contain zeros for all weights
     // Global model uses Dense Vectors by default
-    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
-      DenseVector.zeros(d), dissolveFunctions, numClasses)
-    var globalModelWeightedAverage: StructSVMModel[X, Y] = new StructSVMModel[X, Y](DenseVector.zeros(d), 0.0,
-      DenseVector.zeros(d), dissolveFunctions, numClasses)
+    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](
+      if (sparse) SparseVector.zeros(d) else DenseVector.zeros(d),
+      0.0,
+      DenseVector.zeros(d),
+      dissolveFunctions,
+      numClasses)
+    var globalModelWeightedAverage: StructSVMModel[X, Y] = new StructSVMModel[X, Y](
+      if (sparse) SparseVector.zeros(d) else DenseVector.zeros(d),
+      0.0,
+      DenseVector.zeros(d),
+      dissolveFunctions,
+      numClasses)
 
     val beta: Double = 1.0
 
@@ -275,8 +281,10 @@ class DistBCFW[X, Y](
      * In case of weighted averaging, start off with an all-zero (wAvg, lAvg)
      */
     var wAvg: Vector[Double] =
-      if (doWeightedAveraging)
-        DenseVector.zeros(d) // TODO Support sparse
+      if (doWeightedAveraging & sparse)
+        SparseVector.zeros(d)
+      else if (doWeightedAveraging & !sparse)
+        DenseVector.zeros(d)
       else null
     var lAvg: Double = 0.0
 
@@ -348,7 +356,7 @@ class DistBCFW[X, Y](
     /**
      * ==== Begin Training rounds ====
      */
-    (0 until roundLimit).toStream
+    (1 to roundLimit).toStream
       .takeWhile {
         roundNum =>
 
@@ -361,7 +369,8 @@ class DistBCFW[X, Y](
 
           val continueExecution = !timeLimitExceeded && !gapSatisfied
 
-          if (debug && (!(continueExecution || (roundNum - 1 % debugMultiplier == 0)) || roundNum == 1)) {
+          // if (debug && (!(continueExecution || (roundNum - 1 % debugMultiplier == 0)) || roundNum == 1)) {
+          if (debug && (!continueExecution || roundNum == 1)) {
             // Force evaluation of model in 2 cases - Before beginning the very first round, and after the last round
             debugSb ++= evaluateModel(getLatestModel(), if (roundNum == 1) 0 else roundNum, Double.NaN, Double.NaN, Double.NaN) + "\n"
           }

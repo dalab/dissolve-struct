@@ -19,7 +19,8 @@ import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
  * @param disablePairwise Disable pairwise interactions between labels. Default = false.
  * @param useBPDecoding Use Belief Propagation from Factorie for decoding. Default = Viterbi decoding.
  */
-class LinearChainCRF(disablePairwise: Boolean = false,
+class LinearChainCRF(numStates: Int,
+                     disablePairwise: Boolean = false,
                      useBPDecoding: Boolean = false) extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
   val ENABLE_PERF_METRICS = false
@@ -42,7 +43,6 @@ class LinearChainCRF(disablePairwise: Boolean = false,
    */
   def featureFn(xM: Matrix[Double], y: Vector[Double]): Vector[Double] = {
     val x = xM.toDenseMatrix
-    val numStates = 26
     val numDims = x.rows // 129 in case of Chain OCR
     val numVars = x.cols
     // First term for unaries, Second term for first and last letter biases, Third term for Pairwise features
@@ -217,7 +217,6 @@ class LinearChainCRF(disablePairwise: Boolean = false,
    */
   def oracleFnWithDecode(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double],
                          decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
-    val numStates = 26
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
     val numVars = xi.cols // The length of word, say 9

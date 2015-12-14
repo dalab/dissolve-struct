@@ -71,7 +71,7 @@ object ChainTestAdapter {
   /**
    * Dissolve Functions
    */
-  val dissolveFunctions: DissolveFunctions[X, Y] = new LinearChainCRF()
+  val dissolveFunctions: DissolveFunctions[X, Y] = new LinearChainCRF(26)
   /**
    * Some Data
    */
