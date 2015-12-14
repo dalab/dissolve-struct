@@ -35,6 +35,9 @@ class DistBCFW[X, Y](
   roundLimit: Int = 200,
   doLineSearch: Boolean = true,
   doWeightedAveraging: Boolean = true,
+  useCocoaPlus: Boolean = true, // TODO
+  beta: Double = 1.0,
+  miniBatchUpdates: Boolean = false, // TODO
   timeBudget: Int = Integer.MAX_VALUE,
   debug: Boolean = false,
   debugMultiplier: Int = 100,
@@ -224,8 +227,6 @@ class DistBCFW[X, Y](
       dissolveFunctions,
       numClasses)
 
-    val beta: Double = 1.0
-
     val helperFunctions: HelperFunctions[X, Y] = HelperFunctions(dissolveFunctions.featureFn,
       dissolveFunctions.lossFn,
       dissolveFunctions.oracleFn,
@@ -301,6 +302,22 @@ class DistBCFW[X, Y](
       else
         globalModel.clone()
     }
+
+    /**
+     * The aggregation parameter defines how the updates in duals are merged.
+     *
+     * For CoCoA (jaggi2014communication), we average the updates from each worker.
+     * Each update contributes to fraction (\beta / K) of the final update. By default, beta = 1.0.
+     *
+     * For CoCoA+ (ma2015adding), we sum the updates from each worker.
+     * Each update contributes to fraction \beta of the final update. By default, beta = 1.0.
+     * The aggregation parameter in the paper is represented by \gamma.
+     */
+    val aggregationParameter: Double =
+      if (useCocoaPlus)
+        beta
+      else
+        beta / numPartitions
 
     def getLatestGap(): Double = {
       val debugModel: StructSVMModel[X, Y] = getLatestModel()
@@ -468,13 +485,13 @@ class DistBCFW[X, Y](
           kAccum += deltaK
 
           val newGlobalModel = globalModel.clone()
-          newGlobalModel.setWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * (beta / numPartitions))
-          newGlobalModel.setEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * (beta / numPartitions))
+          newGlobalModel.setWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * aggregationParameter)
+          newGlobalModel.setEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * aggregationParameter)
 
           // Weighted Average model
           val newGlobalModelWAvg = globalModelWeightedAverage.clone()
-          newGlobalModelWAvg.setWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * (beta / numPartitions))
-          newGlobalModelWAvg.setEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * (beta / numPartitions))
+          newGlobalModelWAvg.setWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * aggregationParameter)
+          newGlobalModelWAvg.setEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * aggregationParameter)
 
           val w_t = globalModel.getWeights()
           val w_tp1 = newGlobalModel.getWeights()
@@ -509,8 +526,8 @@ class DistBCFW[X, Y](
             .leftOuterJoin(newPrimalsRDD)
             .mapValues {
               case ((prevW, prevEll), Some((newW, newEll))) =>
-                (prevW + (newW * (beta / numPartitions)),
-                  prevEll + (newEll * (beta / numPartitions)))
+                (prevW + (newW * aggregationParameter),
+                  prevEll + (newEll * aggregationParameter))
               case ((prevW, prevEll), None) => (prevW, prevEll)
             }.cache()
 
