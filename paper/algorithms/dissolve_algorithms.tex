@@ -318,22 +318,6 @@
 		\text{Solve} $\argmaxpred \gets \argmax_{\dy \in \outputspacei} \maxoraclei(\dy;\ \weightv^{(r-1)})$
 		
 		\text{TODO}
-		
-%		$\weightvs \gets  \frac{1}{\lambda n} \featuremapdiffvi(\argmaxpredi)$
-%			\text{and}
-%			$\ells \gets \frac{1}{n} L_i(\argmaxpredi)$
-%			
-%		$\stepsize \gets
-%			\frac{\lambda \left( \weightvi^{(r-1)} - \weightvs \right)^T \weightvi^{(r-1)}\ -\ \elli^{(r-1)}\ +\ \ells}{\lambda \norm{\weightvi^{(r-1)} - \weightvs}^2}$ \text{and clip to} $[0, 1]$ \label{alg:gamma}
-%			
-%		\text{Update} $\weightvi^{(r)} \gets (1 - \stepsize) \weightvi^{(r-1)}\ +\ \stepsize \weightvs$
-%		
-%		$\quad$ \text{and } $\elli^{(r)} \gets (1 - \stepsize) \elli^{(r-1)}\ +\ \stepsize \ells$
-%		
-%		\text{Update} $\weightv^{(r)} \gets \weightv^{(r-1)}\ +\ \weightvi^{(r)}\ -\ \weightvi^{(r-1)}$
-%		
-%		$\quad$ \text{and } $\ell^{(r)} \gets \ell^{(r-1)}\ +\ \elli^{(r)}\ -\ \elli^{(r-1)}$
-%		%
 	}
 	
 	$\Delta\weightv_{[k]} \gets \weightv_{[k]}^{(R)} - \weightv_{[k]}$
