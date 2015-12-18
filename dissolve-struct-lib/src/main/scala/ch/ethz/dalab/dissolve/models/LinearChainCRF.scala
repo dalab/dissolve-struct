@@ -21,7 +21,8 @@ import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
  */
 class LinearChainCRF(numStates: Int,
                      disablePairwise: Boolean = false,
-                     useBPDecoding: Boolean = false) extends DissolveFunctions[Matrix[Double], Vector[Double]] {
+                     useBPDecoding: Boolean = false,
+                     normalizedHammingLoss: Boolean = true) extends DissolveFunctions[Matrix[Double], Vector[Double]] {
 
   val ENABLE_PERF_METRICS = false
 
@@ -78,8 +79,15 @@ class LinearChainCRF(numStates: Int,
   /**
    * Return Normalized Hamming distance
    */
-  def lossFn(yTruth: Vector[Double], yPredict: Vector[Double]): Double =
-    sum((yTruth :== yPredict).map(x => if (x) 0 else 1)) / yTruth.size.toDouble
+  def lossFn(yTruth: Vector[Double], yPredict: Vector[Double]): Double = {
+    val sumIndivLoss =
+      sum((yTruth :== yPredict).map(x => if (x) 0 else 1)).toDouble
+
+    if (normalizedHammingLoss)
+      sumIndivLoss / yTruth.size
+    else
+      sumIndivLoss
+  }
 
   /**
    * Replicate the functionality of Matlab's max function
@@ -238,7 +246,8 @@ class LinearChainCRF(numStates: Int,
 
     // Add loss-augmentation to the score (normalized Hamming distances used for loss)
     if (yi != null) { // loss augmentation is only done if a label yi is given. 
-      val l: Int = yi.size
+      val l: Int =
+        if (normalizedHammingLoss) yi.size else 1
       for (i <- 0 until numVars) {
         thetaUnary(::, i) := thetaUnary(::, i) + 1.0 / l
         val idx = yi(i).toInt // Loss augmentation
