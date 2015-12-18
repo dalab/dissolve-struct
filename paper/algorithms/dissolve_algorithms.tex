@@ -1,0 +1,379 @@
+\documentclass[11pt]{amsart}
+\usepackage{geometry}                % See geometry.pdf to learn the layout options. There are lots.
+\geometry{letterpaper}                   % ... or a4paper or a5paper or ... 
+%\geometry{landscape}                % Activate for for rotated page geometry
+%\usepackage[parfill]{parskip}    % Activate to begin paragraphs with an empty line rather than an indent
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{epstopdf}
+\DeclareGraphicsRule{.tif}{png}{.png}{`convert #1 `dirname #1`/`basename #1 .tif`.png}
+
+%% Some more packages that you may want to use.  Have a look at the
+%% file, and consult the package docs for each.
+\input{extrapackages}
+
+%% Helpful macros.
+\input{macrosetup}
+
+\title{\dstruct Algorithm Handbook}
+\author{Tribhuvanesh Orekondy}
+%\date{}                                           % Activate to display a given date or no date
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+
+\section{Introduction}
+
+\section{Stochastic Gradient Descent (SGD)}
+
+%======== SGD ========
+\begin{algorithm}[H]
+\label{alg:sgd}
+\caption{SGD: Stochastic Gradient Descent}
+\DontPrintSemicolon
+\SetKwInput{Init}{Initialize}
+\SetKwFor{Forloop}{for}{}{end}
+\SetAlgoLined
+\KwIn{Data $\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i=1}^{n}$}
+%\KwData{Local $\left\{ \left( \dyi, \dyi \right) \right\}_{m=1}^{M_k}$} %
+\Init{$\weightv^{(0)} \gets \0$}
+	\Forloop{$t = 1 \dots T$}{
+		\text{Choose} $i \in \{1,2,\dots,n\}$ \text{uniformly at random} \\  %
+		
+		\text{Solve} $\ \argmaxpredi \gets \argmax_{\dy \in \outputspacei} \maxoraclei(\dy;\ \weightv^{(t-1)})$ \tcp*{Max Oracle}
+		
+		\text{Let} $p \gets \lambda \weightv^{(t-1)} - \featuremapdiffvi(\argmaxpredi)$ \tcp*{Compute gradient}
+		
+		\text{Update} $\weightv^{(t)} \gets \weightv^{(t-1)}\ -\ \gamma_t p$
+	}
+\KwOut{$\weightv^{(T)}$ }
+\end{algorithm}
+
+
+
+
+\section{Mini-Batch Stochastic Gradient Descent (MB-SGD)}
+
+%======== SGD ========
+\begin{algorithm}[H]
+\label{alg:mb_sgd}
+\caption{MB-SGD: Mini-batch Stochastic Gradient Descent}
+\DontPrintSemicolon
+\SetKwInput{Init}{Initialize}
+\SetKwFor{Forloop}{for}{}{end}
+\SetAlgoLined
+\KwIn{Data $\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i=1}^{n}$}
+%\KwData{Local $\left\{ \left( \dyi, \dyi \right) \right\}_{m=1}^{M_k}$} %
+\Init{$\weightv^{(0)} \gets \0$}
+	\Forloop{$t = 1 \dots T$}{
+	
+		\Forloop{$k = 1 \dots K \text{, in parallel}$}{
+		
+			\Forloop{$i \in [k]$}{
+				\text{Solve} $\ \argmaxpredi \gets \argmax_{\dy \in \outputspacei} \maxoraclei(\dy;\ \weightv^{(t-1)})$ \tcp*{Max Oracle}
+			}
+    		
+    		\text{Let} $p \gets \lambda \weightv^{(t-1)} - \sum_{i \in [k]}\featuremapdiffvi(\argmaxpredi)$
+    		
+    		\text{Communicate} $\Delta\weightv_k \gets \gamma_t p$
+		}
+		
+		\text{Update} $\weightv^{(t)} \gets \weightv^{(t-1)} - \frac{\beta}{K} \sum_{k=1}^{K} \Delta\weightv_k$ \tcp*{Merge updates}
+	}
+\KwOut{$\weightv^{(T)}$ }
+\end{algorithm}
+
+
+
+
+
+\section{Block-Coordinate Frank-Wolfe (BCFW)}
+
+%======== BCFW ========
+\begin{algorithm}[H]
+\label{alg:bcfw}
+\caption{\bcfw: Block-Coordinate Frank-Wolfe algorithm for Structured SVM}
+\SetKwInput{Init}{Initialize}
+\SetKwFor{Forloop}{for}{}{end}
+\SetAlgoLined
+\KwIn{Data $\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i=1}^{n}$}
+%\KwData{Local $\left\{ \left( \dyi, \dyi \right) \right\}_{m=1}^{M_k}$} %
+\Init{$\weightv^{(0)} \gets \0,\ \weightvi^{(0)} \gets \0,\ \ell^{(0)} \gets 0,\ \elli^{(0)} \gets 0$}
+	\Forloop{$t = 1 \dots T$}{
+		\text{Choose} $i \in \{1,2,\dots,n\}$ \text{uniformly at random} \\  %
+		
+		\text{Solve} $\ \argmaxpredi \gets \argmax_{\dy \in \outputspacei} \maxoraclei(\dy;\ \weightv^{(t)})$ \\
+		
+		\text{Let} $\ \weightvs \gets  \frac{1}{\lambda n} \featuremapdiffvi(\argmaxpredi)$
+			\text{and}
+			$\ells \gets \frac{1}{M} \losom(\argmaxpredi)$ \\
+			
+		\text{Let} $\ \stepsize \gets
+			\frac{\lambda \left( \weightvi^{(t-1)} - \weightvs \right)^T \weightv^{(t-1)}\ -\ \elli^{(t-1)}\ +\ \ells}{\lambda \norm{\weightvi^{(t-1)} - \weightvs}^2}$ \text{and clip to} $[0, 1]$ \label{alg:gamma} \\
+			
+		\text{Update} $\weightvi^{(t)} \gets (1 - \stepsize) \weightvi^{(t-1)}\ +\ \stepsize \weightvs$ \\
+		$\quad$ \text{and } $\elli^{(t)} \gets (1 - \stepsize) \elli^{(t-1)}\ +\ \stepsize \ells$ \\
+		
+		\text{Update} $\weightv^{(t)} \gets \weightv^{(t-1)}\ +\ \weightvi^{(t)}\ -\ \weightvi^{(t-1)}$ \\
+		$\quad$ \text{and } $\ell^{(t)} \gets \ell^{(t-1)}\ +\ \elli^{(t)}\ -\ \elli^{(t-1)}$ \\
+		%
+	}
+\KwOut{$\weightv^{(T)}$ \text{and} $\ell^{(T)}$ }
+\end{algorithm}
+
+\newpage
+
+\section{CoCoA Block-Coordinate Frank-Wolfe (CoCoA-BCFW)}
+
+%======== LocalBCFW ========
+\SetAlgoSkip{}
+\begin{procedureCustom}%
+\linespread{1.2}\selectfont
+\caption{\localBCFW: BCFW iterations on machine $k$}
+\label{proc:localBCFW}
+\SetKwInput{Init}{Initialize}
+\SetKwFor{Forloop}{for}{}{end}
+\SetAlgoLined
+\KwIn{$f \in (0, 1],\ \weightv_{[k]} \in \R^{n_k \times d}$ and $\weightv\in\R^d$ consistent with other coordinate blocks of $\dualalpha$ s.t. $\weightv = A\dualalpha$}
+\KwData{Local $\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i \in n_k}$} %
+\Init{$\weightv^{(0)} \gets \weightv,\ \weightv_{[k]}^{(0)} \gets \weightv_{[k]} \in \R^{n_k \times d}$}
+	\Forloop{$r = 1, 2, \dots ,R$}{
+		\text{choose} $i \in [k]$ \text{uniformly at random}
+		
+		\text{Solve} $\argmaxpred \gets \argmax_{\dy \in \outputspacei} \maxoraclei(\dy;\ \weightv^{(r-1)})$
+		
+		$\weightvs \gets  \frac{1}{\lambda n} \featuremapdiffvi(\argmaxpredi)$
+			\text{and}
+			$\ells \gets \frac{1}{n} L_i(\argmaxpredi)$
+			
+		$\stepsize \gets
+			\frac{\lambda \left( \weightvi^{(r-1)} - \weightvs \right)^T \weightvi^{(r-1)}\ -\ \elli^{(r-1)}\ +\ \ells}{\lambda \norm{\weightvi^{(r-1)} - \weightvs}^2}$ \text{and clip to} $[0, 1]$ \label{alg:gamma}
+			
+		\text{Update} $\weightvi^{(r)} \gets (1 - \stepsize) \weightvi^{(r-1)}\ +\ \stepsize \weightvs$
+		
+		$\quad$ \text{and } $\elli^{(r)} \gets (1 - \stepsize) \elli^{(r-1)}\ +\ \stepsize \ells$
+		
+		\text{Update} $\weightv^{(r)} \gets \weightv^{(r-1)}\ +\ \weightvi^{(r)}\ -\ \weightvi^{(r-1)}$
+		
+		$\quad$ \text{and } $\ell^{(r)} \gets \ell^{(r-1)}\ +\ \elli^{(r)}\ -\ \elli^{(r-1)}$
+		%
+	}
+	
+	$\Delta\weightv_{[k]} \gets \weightv_{[k]}^{(R)} - \weightv_{[k]}$
+	\text{ and }
+	$\Delta\ell_{[k]} \gets \ell_{[k]}^{(R)} - \ell_{[k]}$
+	
+	$\Delta\weightv_k \gets \weightv^{(R)} - \weightv$
+	\text{ and }
+	$\Delta\ell_k \gets \ell^{(R)} - \ell$
+	
+\KwOut{$\Delta\weightv_{[k]},\ \Delta\weightv,\ \Delta\ell_{[k]},\ \Delta\ell$ }
+\end{procedureCustom}
+
+%======== DBCFW ========
+\begin{algorithm}[H]
+\label{alg:codbcfw}
+\caption{\algname: Communication-Efficient Distributed BCFW}
+\SetKwInput{Init}{Initialize}
+\SetKwFor{Forloop}{for}{}{end}
+\SetAlgoLined
+\KwIn{$T \ge 1, $ scaling parameter $1\le \beta_\nworkers \le \nworkers$ (default: $\beta_\nworkers:=1$). }
+\KwData{$\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i=1}^{n}$ distributed over $\nworkers$ machines}
+%\Init{$\dualalpha_{[k]}^{(0)} \gets \0$ for all machines $k$, and $\weightv^{(0)} \gets \0$}
+\Init{$\weightvblock_{(0)} \gets \0,\ \ellblock_{(0)} \gets 0$ for all machines $\block$ and $\weightv_{(0)} \gets \0,\ \ell_{(0)} \gets 0$}
+\Forloop{ $t = 1,2, \dots ,T$}{
+	%
+	\Forloop{{\bfseries all machines $k = 1, 2, \dots ,K$ in parallel}}{
+	
+	$(\Delta\weightv_{[k]},\ \Delta\weightv_{k}) \gets \localBCFW(\weightv_{[k]}^{(t-1)},\ \weightv^{(t-1)})$
+	
+	$\weightv_{[k]}^{(t)} \gets \weightv_{[k]}^{(t-1)} + \frac{\beta_K}{K} \Delta\weightv_{[k]}$ \label{alg:local_weight_reduce}
+	
+	$\ell_{[k]}^{(t)} \gets \ell_{[k]}^{(t-1)} + \frac{\beta_K}{K} \Delta\ell_{[k]}$ \label{alg:local_ell_reduce}
+
+	
+	}
+	
+    \text{reduce} $\weightv^{(t)} \gets \weightv^{(t-1)} + \frac{\beta_K}{K} \sum_{k=1}^K \Delta \weightv^{k}$ \label{alg:weight_reduce}
+    
+    $\quad$ $\text{and}$ $\ell^{(t)} \gets \ell^{(t-1)} + \frac{\beta_K}{K} \sum_{k=1}^K \Delta \ell^{k}$
+}
+%
+\end{algorithm}
+
+\newpage
+
+
+
+
+
+
+\section{Mini-Batch Block-Coordinate Frank-Wolfe (MB-BCFW)}
+
+%======== MB-LocalBCFW ========
+\SetAlgoSkip{}
+\begin{procedureCustom}%
+\linespread{1.2}\selectfont
+\caption{MB-\localBCFW: Mini-Batch \bcfw iterations on machine $k$}
+\label{proc:localBCFW_mb}
+\SetKwInput{Init}{Initialize}
+\SetKwFor{Forloop}{for}{}{end}
+\SetAlgoLined
+\KwIn{$f \in (0, 1],\ \weightv_{[k]} \in \R^{n_k \times d}$ and $\weightv\in\R^d$ consistent with other coordinate blocks of $\dualalpha$ s.t. $\weightv = A\dualalpha$}
+\KwData{Local $\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i \in n_k}$} %
+\Init{$\weightv^{(0)} \gets \weightv,\ \weightv_{[k]}^{(0)} \gets \weightv_{[k]} \in \R^{n_k \times d}, \Delta\weightv \gets \0 \in \R^d, \ell \gets 0$}
+	\Forloop{$r = 1, 2, \dots ,R$}{
+		\text{choose} $i \in [k]$ \text{uniformly at random}
+		
+		\text{Solve} $\argmaxpred \gets \argmax_{\dy \in \outputspacei} \maxoraclei(\dy;\ \weightv)$
+		
+		$\weightvs \gets  \frac{1}{\lambda n} \featuremapdiffvi(\argmaxpredi)$
+			\text{and}
+			$\ells \gets \frac{1}{n} L_i(\argmaxpredi)$
+			
+		$\stepsize \gets
+			\frac{\lambda \left( \weightvi^{(r-1)} - \weightvs \right)^T \weightv\ -\ \elli^{(r-1)}\ +\ \ells}{\lambda \norm{\weightvi^{(r-1)} - \weightvs}^2}$ \text{and clip to} $[0, 1]$ \label{alg:gamma}
+			
+		\text{Update} $\weightvi^{(r)} \gets (1 - \stepsize) \weightvi^{(r-1)}\ +\ \stepsize \weightvs$
+		
+		$\quad$ \text{and } $\elli^{(r)} \gets (1 - \stepsize) \elli^{(r-1)}\ +\ \stepsize \ells$
+		
+		% \text{Update} $\weightv^{(r)} \gets \weightv\ +\ \weightvi^{(r)}\ -\ \weightvi^{(r-1)}$
+		
+		% $\quad$ \text{and } $\ell^{(r)} \gets \ell\ +\ \elli^{(r)}\ -\ \elli^{(r-1)}$
+		
+		\text{Update} $\Delta\weightv \gets \Delta\weightv\ +\ \weightvi^{(r)}\ -\ \weightvi^{(r-1)}$
+		
+		$\quad$ \text{and } $\Delta\ell \gets \Delta\ell\ +\ \elli^{(r)}\ -\ \elli^{(r-1)}$
+		%
+	}
+	
+	$\Delta\weightv_{[k]} \gets \weightv_{[k]}^{(R)} - \weightv_{[k]}$
+	\text{ and }
+	$\Delta\ell_{[k]} \gets \ell_{[k]}^{(R)} - \ell_{[k]}$
+	
+	
+	$\Delta\weightv_k \gets \Delta\weightv$
+	\text{ and }
+	$\Delta\ell_k \gets \Delta\ell$
+	
+\KwOut{$\Delta\weightv_{[k]},\ \Delta\weightv,\ \Delta\ell_{[k]},\ \Delta\ell$ }
+\end{procedureCustom}
+
+%======== MB-DBCFW ========
+\begin{algorithm}[H]
+\label{alg:codbcfw_mb}
+\caption{MB-\bcfw: Mini-Batch Distributed \bcfw on Master}
+\SetKwInput{Init}{Initialize}
+\SetKwFor{Forloop}{for}{}{end}
+\SetAlgoLined
+\KwIn{$T \ge 1, $ scaling parameter $1\le \beta_\nworkers \le \nworkers$ (default: $\beta_\nworkers:=1$). }
+\KwData{$\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i=1}^{n}$ distributed over $\nworkers$ machines}
+%\Init{$\dualalpha_{[k]}^{(0)} \gets \0$ for all machines $k$, and $\weightv^{(0)} \gets \0$}
+\Init{$\weightvblock_{(0)} \gets \0,\ \ellblock_{(0)} \gets 0$ for all machines $\block$ and $\weightv_{(0)} \gets \0,\ \ell_{(0)} \gets 0$}
+\Forloop{ $t = 1,2, \dots ,T$}{
+	%
+	\Forloop{{\bfseries all machines $k = 1, 2, \dots ,K$ in parallel}}{
+	
+	$(\Delta\weightv_{[k]},\ \Delta\weightv_{k}) \gets \text{MB-}\localBCFW(\weightv_{[k]}^{(t-1)},\ \weightv^{(t-1)})$
+	
+	$\weightv_{[k]}^{(t)} \gets \weightv_{[k]}^{(t-1)} + \frac{\beta_K}{K} \Delta\weightv_{[k]}$ \label{alg:local_weight_reduce}
+	
+	$\ell_{[k]}^{(t)} \gets \ell_{[k]}^{(t-1)} + \frac{\beta_K}{K} \Delta\ell_{[k]}$ \label{alg:local_ell_reduce}
+	
+	}
+	
+    \text{reduce} $\weightv^{(t)} \gets \weightv^{(t-1)} + \frac{\beta_K}{K} \sum_{k=1}^K \Delta \weightv^{k}$ \label{alg:weight_reduce}
+    
+    $\quad$ $\text{and}$ $\ell^{(t)} \gets \ell^{(t-1)} + \frac{\beta_K}{K} \sum_{k=1}^K \Delta \ell^{k}$
+}
+%
+\end{algorithm}
+
+
+
+
+
+\newpage
+
+\section{\cocoap \bcfw}
+
+%======== LocalBCFW ========
+%\SetAlgoSkip{}
+%\begin{procedureCustom}%
+%\linespread{1.2}\selectfont
+%\caption{\cocoap-\localBCFW: BCFW iterations on machine $k$}
+%\label{proc:localBCFW}
+%\SetKwInput{Init}{Initialize}
+%\SetKwFor{Forloop}{for}{}{end}
+%\SetAlgoLined
+%\KwIn{$f \in (0, 1],\ \weightv_{[k]} \in \R^{n_k \times d}$ and $\weightv\in\R^d$ consistent with other coordinate blocks of $\dualalpha$ s.t. $\weightv = A\dualalpha$}
+%\KwData{Local $\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i \in n_k}$} %
+%\Init{$\weightv^{(0)} \gets \weightv,\ \weightv_{[k]}^{(0)} \gets \weightv_{[k]} \in \R^{n_k \times d}$}
+%	\Forloop{$r = 1, 2, \dots ,R$}{
+%		\text{choose} $i \in [k]$ \text{uniformly at random}
+%		
+%		\text{Solve} $\argmaxpred \gets \argmax_{\dy \in \outputspacei} \maxoraclei(\dy;\ \weightv^{(r-1)})$
+%		
+%		$\weightvs \gets  \frac{1}{\lambda n} \featuremapdiffvi(\argmaxpredi)$
+%			\text{and}
+%			$\ells \gets \frac{1}{n} L_i(\argmaxpredi)$
+%			
+%		$\stepsize \gets
+%			\frac{\lambda \left( \weightvi^{(r-1)} - \weightvs \right)^T \weightvi^{(r-1)}\ -\ \elli^{(r-1)}\ +\ \ells}{\lambda \norm{\weightvi^{(r-1)} - \weightvs}^2}$ \text{and clip to} $[0, 1]$ \label{alg:gamma}
+%			
+%		\text{Update} $\weightvi^{(r)} \gets (1 - \stepsize) \weightvi^{(r-1)}\ +\ \stepsize \weightvs$
+%		
+%		$\quad$ \text{and } $\elli^{(r)} \gets (1 - \stepsize) \elli^{(r-1)}\ +\ \stepsize \ells$
+%		
+%		\text{Update} $\weightv^{(r)} \gets \weightv^{(r-1)}\ +\ \weightvi^{(r)}\ -\ \weightvi^{(r-1)}$
+%		
+%		$\quad$ \text{and } $\ell^{(r)} \gets \ell^{(r-1)}\ +\ \elli^{(r)}\ -\ \elli^{(r-1)}$
+%		%
+%	}
+%	
+%	$\Delta\weightv_{[k]} \gets \weightv_{[k]}^{(R)} - \weightv_{[k]}$
+%	\text{ and }
+%	$\Delta\ell_{[k]} \gets \ell_{[k]}^{(R)} - \ell_{[k]}$
+%	
+%	$\Delta\weightv_k \gets \weightv^{(R)} - \weightv$
+%	\text{ and }
+%	$\Delta\ell_k \gets \ell^{(R)} - \ell$
+%	
+%\KwOut{$\Delta\weightv_{[k]},\ \Delta\weightv,\ \Delta\ell_{[k]},\ \Delta\ell$ }
+%\end{procedureCustom}
+
+%======== DBCFW ========
+\begin{algorithm}[H]
+\label{alg:codbcfw}
+\caption{\cocoap-\bcfw: Communication-Efficient Distributed BCFW}
+\SetKwInput{Init}{Initialize}
+\SetKwFor{Forloop}{for}{}{end}
+\SetAlgoLined
+\KwIn{$T \ge 1, $ aggregation parameter $0\le \beta_\nworkers \le 1$ (default: $\beta_\nworkers:=1$). }
+\KwData{$\dataspace = \left\{ \left( \dxi, \dyi \right) \right\}_{i=1}^{n}$ distributed over $\nworkers$ machines}
+%\Init{$\dualalpha_{[k]}^{(0)} \gets \0$ for all machines $k$, and $\weightv^{(0)} \gets \0$}
+\Init{$\weightvblock_{(0)} \gets \0,\ \ellblock_{(0)} \gets 0$ for all machines $\block$ and $\weightv_{(0)} \gets \0,\ \ell_{(0)} \gets 0$}
+\Forloop{ $t = 1,2, \dots ,T$}{
+	%
+	\Forloop{{\bfseries all machines $k = 1, 2, \dots ,K$ in parallel}}{
+	
+	$(\Delta\weightv_{[k]},\ \Delta\weightv_{k}) \gets \localBCFW(\weightv_{[k]}^{(t-1)},\ \weightv^{(t-1)})$
+	
+	$\weightv_{[k]}^{(t)} \gets \weightv_{[k]}^{(t-1)} + {\beta_K} \Delta\weightv_{[k]}$ \label{alg:local_weight_reduce}
+	
+	$\ell_{[k]}^{(t)} \gets \ell_{[k]}^{(t-1)} + {\beta_K} \Delta\ell_{[k]}$ \label{alg:local_ell_reduce}
+
+	
+	}
+	
+    \text{reduce} $\weightv^{(t)} \gets \weightv^{(t-1)} + {\beta_K} \sum_{k=1}^K \Delta \weightv^{k}$ \label{alg:weight_reduce}
+    
+    $\quad$ $\text{and}$ $\ell^{(t)} \gets \ell^{(t-1)} + {\beta_K} \sum_{k=1}^K \Delta \ell^{k}$
+}
+%
+\end{algorithm}
+
+\end{document}  

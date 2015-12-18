@@ -1,0 +1,124 @@
+%% See the TeXed file for more explanations
+
+%% [OPT] Multi-rowed cells in tabulars
+%\usepackage{multirow}
+
+%% [REC] Intelligent cross reference package. This allows for nice
+%% combined references that include the reference and a hint to where
+%% to look for it.
+\usepackage{varioref}
+
+%% [OPT] Easily changeable quotes with \enquote{Text}
+%\usepackage[german=swiss]{csquotes}
+
+%% [REC] Format dates and time depending on locale
+\usepackage{datetime}
+
+%% [OPT] Provides a \cancel{} command to stroke through mathematics.
+%\usepackage{cancel}
+
+%% [NEED] This allows for additional typesetting tools in mathmode.
+%% See its excellent documentation.
+\usepackage{mathtools}
+
+%% [ADV] Conditional commands
+%\usepackage{ifthen}
+
+%% [OPT] Manual large braces or other delimiters.
+%\usepackage{bigdelim, bigstrut}
+
+%% [REC] Alternate vector arrows. Use the command \vv{} to get scaled
+%% vector arrows.
+\usepackage[h]{esvect}
+
+%% [NEED] Some extensions to tabulars and array environments.
+\usepackage{array}
+
+%% [OPT] Postscript support via pstricks graphics package. Very
+%% diverse applications.
+%\usepackage{pstricks,pst-all}
+
+%% [?] This seems to allow us to define some additional counters.
+%\usepackage{etex}
+
+%% [ADV] XY-Pic to typeset some matrix-style graphics
+%\usepackage[all]{xy}
+
+%% [OPT] This is needed to generate an index at the end of the
+%% document.
+%\usepackage{makeidx}
+
+%% [OPT] Fancy package for source code listings.  The template text
+%% needs it for some LaTeX snippets; remove/adapt the \lstset when you
+%% remove the template content.
+\usepackage{listings}
+\lstset{language=TeX,basicstyle={\normalfont\ttfamily}}
+
+%% [REC] Fancy character protrusion.  Must be loaded after all fonts.
+\usepackage[activate]{pdfcprot}
+
+%% [REC] Nicer tables.  Read the excellent documentation.
+\usepackage{booktabs}
+\usepackage{multirow}
+
+%%
+%% Packages added by OT
+%%
+\usepackage{bm} % Bold
+\usepackage{bbm} % Bold for Indicator function
+\usepackage{todonotes} % TODO tags
+\setlength{\marginparwidth}{1.5cm}
+
+\usepackage{thmtools} % List of theorems, questions, etc
+
+\usepackage[ruled, vlined, linesnumbered]{algorithm2e} % Algorithms
+% Start counter from 1
+%\setcounter{algocf}{1}
+%% Procedures
+\newcounter{procCf}
+\newenvironment{procedureCustom}
+  {\refstepcounter{procCf}%
+    \renewcommand*{\algorithmcfname}{Procedure}%
+    \begin{algorithm}\renewcommand\thealgocf{\Alph{procCf}}}
+  {\end{algorithm}\addtocounter{algocf}{-1}}
+\newcommand\mycommfont[1]{\footnotesize\ttfamily\textcolor{blue}{#1}}
+\SetCommentSty{mycommfont}
+
+% Figures and Subfigures
+\usepackage{caption}
+\usepackage{subcaption}
+
+% Code blocks
+\usepackage{listings}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    % basicstyle=\footnotesize,
+    basicstyle=\ttfamily\small,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+% Reference multiple things
+% \usepackage{cleveref}
+
+% Inline lists
+\usepackage[inline]{enumitem}
+
+%\usepackage{natbib}

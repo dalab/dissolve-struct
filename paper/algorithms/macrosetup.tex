@@ -1,0 +1,311 @@
+%!TEX root =  dissolve_algorithms.tex
+%% Custom commands
+%% ===============
+
+%% dissolve algorithms
+\newcommand{\dxi}{\dx_i} % Representing example x(m)
+\newcommand{\dyi}{\dy_i} % Representing example x(m)
+\newcommand{\weightvi}{\weightv_i}
+\newcommand{\elli}{\ell_i}
+\newcommand{\argmaxpredi}{{\hat{\dy}}_i}
+\newcommand{\outputspacei}{\outputspace_i}
+\newcommand{\maxoraclei}{\maxoracle_i}
+\newcommand{\featuremapdiffvi}{\featuremapdiffv_i}
+
+%% Text stuff
+\newcommand{\dstruct}{dissolve\textsuperscript{struct} }
+
+%% Special characters for number sets, e.g. real or complex numbers.
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\R}{\mathbb{R}}
+
+% Independence symbol
+\newcommand\independent{\protect\mathpalette{\protect\independenT}{\perp}}
+\def\independenT#1#2{\mathrel{\rlap{$#1#2$}\mkern2mu{#1#2}}}
+
+% Indicator function
+\newcommand{\indicator}{\mathbbm{1}}
+
+%% Special characters for Output spaces
+\newcommand{\mcC}{\mathcal{C}} % Labeled Data
+\newcommand{\mcD}{\mathcal{D}} % Labeled Data
+\newcommand{\mcE}{\mathcal{E}} % Edges
+\newcommand{\mcF}{\mathcal{F}} % Factors
+\newcommand{\mcG}{\mathcal{G}} % Graph
+\newcommand{\mcP}{\mathcal{P}} % Pixels
+\newcommand{\mcV}{\mathcal{V}} % Vertices
+\newcommand{\mcX}{\mathcal{X}} % Input
+\newcommand{\mcY}{\mathcal{Y}} % Output
+
+%% Aliases for the above
+\newcommand{\cachespace}{\mcC}
+\newcommand{\cachespacem}{\dptm{\mcC}}
+\newcommand{\dataspace}{\mcD}
+\newcommand{\factorspace}{\mcF}
+\newcommand{\pixelspace}{\mcP}
+\newcommand{\inputspace}{\mcX}
+\newcommand{\outputspace}{\mcY}
+\newcommand{\outputspacea}{\sapp{\outputspace}}
+\newcommand{\outputspacep}{\outputspace_\pixelspace}
+\newcommand{\outputspacem}{\dptm{\outputspace}}
+\newcommand{\outputspaceml}{\dptm{\outputspace_\level}}
+\newcommand{\outputspaceal}{\sapp{\outputspace}_\level}
+\newcommand{\outputspacemal}{\dptm{\sapp{\outputspace}_\level}}
+
+\newcommand{\fg}{\mcF}
+\newcommand{\fgv}{\mcV_{\mcF}}
+\newcommand{\fgf}{\mcC_{\mcF}}
+\newcommand{\fge}{\mcE_{\mcF}}
+
+\newcommand{\didx}{m} % Indexing for data points
+
+%% Fixed/scaling delimiter examples (see mathtools documentation)
+\DeclarePairedDelimiter\card{\lvert}{\rvert}
+\DeclarePairedDelimiter\abs{\lvert}{\rvert}
+\DeclarePairedDelimiter\norm{\lVert}{\rVert}
+
+\DeclareMathOperator*{\argmin}{\arg\!\min}
+\DeclareMathOperator*{\argmax}{\arg\!\max}
+
+%%% ImageSegm
+\newcommand{\numclasses}{K}
+
+%%% Dimensions
+\newcommand{\datadim}{d}
+\newcommand{\wvecdim}{d}
+
+%%% Data representation
+\newcommand{\sapp}[1]{\tilde{#1}}
+\newcommand{\mc}[1]{\mathcal{#1}}
+\newcommand{\mb}[1]{\mathbb{#1}}
+
+\newcommand{\dpt}[2]{#1^{#2}}
+% \newcommand{\dptm}[1]{#1^{\left(m\right)}}
+\newcommand{\dptm}[1]{#1^{\didx}}
+
+% Random Variables
+\newcommand{\rvx}{X} % Representing Random Variable X
+\newcommand{\rvy}{Y} % Representing Random Variable Y
+\newcommand{\rvxm}{\dptm{X}} % Representing Random Variable X(m)
+\newcommand{\rvym}{\dptm{Y}} % Representing Random Variable Y(m)
+
+\newcommand{\dx}{\bm{x}} % Representing example (vector) x
+\newcommand{\dy}{\bm{y}} % Representing example (vector) y
+
+\newcommand{\sx}{x} % Representing example (scalar) x
+\newcommand{\sy}{y} % Representing example (scalar) y
+
+\newcommand{\dxm}{\dptm{\dx}} % Representing example x(m)
+\newcommand{\dxl}{\dpt{\dx}{l}} % Representing example y(m)
+
+\newcommand{\dym}{\dptm{\dy}} % Representing example y(m)
+\newcommand{\dyl}{\dpt{\dy}{l}} % Representing example y(m)
+
+\newcommand{\sxm}{\dptm{x}} % Representing example (scalar) x
+\newcommand{\sym}{\dptm{y}} % Representing example (scalar) y
+
+\newcommand{\dxa}{\sapp{\dx}} % Representing example x at level l
+\newcommand{\dya}{\sapp{\dy}} % Representing example y at level l
+\newcommand{\dxal}{\sapp{\dx_l}} % Representing example x at level l
+\newcommand{\dyal}{\sapp{\dy_l}} % Representing example y at level l
+\newcommand{\dxalc}[1]{\sapp{\dx}_{#1}} % Representing example x at level l
+\newcommand{\dyalc}[1]{\sapp{\dy}_{#1}} % Representing example y at level l
+
+\newcommand{\dxma}{\dptm{\sapp{\dx}}} % Representing example x(m) at level l
+\newcommand{\dxmal}{\dptm{\sapp{\dx_l}}} % Representing example x(m) at level l
+\newcommand{\dymal}{\dptm{\sapp{\dy_l}}} % Representing example y(m) at level l
+\newcommand{\dxmalc}[1]{\dptm{\sapp{\dx}}_{#1}} % Representing example x(m) at level l
+\newcommand{\dymalc}[1]{\dptm{\sapp{\dy}}_{#1}} % Representing example y(m) at level l
+
+\newcommand{\dr}[1]{\bm{#1}}
+\newcommand{\oX}{\bm{X}}
+\newcommand{\oY}{\bm{Y}}
+\newcommand{\oZ}{\bm{Z}}
+
+\newcommand{\ow}{\bm{w}}
+\newcommand{\ox}{\bm{x}}
+\newcommand{\oy}{\bm{y}}
+\newcommand{\oz}{\bm{z}}
+
+\newcommand{\labelhist}{\bm{h}}
+
+\newcommand{\nlabels}{K}
+
+\newcommand{\adx}{\bm{\sapp{X}}}
+\newcommand{\ady}{\bm{\sapp{Y}}}
+\newcommand{\adxm}{\bm{\sapp{X}}^{\left(m\right)}}
+\newcommand{\adym}{\bm{\sapp{Y}}^{\left(m\right)}}
+
+\newcommand{\Real}{\mathbb{R}}
+
+%% Levels
+\newcommand{\level}{l}
+\newcommand{\nlevel}{L}
+
+%% Energies
+\newcommand{\energy}{E}
+\newcommand{\energya}{\sapp{\energy}}
+
+\newcommand{\energyu}{\sapp{\energy}^\unarycomp}
+\newcommand{\energys}{\sapp{\energy}^\staticcomp}
+\newcommand{\energyp}{\sapp{\energy}^\pairwisecomp}
+
+\newcommand{\energyau}{\sapp{\energy}^\unarycomp}
+\newcommand{\energyas}{\sapp{\energy}^\staticcomp}
+\newcommand{\energyap}{\sapp{\energy}^\pairwisecomp}
+\newcommand{\energyl}{\energy_\level}
+\newcommand{\energym}{\dptm{E}}
+
+\newcommand{\unarycomp}{U}
+\newcommand{\pairwisecomp}{P}
+\newcommand{\staticcomp}{S}
+
+\newcommand{\featuremapu}{{\featuremap}^\unarycomp}
+\newcommand{\featuremapp}{{\featuremap}^\pairwisecomp}
+
+\newcommand{\weightvunaries}{{\weightv}^\unarycomp}
+\newcommand{\weightvpairwise}{{\weightv}^\pairwisecomp}
+
+\newcommand{\eweight}{E_{\weightv}}
+\newcommand{\eunaries}{E^\unarycomp}
+\newcommand{\epairwise}{E^\pairwisecomp}
+
+\newcommand{\elopt}{\hat{\energy_{l}}}
+\newcommand{\elnopt}{\energya_{l+1}^*}
+\newcommand{\epopt}{\hat{E}}
+
+%% SSVM
+\newcommand{\loso}{\Delta} % Loss over an entire structured object
+\newcommand{\loss}{\delta} % Loss over a sub-object
+\newcommand{\losom}{\dptm{\Delta}} % Loss over an entire structured object
+
+%% Graphs
+\newcommand{\ggraph}{\mcG} % Normal graph
+\newcommand{\gvert}{\mcV}
+\newcommand{\gedge}{\mcE}
+
+\newcommand{\ggraphp}{\mcG_{\mcP}} % Graph over pixels
+\newcommand{\gvertp}{\mcV_{\mcP}}
+\newcommand{\gedgep}{\mcE_{\mcP}}
+
+\newcommand{\ggrapha}{\sapp{\mcG}} % Approx. graph
+\newcommand{\gverta}{\sapp{\mcV}}
+\newcommand{\gedgea}{\sapp{\mcE}}
+
+\newcommand{\ggraphal}{\sapp{\mcG_l}} % Approx. graph at level l
+\newcommand{\gvertal}{\sapp{\mcV_l}}
+\newcommand{\gedgeal}{\sapp{\mcE_l}}
+
+\newcommand{\ggraphalc}[1]{\sapp{\mcG}_{#1}} % Approx. graph at level l
+\newcommand{\gvertalc}[1]{\sapp{\mcV}_{#1}}
+\newcommand{\gedgealc}[1]{\sapp{\mcE}_{#1}}
+
+\newcommand{\ggraphf}{\mcG_{\mcF}} % Factor Graph
+
+\DeclareMathOperator{\atoms}{atm}
+\DeclareMathOperator{\atomsu}{\atoms_U}
+\DeclareMathOperator{\atomss}{\atoms_S}
+\DeclareMathOperator{\atomsp}{\atoms_P}
+\DeclareMathOperator{\parent}{par}
+\DeclareMathOperator{\children}{chi}
+
+\DeclareMathOperator{\chiu}{\children_U}
+\DeclareMathOperator{\chis}{\children_S}
+\DeclareMathOperator{\chip}{\children_P}
+
+\DeclareMathOperator{\atomsEdges}{atm_\mathcal{E}}
+\DeclareMathOperator{\childrenEdges}{chi_\mathcal{E}}
+
+\DeclareMathOperator{\degree}{deg}
+
+\newcommand{\ubar}{\overline{u}}
+\newcommand{\vbar}{\overline{v}}
+\newcommand{\Cbar}{\overline{C}}
+
+% BCFW
+%\let\oldell\ell
+%\renewcommand\ell{b}
+\newcommand{\weightv}{\bm{w}}
+\newcommand{\weightvopt}{\hat{\weightv}}
+\newcommand{\outputvarv}{y}
+\newcommand{\outputdomain}{\mathcal{Y}}
+\newcommand{\featuremap}{\phi}
+\newcommand{\featuremapm}{\dptm{\phi}}
+\newcommand{\featuremapdiffv}{\psi}
+\newcommand{\featuremapdiffvm}{\dptm{\featuremapdiffv}}
+\newcommand{\maxoracle}{H}
+\newcommand{\ctforacle}{C}
+\newcommand{\maxoraclem}{H^m}
+\newcommand{\ctforaclem}{C^m}
+\newcommand{\maxoracleml}{H^m_\level}
+\newcommand{\hypofunc}{h}
+\newcommand{\discfunc}{F}
+\newcommand{\discfuncl}{F_\level}
+\newcommand{\discfuncm}{\dptm{F}}
+\newcommand{\discfuncml}{\dptm{F}_\level}
+\newcommand{\discfuncw}{\discfunc_{\weightv}}
+\newcommand{\discfuncdiff}{\delta \discfunc}
+\newcommand{\discfuncdiffm}{\delta \discfuncm}
+\newcommand{\discfuncdiffw}{\delta \discfuncw}
+\newcommand{\sv}{s}
+\newcommand{\errorterm}{L}
+\newcommand{\stepsize}{\gamma}
+\newcommand{\slackvar}{\xi}
+\newcommand{\slackvarm}{\dptm{\slackvar}}
+\newcommand{\searchcorner}{\bm{s}}
+\newcommand{\weightvs}{\weightv_{\searchcorner}}
+\newcommand{\ells}{\ell_{\searchcorner}}
+
+\newcommand{\argmaxpred}{\hat{\dy}}
+\newcommand{\argmaxpredm}{\dptm{\hat{\dy}}}
+\newcommand{\argmaxpredml}{\dptm{\hat{\dy}_\level}}
+
+\newcommand{\ncache}{c}
+
+% CoCoA
+\newcommand{\nworkers}{K}
+\newcommand{\block}{k}
+\newcommand{\weightvm}{\dptm{\weightv}}
+\newcommand{\weightvblock}{\weightv^{[\block]}}
+\newcommand{\ellm}{\dptm{\ell}}
+\newcommand{\ellblock}{\ell^{[\block]}}
+\newcommand{\0}{\mathbf{0}} % the origin
+
+\newcommand{\samplefrac}{f}
+
+\newcommand{\bcfw}{\textsc{Bcfw}\xspace} 
+\newcommand{\cocoa}{\textsc{CoCoA}\xspace} 
+\newcommand{\cocoap}{\textsc{CoCoA}\textsuperscript{+}\xspace} 
+\newcommand{\algname}{\textsc{Cocoa-BCFW}\xspace} 
+\newcommand{\codbcfw}{\textsc{Cocoa-BCFW}\xspace} 
+\newcommand{\localalgname}{\textsc{LocalBcfw}\xspace}
+\newcommand{\localBCFW}{\textsc{LocalBcfw}\xspace}
+
+\newcommand{\hadesbcfw}{\textsc{Hades-Bcfw}\xspace}
+\newcommand{\hade}{\textsc{Hade}\xspace}
+
+
+% Dual formulation
+\newcommand{\ndual}{k}
+\newcommand{\dualA}{\bm{A}}
+\newcommand{\dualb}{\bm{b}}
+\newcommand{\dualalpha}{\bm{\alpha}}
+\newcommand{\dualalpham}{\dptm{\alpha}}
+
+% Inline representation
+\newcommand{\icol}[1]{% inline column vector
+  \left(\begin{smallmatrix}#1\end{smallmatrix}\right)%
+}
+\newcommand{\irow}[1]{% inline row vector
+  \begin{smallmatrix}(#1)\end{smallmatrix}%
+}
+
+% Colors
+\definecolor{DarkOrange}{rgb}{1.0, 0.55, 0.0}
+\definecolor{DarkRed}{rgb}{0.76, 0.23, 0.13}
+\definecolor{cadmiumgreen}{rgb}{0.0, 0.42, 0.24}
+
+\newcommand{\uOrange}{{\color{DarkOrange} u}}
+\newcommand{\vOrange}{{\color{DarkOrange} v}}
+\newcommand{\ubarRed}{{\color{DarkRed} \ubar}}
+\newcommand{\vbarRed}{{\color{DarkRed} \vbar}}
