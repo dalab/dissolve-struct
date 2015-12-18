@@ -247,7 +247,7 @@ object ImageSeg
   /**
    * ======= Maximization Oracle =======
    */
-  override def oracleFn(model: StructSVMModel[QuantizedImage, QuantizedLabel],
+  override def oracleFn(weights: Vector[Double],
                         xi: QuantizedImage,
                         yi: QuantizedLabel): QuantizedLabel = {
 
@@ -264,7 +264,7 @@ object ImageSeg
     assert(xi.unaryFeatures.cols == nSuperpixels,
       "xi.unaryFeatures.cols == nSuperpixels")
 
-    val (unaryWeights, pairwisePot) = unpackWeightVec(model.weights.toDenseVector, dComb)
+    val (unaryWeights, pairwisePot) = unpackWeightVec(weights.toDenseVector, dComb)
     val localFeatures =
       if (xi.globalFeatures == null)
         xi.unaryFeatures
@@ -302,9 +302,9 @@ object ImageSeg
     oracleSolution
   }
 
-  def predictFn(model: StructSVMModel[QuantizedImage, QuantizedLabel],
+  def predictFn(weights: Vector[Double],
                 xi: QuantizedImage): QuantizedLabel = {
-    oracleFn(model, xi, null)
+    oracleFn(weights, xi, null)
   }
 
 }

@@ -50,7 +50,6 @@ class OracleSpec extends UnitSpec {
 
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -59,7 +58,7 @@ class OracleSpec extends UnitSpec {
       val y_m = lo.label
 
       // Get loss-augmented argmax prediction
-      val ystar = maxoracle(model, x_m, y_m)
+      val ystar = maxoracle(w, x_m, y_m)
       val shl = delta(y_m, ystar) - deltaF(lo, ystar, w)
 
       shl
@@ -80,7 +79,6 @@ class OracleSpec extends UnitSpec {
 
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.setWeights(w)
 
       // Sample a random (x, y) pair
       val m = scala.util.Random.nextInt(M)
@@ -89,7 +87,7 @@ class OracleSpec extends UnitSpec {
       val lo = LabeledObject(y_m, x_m)
 
       // Get loss-augmented argmax prediction
-      val ystar = maxoracle(model, x_m, y_m)
+      val ystar = maxoracle(w, x_m, y_m)
       val shl = delta(y_m, ystar) - deltaF(lo, ystar, w)
 
       shl
@@ -112,7 +110,6 @@ class OracleSpec extends UnitSpec {
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -121,7 +118,7 @@ class OracleSpec extends UnitSpec {
       val y_m = lo.label
 
       // Get argmax prediction
-      val ystar = predict(model, x_m)
+      val ystar = predict(w, x_m)
 
       val F_ystar = F(x_m, ystar, w)
       val F_gt = F(x_m, y_m, w)
@@ -146,7 +143,6 @@ class OracleSpec extends UnitSpec {
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -155,7 +151,7 @@ class OracleSpec extends UnitSpec {
       val y_m = perturb(lo.label, 0.1)
 
       // Get argmax prediction
-      val ystar = predict(model, x_m)
+      val ystar = predict(w, x_m)
 
       val F_ystar = F(x_m, ystar, w)
       val F_gt = F(x_m, y_m, w)
@@ -178,7 +174,6 @@ class OracleSpec extends UnitSpec {
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -187,7 +182,7 @@ class OracleSpec extends UnitSpec {
       val y_m = lo.label
 
       // Get loss-augmented argmax prediction
-      val ystar = maxoracle(model, x_m, y_m)
+      val ystar = maxoracle(w, x_m, y_m)
 
       val H = delta(y_m, ystar) - deltaF(lo, ystar, w)
       val F_loss_aug = delta(y_m, y_m) - deltaF(lo, y_m, w)
@@ -209,7 +204,6 @@ class OracleSpec extends UnitSpec {
     val diffSeq = for (k <- 0 until NUM_WEIGHT_VECS) yield {
       // Set weight vector
       val w: WeightVector = weightVectors(k)
-      model.setWeights(w)
 
       // Choose a random example
       val m = scala.util.Random.nextInt(M)
@@ -218,7 +212,7 @@ class OracleSpec extends UnitSpec {
       val y_m = perturb(lo.label, 0.1)
 
       // Get loss-augmented argmax prediction
-      val ystar = maxoracle(model, x_m, y_m)
+      val ystar = maxoracle(w, x_m, y_m)
 
       val H = delta(y_m, ystar) - deltaF(lo, ystar, w)
       val F_loss_aug = delta(y_m, y_m) - deltaF(lo, y_m, w)

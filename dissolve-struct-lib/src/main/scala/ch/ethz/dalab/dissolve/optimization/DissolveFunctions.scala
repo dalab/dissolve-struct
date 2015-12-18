@@ -10,14 +10,14 @@ trait DissolveFunctions[X, Y] extends Serializable {
   def lossFn(yPredicted: Y, yTruth: Y): Double
 
   // Override either `oracleFn` or `oracleCandidateStream`
-  def oracleFn(model: StructSVMModel[X, Y], x: X, y: Y): Y =
-    oracleCandidateStream(model, x, y).head
+  def oracleFn(weights: Vector[Double], x: X, y: Y): Y =
+    oracleCandidateStream(weights, x, y).head
 
-  def oracleCandidateStream(model: StructSVMModel[X, Y], x: X, y: Y, initLevel: Int = 0): Stream[Y] =
-    oracleFn(model, x, y) #:: Stream.empty
+  def oracleCandidateStream(weights: Vector[Double], x: X, y: Y): Stream[Y] =
+    oracleFn(weights, x, y) #:: Stream.empty
 
-  def predictFn(model: StructSVMModel[X, Y], x: X): Y
-  
-  def classWeights(y:Y): Double = 1.0
+  def predictFn(weights: Vector[Double], x: X): Y
+
+  def classWeights(y: Y): Double = 1.0
 
 }

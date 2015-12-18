@@ -22,7 +22,7 @@ object SolverUtils {
     var structuredHingeLoss: Double = 0.0
 
     for (i <- 0 until data.size) {
-      val ystar_i = dissolveFunctions.predictFn(model, data(i).pattern)
+      val ystar_i = dissolveFunctions.predictFn(model.getWeights(), data(i).pattern)
       val loss = dissolveFunctions.lossFn(data(i).label, ystar_i)
       errorTerm += loss
 
@@ -42,7 +42,7 @@ object SolverUtils {
     val (loss, hloss) =
       data.map {
         case datapoint =>
-          val ystar_i = dissolveFunctions.predictFn(model, datapoint.pattern)
+          val ystar_i = dissolveFunctions.predictFn(model.getWeights(), datapoint.pattern)
           val loss = dissolveFunctions.lossFn(ystar_i, datapoint.label)
           val wFeatureDotProduct = model.getWeights().t * (dissolveFunctions.featureFn(datapoint.pattern, datapoint.label)
             - dissolveFunctions.featureFn(datapoint.pattern, ystar_i))
@@ -74,13 +74,13 @@ object SolverUtils {
   def dualityGap[X, Y](data: Seq[LabeledObject[X, Y]],
                        featureFn: (X, Y) => Vector[Double],
                        lossFn: (Y, Y) => Double,
-                       oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
+                       oracleFn: (Vector[Double], X, Y) => Y,
                        model: StructSVMModel[X, Y],
                        lambda: Double)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
 
     val phi = featureFn
     val maxOracle = oracleFn
-    
+
     val w: Vector[Double] = model.getWeights()
     val ell: Double = model.getEll()
 
@@ -89,7 +89,7 @@ object SolverUtils {
     val yStars = new Array[Y](n)
 
     for (i <- 0 until n) {
-      yStars(i) = maxOracle(model, data(i).pattern, data(i).label)
+      yStars(i) = maxOracle(model.getWeights(), data(i).pattern, data(i).label)
     }
 
     var w_s: DenseVector[Double] = DenseVector.zeros[Double](d)
@@ -130,9 +130,9 @@ object SolverUtils {
 
     var (w_s, ell_s) = data.map {
       case datapoint =>
-        val yStar = maxOracle(model, datapoint.pattern, datapoint.label)
-        val w_s = (phi(datapoint.pattern, datapoint.label) - phi(datapoint.pattern, yStar))*classWeight(datapoint.label)
-        val ell_s = lossFn(yStar, datapoint.label)*classWeight(datapoint.label)
+        val yStar = maxOracle(model.getWeights(), datapoint.pattern, datapoint.label)
+        val w_s = (phi(datapoint.pattern, datapoint.label) - phi(datapoint.pattern, yStar)) * classWeight(datapoint.label)
+        val ell_s = lossFn(yStar, datapoint.label) * classWeight(datapoint.label)
 
         (w_s, ell_s)
     }.fold((Vector.zeros[Double](d), 0.0)) {
@@ -160,13 +160,13 @@ object SolverUtils {
     val featureFn = dissolveFunctions.featureFn _
     val oracleFn = dissolveFunctions.oracleFn _
     val lossFn = dissolveFunctions.lossFn _
-    val classWeight = dissolveFunctions.classWeights _ 
+    val classWeight = dissolveFunctions.classWeights _
 
     var hingeLosses: Double = 0.0
     for (i <- 0 until data.size) {
-      val yStar_i = oracleFn(model, data(i).pattern, data(i).label)
-      val loss_i = lossFn(yStar_i, data(i).label)*classWeight(data(i).label)
-      val psi_i = featureFn(data(i).pattern, data(i).label) - featureFn(data(i).pattern, yStar_i)*classWeight(data(i).label)
+      val yStar_i = oracleFn(model.getWeights(), data(i).pattern, data(i).label)
+      val loss_i = lossFn(yStar_i, data(i).label) * classWeight(data(i).label)
+      val psi_i = featureFn(data(i).pattern, data(i).label) - featureFn(data(i).pattern, yStar_i) * classWeight(data(i).label)
 
       val hingeloss_i = loss_i - model.getWeights().t * psi_i
       // println("loss_i = %f, other_loss = %f".format(loss_i, model.getWeights().t * psi_i))
@@ -225,9 +225,9 @@ object SolverUtils {
 
     val n: Int = dataSize.toInt
     val d: Int = model.getWeights().size
-    
+
     val bcModel: Broadcast[StructSVMModel[X, Y]] = data.context.broadcast(model)
-    
+
     val initEval =
       PartialTrainDataEval(DenseVector.zeros[Double](d),
         0.0,
@@ -239,9 +239,9 @@ object SolverUtils {
         /**
          * Gap and Structured HingeLoss
          */
-        val lossAug_yStar = maxOracle(bcModel.value, datapoint.pattern, datapoint.label)
-        val w_s = (phi(datapoint.pattern, datapoint.label) - phi(datapoint.pattern, lossAug_yStar))*classWeight(datapoint.label)
-        val ell_s = lossFn(datapoint.label, lossAug_yStar)*classWeight(datapoint.label)
+        val lossAug_yStar = maxOracle(bcModel.value.getWeights(), datapoint.pattern, datapoint.label)
+        val w_s = (phi(datapoint.pattern, datapoint.label) - phi(datapoint.pattern, lossAug_yStar)) * classWeight(datapoint.label)
+        val ell_s = lossFn(datapoint.label, lossAug_yStar) * classWeight(datapoint.label)
         val lossAug_wFeatureDotProduct = lossFn(datapoint.label, lossAug_yStar) -
           (bcModel.value.getWeights().t * (phi(datapoint.pattern, datapoint.label)
             - phi(datapoint.pattern, lossAug_yStar)))
@@ -250,7 +250,7 @@ object SolverUtils {
         /**
          * \Delta
          */
-        val predict_yStar = predictFn(bcModel.value, datapoint.pattern)
+        val predict_yStar = predictFn(bcModel.value.getWeights(), datapoint.pattern)
         val loss = lossFn(datapoint.label, predict_yStar)
 
         /**
@@ -265,7 +265,7 @@ object SolverUtils {
           structuredHingeLoss)
 
     }.reduce(_ + _)
-    
+
     val w: Vector[Double] = model.getWeights()
     val ell: Double = model.getEll()
 

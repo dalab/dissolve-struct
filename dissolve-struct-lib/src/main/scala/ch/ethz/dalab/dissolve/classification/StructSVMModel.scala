@@ -47,7 +47,7 @@ class StructSVMModel[X, Y](
     ell = newEll
 
   def predict(pattern: X): Y = {
-    dissolveFunctions.predictFn(this, pattern)
+    dissolveFunctions.predictFn(weights, pattern)
   }
 
   override def clone(): StructSVMModel[X, Y] = {

@@ -57,8 +57,8 @@ class DBCFWSolverTuned[X, Y](
 
   case class HelperFunctions[X, Y](featureFn: (X, Y) => Vector[Double],
                                    lossFn: (Y, Y) => Double,
-                                   oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
-                                   oracleStreamFn: (StructSVMModel[X, Y], X, Y, Int) => Stream[Y],
+                                   oracleFn: (Vector[Double], X, Y) => Y,
+                                   oracleStreamFn: (Vector[Double], X, Y) => Stream[Y],
                                    classWeights: (Y) => Double)
 
   // Input to the mapper: idx -> DataShard
@@ -514,7 +514,6 @@ class DBCFWSolverTuned[X, Y](
               case (oldCache, None)           => oldCache
             }.cache()
 
-
           /**
            * Debug info
            */
@@ -590,10 +589,10 @@ class DBCFWSolverTuned[X, Y](
 
       val phi_i_label: Vector[Double] = time({ phi(pattern, label) }, "phi")
       val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
-      val psi_i: Vector[Double] = (phi_i_label - phi_i_ystar)*c_i(label)
+      val psi_i: Vector[Double] = (phi_i_label - phi_i_ystar) * c_i(label)
       val w_s: Vector[Double] = psi_i :* (1.0 / (n * lambda))
-      val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta")*c_i(label)
-      
+      val loss_i: Double = time({ lossFn(label, ystar_i) }, "Delta") * c_i(label)
+
       val ell_s: Double = (1.0 / n) * loss_i
 
       val gamma: Double =
@@ -614,7 +613,7 @@ class DBCFWSolverTuned[X, Y](
     val phi = helperFunctions.featureFn
     val lossFn = helperFunctions.lossFn
     val classWeights = helperFunctions.classWeights
-    
+
     val lambda = solverOptions.lambda
 
     val (partitionIdx, numPartitions) = partitionInfo
@@ -674,7 +673,7 @@ class DBCFWSolverTuned[X, Y](
       val yCacheMaxLevel =
         if (bestCachedCandidateForI.isEmpty) {
 
-          val argmaxStream = oracleStreamFn(localModel, pattern, label, startLevel)
+          val argmaxStream = oracleStreamFn(localModel.getWeights(), pattern, label)
 
           // val GAMMA_THRESHOLD = 0.5 * ((2.0 * n) / (k + 2.0 * n))
           val GAMMA_THRESHOLD = EPS
@@ -742,7 +741,7 @@ class DBCFWSolverTuned[X, Y](
       val phi_i_label: Vector[Double] = phi(pattern, label)
       val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
       val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
-      val energy = (lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i))*classWeights(label)
+      val energy = (lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i)) * classWeights(label)
 
       val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)
 

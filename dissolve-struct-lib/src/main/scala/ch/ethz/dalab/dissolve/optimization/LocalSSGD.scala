@@ -71,7 +71,7 @@ class LocalSSGD[X, Y](
    * BCFW optimizer
    */
   def train(data: Seq[LabeledObject[X, Y]],
-            testData: Option[Seq[LabeledObject[X, Y]]])(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
+            testData: Option[Seq[LabeledObject[X, Y]]])(implicit m: ClassTag[Y]): Vector[Double] = {
 
     util.Random.setSeed(randSeed)
 
@@ -128,7 +128,7 @@ class LocalSSGD[X, Y](
                 val label: Y = data(i).label
 
                 // 2) Solve loss-augmented inference for point i
-                val ystar_i: Y = maxOracle(model, pattern, label)
+                val ystar_i: Y = maxOracle(model.getWeights(), pattern, label)
 
                 // 3) Get the subgradient
                 val psi_i: Vector[Double] = (phi(pattern, label) - phi(pattern, ystar_i))
@@ -219,7 +219,7 @@ class LocalSSGD[X, Y](
 
     print(debugSb)
 
-    return model
+    return model.getWeights()
   }
 
 }

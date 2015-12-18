@@ -15,18 +15,15 @@ import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
 import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
 import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
-import ch.ethz.dalab.dissolve.optimization.GapThresholdCriterion
-import ch.ethz.dalab.dissolve.optimization.RoundLimitCriterion
 import ch.ethz.dalab.dissolve.optimization.SolverOptions
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
-import ch.ethz.dalab.dissolve.optimization.TimeLimitCriterion
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.utils.cli.CLAParser
 import ch.ethz.dalab.dissolve.optimization.DistBCFW
 import ch.ethz.dalab.dissolve.models.LinearChainCRF
 import ch.ethz.dalab.dissolve.optimization.DistributedSolver
 import ch.ethz.dalab.dissolve.optimization.LocalBCFW
 import ch.ethz.dalab.dissolve.optimization.LocalSSGD
+import ch.ethz.dalab.dissolve.optimization.SSVMClassifier
 
 /**
  * How to generate the input data:
@@ -112,7 +109,12 @@ object ChainDemo {
     // val solver = new LocalBCFW(crfModel, numPasses = 100, debug = true, debugMultiplier = 0, gapThreshold = 0.1, gapCheck = 0, timeBudget = 1)
     val solver = new LocalSSGD(crfModel, numPasses = 100, debug = true, debugMultiplier = 0)
 
-    val model: StructSVMModel[Matrix[Double], Vector[Double]] = solver.train(train_data, test_data)
+    val classifier = new SSVMClassifier(crfModel, solver)
+
+    classifier.train(train_data, test_data)
+
+    val x = train_data(0).pattern
+    val y = classifier.predict(x)
 
   }
 
@@ -121,13 +123,13 @@ object ChainDemo {
     val dataDir = "../data/generated"
     val appname = "chain"
     val debugPath = "chain-%d.csv".format(System.currentTimeMillis() / 1000)
-    val numPartitions = 1
+    val numPartitions = 6
     val numStates = 26
 
     /**
      * Set and configure Spark
      */
-    val conf = new SparkConf().setAppName(appname).setMaster("local")
+    val conf = new SparkConf().setAppName(appname).setMaster("local[3]")
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
@@ -140,7 +142,7 @@ object ChainDemo {
       loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
 
     val testDataRDD =
-      Some(sc.parallelize(testData, numPartitions))
+      sc.parallelize(testData, numPartitions)
 
     val trainDataRDD =
       sc.parallelize(trainData, numPartitions)
@@ -151,12 +153,24 @@ object ChainDemo {
     val crfModel = new LinearChainCRF(numStates, disablePairwise = false, useBPDecoding = false)
 
     val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
-      new DistBCFW(crfModel, roundLimit = 10, debug = true, debugMultiplier = 2, debugOutPath = debugPath, samplePerRound = 1.0)
+      new DistBCFW(crfModel, roundLimit = 50,
+        useCocoaPlus = false, debug = true,
+        debugMultiplier = 1, debugOutPath = debugPath,
+        samplePerRound = 1.0, doWeightedAveraging = false)
 
     println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1"
       .format(trainData.size, trainData(0).pattern.rows, trainData(0).pattern.cols, trainData(0).label.size))
 
-    val model: StructSVMModel[Matrix[Double], Vector[Double]] = solver.train(trainDataRDD, testDataRDD)
+    val classifier = new SSVMClassifier(crfModel, solver)
+
+    classifier.train(trainDataRDD, testDataRDD)
+
+    val x = trainData(0).pattern
+    val y = classifier.predict(x)
+
+    classifier.saveWeights("chain-weights.csv")
+
+    classifier.loadWeights("chain-weights.csv")
 
   }
 

@@ -21,12 +21,11 @@ case class MultiClassLabel(label: Double, numClasses: Int)
 object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiClassLabel] {
 
   var labelToWeight = HashMap[MultiClassLabel, Double]()
-  
 
   override def classWeights(label: MultiClassLabel): Double = {
     labelToWeight.get(label).getOrElse(1.0)
   }
-  
+
   /**
    * Feature function
    *
@@ -69,9 +68,8 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
    * Want: argmax L(y_i, y) - <w, psi_i(y)>
    * This returns the most violating (Loss-augmented) label.
    */
-  override def oracleFn(model: StructSVMModel[Vector[Double], MultiClassLabel], xi: Vector[Double], yi: MultiClassLabel): MultiClassLabel = {
+  override def oracleFn(weights: Vector[Double], xi: Vector[Double], yi: MultiClassLabel): MultiClassLabel = {
 
-    val weights = model.getWeights()
     val numClasses = yi.numClasses
 
     // Obtain a list of scores for each class
@@ -98,10 +96,10 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
   /**
    * Prediction function
    */
-  def predictFn(model: StructSVMModel[Vector[Double], MultiClassLabel], xi: Vector[Double]): MultiClassLabel = {
+  def predictFn(weights: Vector[Double], xi: Vector[Double]): MultiClassLabel = {
 
-    val weights = model.getWeights()
-    val numClasses = model.numClasses
+    // TODO Verify
+    val numClasses = labelToWeight.keys.size
 
     assert(numClasses > 1)
 
@@ -126,9 +124,9 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
     data: RDD[LabeledPoint],
     numClasses: Int,
     solverOptions: SolverOptions[Vector[Double], MultiClassLabel],
-    customWeights:Option[HashMap[MultiClassLabel,Double]]=None): StructSVMModel[Vector[Double], MultiClassLabel] = {
+    customWeights: Option[HashMap[MultiClassLabel, Double]] = None): StructSVMModel[Vector[Double], MultiClassLabel] = {
 
-    solverOptions.numClasses = numClasses  
+    solverOptions.numClasses = numClasses
 
     // Convert the RDD[LabeledPoint] to RDD[LabeledObject]
     val objectifiedData: RDD[LabeledObject[Vector[Double], MultiClassLabel]] =
@@ -143,8 +141,8 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
           new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses), features)
       }
 
-    labelToWeight = ClassificationUtils.generateClassWeights(objectifiedData,solverOptions.classWeights,customWeights)
-    
+    labelToWeight = ClassificationUtils.generateClassWeights(objectifiedData, solverOptions.classWeights, customWeights)
+
     val repartData =
       if (solverOptions.enableManualPartitionSize)
         objectifiedData.repartition(solverOptions.NUM_PART)
@@ -152,9 +150,8 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
         objectifiedData
 
     println(solverOptions)
-    
-    
-    val (trainedModel,debugInfo) = solverOptions.solver match {
+
+    val (trainedModel, debugInfo) = solverOptions.solver match {
       case UseDBCFWSolver => new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
         repartData,
         this,
@@ -163,12 +160,11 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
       case UseSSGSolver => (new SSGSolver[Vector[Double], MultiClassLabel](
         repartData.collect(),
         this,
-        solverOptions
-        ).optimize(),"")
+        solverOptions).optimize(), "")
     }
-        
+
     println(debugInfo)
-  
+
     // Dump debug information into a file
     val fw = new FileWriter(solverOptions.debugInfoPath)
     // Write the current parameters being used
@@ -230,7 +226,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
     println(solverOptions)
 
     //choose optimizer
-    val (trainedModel,debugInfo) = solverOptions.solver match {
+    val (trainedModel, debugInfo) = solverOptions.solver match {
       case UseDBCFWSolver => new DBCFWSolverTuned[Vector[Double], MultiClassLabel](
         repartData,
         dissolveFunctions,
@@ -239,8 +235,7 @@ object MultiClassSVMWithDBCFW extends DissolveFunctions[Vector[Double], MultiCla
       case UseSSGSolver => (new SSGSolver[Vector[Double], MultiClassLabel](
         repartData.collect(),
         dissolveFunctions,
-        solverOptions
-        ).optimize(),"")
+        solverOptions).optimize(), "")
     }
 
     // Dump debug information into a file

@@ -95,7 +95,7 @@ class SSGSolver[X, Y](
         val label: Y = data(i).label
 
         // 2) Solve loss-augmented inference for point i
-        val ystar_i: Y = maxOracle(model, pattern, label)
+        val ystar_i: Y = maxOracle(model.getWeights(), pattern, label)
 
         // 3) Get the subgradient
         val psi_i: Vector[Double] = (phi(pattern, label) - phi(pattern, ystar_i))*cWeight(label)

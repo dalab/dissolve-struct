@@ -146,7 +146,7 @@ class BCFWSolver[X, Y] /*extends Optimizer*/ (
         // 2.b) In case cache is disabled or a good contender from cache hasn't been found, call max Oracle
         val ystar_i: Y =
           if (bestCachedCandidateForI.isEmpty) {
-            val ystar = maxOracle(model, pattern, label)
+            val ystar = maxOracle(model.getWeights(), pattern, label)
 
             if (solverOptions.enableOracleCache)
               // Add this newly computed ystar to the cache of this i

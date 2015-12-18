@@ -84,7 +84,7 @@ class LocalBCFW[X, Y](
    * BCFW optimizer
    */
   def train(data: Seq[LabeledObject[X, Y]],
-            testData: Option[Seq[LabeledObject[X, Y]]])(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
+            testData: Option[Seq[LabeledObject[X, Y]]])(implicit m: ClassTag[Y]): Vector[Double] = {
 
     util.Random.setSeed(randSeed)
 
@@ -178,7 +178,7 @@ class LocalBCFW[X, Y](
                 // 2.b) In case cache is disabled or a good contender from cache hasn't been found, call max Oracle
                 val ystar_i: Y =
                   if (bestCachedCandidateForI.isEmpty) {
-                    val ystar = maxOracle(model, pattern, label)
+                    val ystar = maxOracle(model.getWeights(), pattern, label)
 
                     if (enableOracleCache)
                       // Add this newly computed ystar to the cache of this i
@@ -329,7 +329,7 @@ class LocalBCFW[X, Y](
 
     print(debugSb)
 
-    return model
+    return model.getWeights()
   }
 
 }

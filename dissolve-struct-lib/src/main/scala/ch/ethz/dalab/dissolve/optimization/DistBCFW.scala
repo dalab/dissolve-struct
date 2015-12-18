@@ -71,8 +71,8 @@ class DistBCFW[X, Y](
 
   case class HelperFunctions[X, Y](featureFn: (X, Y) => Vector[Double],
                                    lossFn: (Y, Y) => Double,
-                                   oracleFn: (StructSVMModel[X, Y], X, Y) => Y,
-                                   oracleStreamFn: (StructSVMModel[X, Y], X, Y, Int) => Stream[Y],
+                                   oracleFn: (Vector[Double], X, Y) => Y,
+                                   oracleStreamFn: (Vector[Double], X, Y) => Stream[Y],
                                    classWeights: (Y) => Double)
 
   // Input to the mapper: idx -> DataShard
@@ -151,7 +151,7 @@ class DistBCFW[X, Y](
    * This runs on the Master node, and each round triggers a map-reduce job on the workers
    */
   def train(data: RDD[LabeledObject[X, Y]],
-            testData: Option[RDD[LabeledObject[X, Y]]])(implicit m: ClassTag[Y]): StructSVMModel[X, Y] = {
+            testData: Option[RDD[LabeledObject[X, Y]]])(implicit m: ClassTag[Y]): Vector[Double] = {
 
     val startTime = System.currentTimeMillis()
 
@@ -485,13 +485,13 @@ class DistBCFW[X, Y](
           kAccum += deltaK
 
           val newGlobalModel = globalModel.clone()
-          newGlobalModel.setWeights(globalModel.getWeights() + sumDeltaWeightsAndEll._1 * aggregationParameter)
-          newGlobalModel.setEll(globalModel.getEll() + sumDeltaWeightsAndEll._2 * aggregationParameter)
+          newGlobalModel.setWeights(globalModel.getWeights() + (aggregationParameter * sumDeltaWeightsAndEll._1))
+          newGlobalModel.setEll(globalModel.getEll() + (aggregationParameter * sumDeltaWeightsAndEll._2))
 
           // Weighted Average model
           val newGlobalModelWAvg = globalModelWeightedAverage.clone()
-          newGlobalModelWAvg.setWeights(globalModelWeightedAverage.getWeights() + sumDeltaWeightsAndEllWAvg._1 * aggregationParameter)
-          newGlobalModelWAvg.setEll(globalModelWeightedAverage.getEll() + sumDeltaWeightsAndEllWAvg._2 * aggregationParameter)
+          newGlobalModelWAvg.setWeights(globalModelWeightedAverage.getWeights() + (aggregationParameter * sumDeltaWeightsAndEllWAvg._1))
+          newGlobalModelWAvg.setEll(globalModelWeightedAverage.getEll() + (aggregationParameter * sumDeltaWeightsAndEllWAvg._2))
 
           val w_t = globalModel.getWeights()
           val w_tp1 = newGlobalModel.getWeights()
@@ -526,8 +526,8 @@ class DistBCFW[X, Y](
             .leftOuterJoin(newPrimalsRDD)
             .mapValues {
               case ((prevW, prevEll), Some((newW, newEll))) =>
-                (prevW + (newW * aggregationParameter),
-                  prevEll + (newEll * aggregationParameter))
+                (prevW + (aggregationParameter * newW),
+                  prevEll + (aggregationParameter * newEll))
               case ((prevW, prevEll), None) => (prevW, prevEll)
             }.cache()
 
@@ -616,7 +616,7 @@ class DistBCFW[X, Y](
     /**
      * Return trained model
      */
-    globalModel
+    globalModel.getWeights()
   }
 
   def mapper(partitionInfo: (Int, Int), // (partitionIdx, numPartitions)
@@ -684,9 +684,6 @@ class DistBCFW[X, Y](
 
     for ((index, shard) <- dataIterator) yield {
 
-      /*if (index < 10)
-        println("Partition = %d, Index = %d".format(partitionNum, index))*/
-
       // 1) Pick example
       val pattern: X = shard.labeledObject.pattern
       val label: Y = shard.labeledObject.label
@@ -694,8 +691,6 @@ class DistBCFW[X, Y](
       // shard.primalInfo: (w_i, ell_i)
       val w_i = shard.primalInfo._1
       val ell_i = shard.primalInfo._2
-
-      // println("w_i is sparse - " + w_i.isInstanceOf[SparseVector[Double]])
 
       // 2.a) Search for candidates
       val optionalCache_i: Option[BoundedCacheList[Y]] = shard.cache
@@ -726,11 +721,10 @@ class DistBCFW[X, Y](
         } else None
 
       // 2.b) Solve loss-augmented inference for point i
-      val startLevel = 0
       val yCacheMaxLevel =
         if (bestCachedCandidateForI.isEmpty) {
 
-          val argmaxStream = oracleStreamFn(localModel, pattern, label, startLevel)
+          val argmaxStream = oracleStreamFn(localModel.getWeights(), pattern, label)
 
           // val GAMMA_THRESHOLD = 0.5 * ((2.0 * n) / (k + 2.0 * n))
           val GAMMA_THRESHOLD = EPS
@@ -793,12 +787,6 @@ class DistBCFW[X, Y](
       val gamma = updates.gamma
       val w_s = updates.w_s
       val ell_s = updates.ell_s
-
-      // Calculate Energy in this level
-      val phi_i_label: Vector[Double] = phi(pattern, label)
-      val phi_i_ystar: Vector[Double] = phi(pattern, ystar_i)
-      val psi_i: Vector[Double] = phi_i_label - phi_i_ystar
-      val energy = (lossFn(label, ystar_i) - (localModel.getWeights() dot psi_i)) * classWeights(label)
 
       val w_i_prime = w_i * (1.0 - gamma) + (w_s * gamma)
 

@@ -223,7 +223,7 @@ class LinearChainCRF(numStates: Int,
    * If yi is not given, then standard prediction is done (i.e. MAP decoding),
    * without any loss term.
    */
-  def oracleFnWithDecode(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double],
+  def oracleFnWithDecode(weightVec: Vector[Double], xi: Matrix[Double], yi: Vector[Double],
                          decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
     val numDims = xi.rows // 129 in Chain example 
@@ -233,7 +233,7 @@ class LinearChainCRF(numStates: Int,
     // weight.unary is a numDims x numStates Matrix (129 x 26 in above example)
     // weight.firstBias and weight.lastBias is a numStates-dimensional vector
     // weight.pairwise is a numStates x numStates Matrix
-    val weight: Weight = weightVecToObj(model.getWeights(), numStates, numDims)
+    val weight: Weight = weightVecToObj(weightVec, numStates, numDims)
 
     val thetaUnary: DenseMatrix[Double] = weight.unary.t * xi // Produces a 26 x (length-of-chain) matrix
 
@@ -301,19 +301,19 @@ class LinearChainCRF(numStates: Int,
     new Weight(unary, firstBias.toDenseVector, lastBias.toDenseVector, pairwise)
   }
 
-  override def oracleFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] =
+  override def oracleFn(weightVec: Vector[Double], xi: Matrix[Double], yi: Vector[Double]): Vector[Double] =
     if (useBPDecoding)
-      oracleFnWithDecode(model, xi, yi, bpDecode)
+      oracleFnWithDecode(weightVec, xi, yi, bpDecode)
     else
-      oracleFnWithDecode(model, xi, yi, viterbiDecode)
+      oracleFnWithDecode(weightVec, xi, yi, viterbiDecode)
 
   /**
    * Predict function.
    * This is (non-loss-augmented) decoding
    *
    */
-  def predictFn(model: StructSVMModel[Matrix[Double], Vector[Double]], xi: Matrix[Double]): Vector[Double] = {
-    val label: Vector[Double] = oracleFn(model, xi, null)
+  def predictFn(weightVec: Vector[Double], xi: Matrix[Double]): Vector[Double] = {
+    val label: Vector[Double] = oracleFn(weightVec, xi, null)
 
     label
   }
