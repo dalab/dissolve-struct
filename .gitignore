@@ -89,3 +89,5 @@ jars/
 *.synctex.gz
 *.blg
 *.aux
+
+*.toc
