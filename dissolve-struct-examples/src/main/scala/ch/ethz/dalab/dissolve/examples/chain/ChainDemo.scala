@@ -109,9 +109,9 @@ object ChainDemo {
     // val solver = new LocalBCFW(crfModel, numPasses = 100, debug = true, debugMultiplier = 0, gapThreshold = 0.1, gapCheck = 0, timeBudget = 1)
     val solver = new LocalSSGD(crfModel, numPasses = 100, debug = true, debugMultiplier = 0)
 
-    val classifier = new SSVMClassifier(crfModel, solver)
+    val classifier = new SSVMClassifier(crfModel)
 
-    classifier.train(train_data, test_data)
+    classifier.train(train_data, test_data, solver)
 
     val x = train_data(0).pattern
     val y = classifier.predict(x)
@@ -161,9 +161,9 @@ object ChainDemo {
     println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1"
       .format(trainData.size, trainData(0).pattern.rows, trainData(0).pattern.cols, trainData(0).label.size))
 
-    val classifier = new SSVMClassifier(crfModel, solver)
+    val classifier = new SSVMClassifier(crfModel)
 
-    classifier.train(trainDataRDD, testDataRDD)
+    classifier.train(trainDataRDD, testDataRDD, solver)
 
     val x = trainData(0).pattern
     val y = classifier.predict(x)
