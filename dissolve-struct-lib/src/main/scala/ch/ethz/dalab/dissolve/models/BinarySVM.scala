@@ -7,8 +7,6 @@ import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 
 class BinarySVM(classFreqMap: HashMap[Int, Double]) extends DissolveFunctions[Vector[Double], Int] {
 
-  def getClassFreqMap() = classFreqMap
-
   def setClassFreq(label: Int, freq: Double) = {
     assert(label == 1 || label == -1)
     classFreqMap(label) = freq

@@ -1,19 +1,22 @@
 package ch.ethz.dalab.dissolve.optimization
 
+import scala.annotation.migration
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
-
 import org.apache.spark.mllib
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-
+import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
 import breeze.linalg._
 import ch.ethz.dalab.dissolve.models.BinarySVM
 import ch.ethz.dalab.dissolve.regression.LabeledObject
+import ch.ethz.dalab.dissolve.models.MulticlassSVM
 
-class BinaryClassifier(invFreqLoss: Boolean = true)
-    extends SSVMClassifier[Vector[Double], Int](new BinarySVM(HashMap(1 -> 1.0, -1 -> 1.0))) {
+class MulticlassClassifier(numClasses: Int, invFreqLoss: Boolean = true)
+    extends SSVMClassifier[Vector[Double], Int](new MulticlassSVM(numClasses,
+      HashMap((0 until numClasses).toSeq.map(x => (x, 1.0)): _*))) {
 
+  // Consider reusing the below two functions from BinaryClassifier
   def convertLabPointToLabObj(dataLP: RDD[LabeledPoint],
                               isDense: Boolean): RDD[LabeledObject[Vector[Double], Int]] =
     dataLP.map {
@@ -85,7 +88,7 @@ class BinaryClassifier(invFreqLoss: Boolean = true)
       .collect()
       .toMap
     val thisLabels: List[Int] = classCount.keys.toList.sorted
-    val validLabels: List[Int] = List(-1, 1)
+    val validLabels: List[Int] = (0 until numClasses).toList
     val isValidLabels = thisLabels.zip(validLabels).forall { case (t, v) => t == v }
     assert(isValidLabels, "Expected labels = %s, Found labels = %s".format(validLabels, thisLabels))
 
@@ -103,10 +106,9 @@ class BinaryClassifier(invFreqLoss: Boolean = true)
       val classFreq = classCount.mapValues(_ / totalCount)
 
       model match {
-        case bsvmModel: BinarySVM =>
-          bsvmModel.setClassFreq(-1, classFreq(-1))
-          bsvmModel.setClassFreq(+1, classFreq(+1))
-        case _ => throw new Exception("Unrecognized Binary SVM Model")
+        case msvmModel: MulticlassSVM =>
+          (0 until numClasses).foreach { cl => msvmModel.setClassFreq(cl, classFreq(cl)) }
+        case _ => throw new Exception("Unrecognized Multiclass SVM Model")
       }
     }
 
@@ -120,27 +122,28 @@ class BinaryClassifier(invFreqLoss: Boolean = true)
                      testData: Option[Seq[LabeledObject[Vector[Double], Int]]],
                      solver: LocalSolver[Vector[Double], Int])(implicit m: ClassTag[Int]): Unit = {
 
+    // Verify sanity of labels
+    val classCount = trainData.map(_.label)
+      .groupBy(identity)
+      .mapValues(_.size)
+      .toMap
+
+    val thisLabels: List[Int] = classCount.keys.toList.sorted
+    val validLabels: List[Int] = (0 until numClasses).toList
+
+    val isValidLabels = thisLabels.zip(validLabels).forall { case (t, v) => t == v }
+    assert(isValidLabels, "Expected labels = %s, Found labels = %s".format(validLabels, thisLabels))
+
     // calculate class frequencies from trainData
     if (invFreqLoss) {
-      val classCount = trainData.map(_.label)
-        .groupBy(identity)
-        .mapValues(_.size)
-        .toMap
-
-      val thisLabels: List[Int] = classCount.keys.toList.sorted
-      val validLabels: List[Int] = List(-1, 1)
-
-      val isValidLabels = thisLabels.zip(validLabels).forall { case (t, v) => t == v }
-      assert(isValidLabels, "Expected labels = %s, Found labels = %s".format(validLabels, thisLabels))
 
       val totalCount = classCount.values.sum.toDouble
       val classFreq = classCount.mapValues(_ / totalCount)
 
       model match {
-        case bsvmModel: BinarySVM =>
-          bsvmModel.setClassFreq(-1, classFreq(-1))
-          bsvmModel.setClassFreq(+1, classFreq(+1))
-        case _ => throw new Exception("Unrecognized Binary SVM Model")
+        case msvmModel: MulticlassSVM =>
+          (0 until numClasses).foreach { cl => msvmModel.setClassFreq(cl, classFreq(cl)) }
+        case _ => throw new Exception("Unrecognized Multiclass SVM Model")
       }
     }
 

@@ -7,6 +7,11 @@ import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 
 class MulticlassSVM(numClasses: Int, classFreqMap: HashMap[Int, Double]) extends DissolveFunctions[Vector[Double], Int] {
 
+  def setClassFreq(label: Int, freq: Double) = {
+    assert(label == 1 || label == -1)
+    classFreqMap(label) = freq
+  }
+
   /**
    * Feature function
    *
