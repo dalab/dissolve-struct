@@ -42,7 +42,7 @@ The fat jar produced by this build is placed in
 `dissolve-struct-examples` directory.
 We'll now refer to this as `<examples-jar-path>`.
 
-(you might have to install `sbt` first, which can be done by running `brew install sbt` on a mac or `sudo apt-get install sbt` on Ubuntu.)
+(you might have to install `sbt` first, which can be done by running `brew install sbt` on a mac or `sudo apt-get install sbt` on Ubuntu, or follow instructions available at http://www.scala-sbt.org/download.html)
 
 **Alternative:** The binaries for both the solver and the examples package can be obtained at the [releases](https://github.com/dalab/dissolve-struct/releases) page.
 But be warned, these binaries might not be up-to-date since the project is still in the development stage.
