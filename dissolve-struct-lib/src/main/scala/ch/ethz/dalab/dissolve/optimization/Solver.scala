@@ -3,7 +3,7 @@ package ch.ethz.dalab.dissolve.optimization
 import scala.reflect.ClassTag
 import org.apache.spark.rdd.RDD
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import breeze.linalg._
 
 trait Solver[X, Y] extends Serializable {

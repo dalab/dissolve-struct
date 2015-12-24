@@ -1,6 +1,6 @@
 package ch.ethz.dalab.dissolve.optimization
 
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import breeze.linalg._
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import org.apache.spark.SparkContext
@@ -16,7 +16,7 @@ object SolverUtils {
    */
   def averageLoss[X, Y](data: Seq[LabeledObject[X, Y]],
                         dissolveFunctions: DissolveFunctions[X, Y],
-                        model: StructSVMModel[X, Y]): (Double, Double) = {
+                        model: MutableWeightsEll): (Double, Double) = {
 
     var errorTerm: Double = 0.0
     var structuredHingeLoss: Double = 0.0
@@ -36,7 +36,7 @@ object SolverUtils {
 
   def averageLoss[X, Y](data: RDD[LabeledObject[X, Y]],
                         dissolveFunctions: DissolveFunctions[X, Y],
-                        model: StructSVMModel[X, Y],
+                        model: MutableWeightsEll,
                         dataSize: Int): (Double, Double) = {
 
     val (loss, hloss) =
@@ -75,7 +75,7 @@ object SolverUtils {
                        featureFn: (X, Y) => Vector[Double],
                        lossFn: (Y, Y) => Double,
                        oracleFn: (Vector[Double], X, Y) => Y,
-                       model: StructSVMModel[X, Y],
+                       model: MutableWeightsEll,
                        lambda: Double)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
 
     val phi = featureFn
@@ -113,7 +113,7 @@ object SolverUtils {
    */
   def dualityGap[X, Y](data: RDD[LabeledObject[X, Y]],
                        dissolveFunctions: DissolveFunctions[X, Y],
-                       model: StructSVMModel[X, Y],
+                       model: MutableWeightsEll,
                        lambda: Double,
                        dataSize: Int)(implicit m: ClassTag[Y]): (Double, Vector[Double], Double) = {
 
@@ -154,7 +154,7 @@ object SolverUtils {
    */
   def primalObjective[X, Y](data: Seq[LabeledObject[X, Y]],
                             dissolveFunctions: DissolveFunctions[X, Y],
-                            model: StructSVMModel[X, Y],
+                            model: MutableWeightsEll,
                             lambda: Double): Double = {
 
     val featureFn = dissolveFunctions.featureFn _
@@ -213,7 +213,7 @@ object SolverUtils {
    */
   def trainDataEval[X, Y](data: RDD[LabeledObject[X, Y]],
                           dissolveFunctions: DissolveFunctions[X, Y],
-                          model: StructSVMModel[X, Y],
+                          model: MutableWeightsEll,
                           lambda: Double,
                           dataSize: Int)(implicit m: ClassTag[Y]): DataEval = {
 
@@ -226,7 +226,7 @@ object SolverUtils {
     val n: Int = dataSize.toInt
     val d: Int = model.getWeights().size
 
-    val bcModel: Broadcast[StructSVMModel[X, Y]] = data.context.broadcast(model)
+    val bcModel: Broadcast[MutableWeightsEll] = data.context.broadcast(model)
 
     val initEval =
       PartialTrainDataEval(DenseVector.zeros[Double](d),

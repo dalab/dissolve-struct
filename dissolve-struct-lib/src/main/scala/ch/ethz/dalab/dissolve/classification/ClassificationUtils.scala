@@ -1,16 +1,16 @@
 package ch.ethz.dalab.dissolve.classification
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.PairRDDFunctions
-import ch.ethz.dalab.dissolve.regression.LabeledObject
 import scala.collection.mutable.HashMap
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import scala.reflect.ClassTag
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.regression.LabeledObject
 import scala.collection.mutable.MutableList
-import ch.ethz.dalab.dissolve.regression.LabeledObject
+import scala.reflect.ClassTag
+
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.PairRDDFunctions
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.RDD.doubleRDDToDoubleRDDFunctions
+import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
+
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 object ClassificationUtils {
 

@@ -10,7 +10,7 @@ import cc.factorie.model.Factor2
 import cc.factorie.model.ItemizedModel
 import cc.factorie.variable.DiscreteDomain
 import cc.factorie.variable.DiscreteVariable
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 
 /**

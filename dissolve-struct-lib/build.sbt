@@ -20,8 +20,6 @@ libraryDependencies += "cc.factorie" % "factorie" % "1.0"
 
 libraryDependencies += "org.scalatest" % "scalatest_2.10" % "2.0" % "test"
 
-libraryDependencies += "com.github.scopt" %% "scopt" % "3.3.0"
-
 resolvers += Resolver.sonatypeRepo("public")
 
 mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>

@@ -16,7 +16,7 @@ import breeze.linalg.csvwrite
 import breeze.linalg.max
 import breeze.linalg.min
 import breeze.numerics.ceil
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 /**
@@ -96,7 +96,7 @@ class LocalBCFW[X, Y](
     val n: Int = data.length
     val d: Int = phi(data(0).pattern, data(0).label).size
     // Use first example to determine dimension of w
-    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), dissolveFunctions)
+    val model: MutableWeightsEll = new MutableWeightsEll(DenseVector.zeros(d), 0.0)
     val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
     var ell: Double = 0.0
     val ellMat: DenseVector[Double] = DenseVector.zeros[Double](n)
@@ -110,7 +110,7 @@ class LocalBCFW[X, Y](
 
     val debugMultiplierCor = if (debugMultiplier == 0) 100 else debugMultiplier
     var debugIter = if (debugMultiplier == 0) n else 1
-    val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), dissolveFunctions)
+    val debugModel: MutableWeightsEll = new MutableWeightsEll(DenseVector.zeros(d), 0.0)
 
     if (debug) {
       if (testData != null)

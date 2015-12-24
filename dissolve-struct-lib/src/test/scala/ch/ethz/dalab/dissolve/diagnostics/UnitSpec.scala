@@ -11,7 +11,7 @@ import breeze.linalg.DenseVector
 import breeze.linalg.Matrix
 import breeze.linalg.Vector
 import breeze.linalg.max
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import ch.ethz.dalab.dissolve.models.LinearChainCRF
 import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
 import ch.ethz.dalab.dissolve.regression.LabeledObject
@@ -86,9 +86,8 @@ object ChainTestAdapter {
    */
   val lo = data(0)
   val numd = dissolveFunctions.featureFn(lo.pattern, lo.label).size
-  val model: StructSVMModel[X, Y] =
-    new StructSVMModel[X, Y](DenseVector.zeros(numd), 0.0,
-      DenseVector.zeros(numd), dissolveFunctions, 1)
+  val model: MutableWeightsEll =
+    new MutableWeightsEll(DenseVector.zeros(numd), 0.0)
 
   /**
    * Perturb

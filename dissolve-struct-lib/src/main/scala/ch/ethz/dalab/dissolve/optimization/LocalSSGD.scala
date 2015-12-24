@@ -7,7 +7,7 @@ import breeze.linalg.DenseVector
 import breeze.linalg.Vector
 import breeze.linalg.csvwrite
 import breeze.numerics._
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import scala.collection.mutable.MutableList
 import scala.reflect.ClassTag
@@ -83,7 +83,7 @@ class LocalSSGD[X, Y](
     val n: Int = data.length
     val d: Int = phi(data(0).pattern, data(0).label).size
     // Use first example to determine dimension of w
-    val model: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(d), dissolveFunctions)
+    val model: MutableWeightsEll = new MutableWeightsEll(DenseVector.zeros(d), 0.0)
     val wMat: DenseMatrix[Double] = DenseMatrix.zeros[Double](d, n)
 
     // Initialization in case of Weighted Averaging
@@ -94,7 +94,7 @@ class LocalSSGD[X, Y](
 
     val debugMultiplierCor = if (debugMultiplier == 0) 100 else debugMultiplier
     var debugIter = if (debugMultiplier == 0) n else 1
-    val debugModel: StructSVMModel[X, Y] = new StructSVMModel(DenseVector.zeros(d), 0.0, DenseVector.zeros(ndims), dissolveFunctions)
+    val debugModel: MutableWeightsEll = new MutableWeightsEll(DenseVector.zeros(d), 0.0)
 
     if (debug) {
       debugSb ++= "round,time,iter,primal,train_error\n"

@@ -16,7 +16,7 @@ import breeze.linalg.Vector
 import breeze.linalg.max
 import breeze.linalg.min
 import breeze.linalg.norm
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import ch.ethz.dalab.dissolve.classification.Types.BoundedCacheList
 import ch.ethz.dalab.dissolve.classification.Types.Index
 import ch.ethz.dalab.dissolve.classification.Types.PrimalInfo
@@ -85,9 +85,9 @@ class DistBCFW[X, Y](
                                       cache: Option[BoundedCacheList[Y]],
                                       localSummary: Option[LocalSummary[X, Y]])
 
-  case class LocalSummary[X, Y](deltaLocalModel: StructSVMModel[X, Y],
+  case class LocalSummary[X, Y](deltaLocalModel: MutableWeightsEll,
                                 deltaLocalK: Vector[Int],
-                                deltaLocalAveragedModel: StructSVMModel[X, Y])
+                                deltaLocalAveragedModel: MutableWeightsEll)
 
   // Experimental data
   case class RoundEvaluation(roundNum: Int,
@@ -214,18 +214,12 @@ class DistBCFW[X, Y](
     val d: Int = dissolveFunctions.featureFn(samplePoint.pattern, samplePoint.label).size
     // Let the initial model contain zeros for all weights
     // Global model uses Dense Vectors by default
-    var globalModel: StructSVMModel[X, Y] = new StructSVMModel[X, Y](
+    var globalModel: MutableWeightsEll = new MutableWeightsEll(
       if (sparse) SparseVector.zeros(d) else DenseVector.zeros(d),
-      0.0,
-      DenseVector.zeros(d),
-      dissolveFunctions,
-      numClasses)
-    var globalModelWeightedAverage: StructSVMModel[X, Y] = new StructSVMModel[X, Y](
+      0.0)
+    var globalModelWeightedAverage: MutableWeightsEll = new MutableWeightsEll(
       if (sparse) SparseVector.zeros(d) else DenseVector.zeros(d),
-      0.0,
-      DenseVector.zeros(d),
-      dissolveFunctions,
-      numClasses)
+      0.0)
 
     val helperFunctions: HelperFunctions[X, Y] = HelperFunctions(dissolveFunctions.featureFn,
       dissolveFunctions.lossFn,
@@ -296,7 +290,7 @@ class DistBCFW[X, Y](
     // i.e, getting gap. errors, etc.
     var evaluateModelTimeMillis: Long = 0
 
-    def getLatestModel(): StructSVMModel[X, Y] = {
+    def getLatestModel(): MutableWeightsEll = {
       if (doWeightedAveraging)
         globalModelWeightedAverage.clone()
       else
@@ -320,13 +314,13 @@ class DistBCFW[X, Y](
         beta / numPartitions
 
     def getLatestGap(): Double = {
-      val debugModel: StructSVMModel[X, Y] = getLatestModel()
+      val debugModel: MutableWeightsEll = getLatestModel()
       val trainingData = indexedTrainDataRDD.values
       val gap = SolverUtils.dualityGap(trainingData, dissolveFunctions, debugModel, lambda, dataSize)
       gap._1
     }
 
-    def evaluateModel(model: StructSVMModel[X, Y], roundNum: Int = 0,
+    def evaluateModel(model: MutableWeightsEll, roundNum: Int = 0,
                       w_t_norm: Double, w_update_norm: Double, cos_w_update: Double): RoundEvaluation = {
 
       val startEvaluateTime = System.currentTimeMillis()
@@ -549,7 +543,7 @@ class DistBCFW[X, Y](
            * Debug info
            */
           // Obtain duality gap after each communication round
-          val debugModel: StructSVMModel[X, Y] =
+          val debugModel: MutableWeightsEll =
             if (doWeightedAveraging)
               globalModelWeightedAverage.clone()
             else globalModel.clone()
@@ -622,8 +616,8 @@ class DistBCFW[X, Y](
   def mapper(partitionInfo: (Int, Int), // (partitionIdx, numPartitions)
              dataIterator: Iterator[(Index, InputDataShard[X, Y])],
              helperFunctions: HelperFunctions[X, Y],
-             localModel: StructSVMModel[X, Y],
-             localModelWeightedAverage: StructSVMModel[X, Y],
+             localModel: MutableWeightsEll,
+             localModelWeightedAverage: MutableWeightsEll,
              n: Int,
              kAccum: Vector[Int]): Iterator[(Index, ProcessedDataShard[X, Y])] = {
 
@@ -635,7 +629,7 @@ class DistBCFW[X, Y](
     /**
      * Return updates for a specific choice of argmax and weights
      */
-    def getUpdateQuantities(model: StructSVMModel[X, Y],
+    def getUpdateQuantities(model: MutableWeightsEll,
                             pattern: X,
                             label: Y,
                             ystar_i: Y,

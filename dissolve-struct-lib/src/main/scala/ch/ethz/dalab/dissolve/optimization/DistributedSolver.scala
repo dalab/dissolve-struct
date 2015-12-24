@@ -2,7 +2,7 @@ package ch.ethz.dalab.dissolve.optimization
 
 import org.apache.spark.rdd.RDD
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import scala.reflect.ClassTag
 import breeze.linalg.Vector
 

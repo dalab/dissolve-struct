@@ -1,7 +1,7 @@
 package ch.ethz.dalab.dissolve.optimization
 
 import breeze.linalg.Vector
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
+import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 
 trait DissolveFunctions[X, Y] extends Serializable {
 
