@@ -69,6 +69,11 @@ class MulticlassClassifier(numClasses: Int, invFreqLoss: Boolean = true)
   }
 
   def train(trainDataLP: RDD[LabeledPoint],
+            testDataLP: RDD[LabeledPoint],
+            solver: DistributedSolver[Vector[Double], Int]): Unit =
+    train(trainDataLP, Some(testDataLP), solver)
+
+  def train(trainDataLP: RDD[LabeledPoint],
             testDataLP: Option[RDD[LabeledPoint]],
             solver: DistributedSolver[Vector[Double], Int]): Unit = {
 

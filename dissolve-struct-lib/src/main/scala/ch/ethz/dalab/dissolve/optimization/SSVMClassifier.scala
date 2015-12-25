@@ -13,6 +13,8 @@ class SSVMClassifier[X, Y](protected val model: DissolveFunctions[X, Y]) {
 
   protected var weights: Vector[Double] = Vector.zeros(0) // Begin with an empty vector
 
+  def getModel() = model
+
   /**
    * Distributed Optimization
    */

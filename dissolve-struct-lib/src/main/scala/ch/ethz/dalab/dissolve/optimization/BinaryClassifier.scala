@@ -14,6 +14,8 @@ import ch.ethz.dalab.dissolve.regression.LabeledObject
 class BinaryClassifier(invFreqLoss: Boolean = true)
     extends SSVMClassifier[Vector[Double], Int](new BinarySVM(HashMap(1 -> 1.0, -1 -> 1.0))) {
 
+  override def getModel() = super.getModel()
+
   def convertLabPointToLabObj(dataLP: RDD[LabeledPoint],
                               isDense: Boolean): RDD[LabeledObject[Vector[Double], Int]] =
     dataLP.map {
@@ -64,6 +66,11 @@ class BinaryClassifier(invFreqLoss: Boolean = true)
                      solver: DistributedSolver[Vector[Double], Int])(implicit m: ClassTag[Int]): Unit = {
     weights = solver.train(trainData, testData)
   }
+
+  def train(trainDataLP: RDD[LabeledPoint],
+            testDataLP: RDD[LabeledPoint],
+            solver: DistributedSolver[Vector[Double], Int]): Unit =
+    train(trainDataLP, Some(testDataLP), solver)
 
   def train(trainDataLP: RDD[LabeledPoint],
             testDataLP: Option[RDD[LabeledPoint]],

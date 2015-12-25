@@ -3,27 +3,17 @@ package ch.ethz.dalab.dissolve.examples.chain
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
+
 import breeze.linalg.DenseMatrix
 import breeze.linalg.DenseVector
 import breeze.linalg.Matrix
 import breeze.linalg.Vector
-import breeze.linalg.argmax
-import breeze.linalg.max
-import breeze.linalg.sum
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import ch.ethz.dalab.dissolve.classification.StructSVMWithBCFW
-import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
-import ch.ethz.dalab.dissolve.examples.utils.ExampleUtils
-import ch.ethz.dalab.dissolve.optimization.DissolveFunctions
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.optimization.SolverUtils
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.optimization.DistBCFW
 import ch.ethz.dalab.dissolve.models.LinearChainCRF
+import ch.ethz.dalab.dissolve.optimization.DistBCFW
 import ch.ethz.dalab.dissolve.optimization.DistributedSolver
-import ch.ethz.dalab.dissolve.optimization.LocalBCFW
 import ch.ethz.dalab.dissolve.optimization.LocalSSGD
 import ch.ethz.dalab.dissolve.optimization.SSVMClassifier
+import ch.ethz.dalab.dissolve.regression.LabeledObject
 
 /**
  * How to generate the input data:

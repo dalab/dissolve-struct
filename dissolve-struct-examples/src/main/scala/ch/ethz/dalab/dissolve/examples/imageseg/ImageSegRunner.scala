@@ -1,12 +1,14 @@
 package ch.ethz.dalab.dissolve.examples.imageseg
 
 import java.nio.file.Paths
+
 import org.apache.log4j.PropertyConfigurator
 import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
-import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
-import ch.ethz.dalab.dissolve.utils.cli.CLAParser
+
+import ch.ethz.dalab.dissolve.optimization.DistBCFW
+import ch.ethz.dalab.dissolve.optimization.DistributedSolver
+import ch.ethz.dalab.dissolve.optimization.SSVMClassifier
 import javax.imageio.ImageIO
 
 /**
@@ -24,24 +26,12 @@ object ImageSegRunner {
     /**
      * Load all options
      */
-    val (solverOptions, kwargs) = CLAParser.argsToOptions[QuantizedImage, QuantizedLabel](args)
-    val dataDir = kwargs.getOrElse("input_path", "../data/generated/msrc")
-    val appname = kwargs.getOrElse("appname", "imageseg-%d".format(startTime))
-    val debugPath = kwargs.getOrElse("debug_file", "imageseg-%d.csv".format(startTime))
+    val dataDir = "../data/generated/msrc"
+    val appname = "imageseg-%d".format(startTime)
+    val debugPath = "imageseg-%d.csv".format(startTime)
 
-    val unariesOnly = kwargs.getOrElse("unaries", "true").toBoolean
-
-    val trainFile = kwargs.getOrElse("train", "Train.txt")
-    val validationFile = kwargs.getOrElse("validation", "Validation.txt")
-    solverOptions.debugInfoPath = debugPath
-
-    println(dataDir)
-    println(kwargs)
-
-    solverOptions.doLineSearch = true
-
-    if (unariesOnly)
-      ImageSeg.DISABLE_PAIRWISE = true
+    val trainFile = "Train.txt"
+    val validationFile = "Validation.txt"
 
     /**
      * Setup Spark
@@ -59,17 +49,15 @@ object ImageSegRunner {
     val trainData = sc.parallelize(trainDataSeq, 1).cache
     val valData = sc.parallelize(valDataSeq, 1).cache
 
-    solverOptions.testDataRDD = Some(valData)
+    val crfModel = ImageSeg
+    val solver: DistributedSolver[QuantizedImage, QuantizedLabel] =
+      new DistBCFW(crfModel, roundLimit = 50,
+        useCocoaPlus = false, debug = true,
+        debugMultiplier = 1, debugOutPath = debugPath,
+        samplePerRound = 1.0, doWeightedAveraging = false)
 
-    println(solverOptions)
-
-    val trainer: StructSVMWithDBCFW[QuantizedImage, QuantizedLabel] =
-      new StructSVMWithDBCFW[QuantizedImage, QuantizedLabel](
-        trainData,
-        ImageSeg,
-        solverOptions)
-
-    val model: StructSVMModel[QuantizedImage, QuantizedLabel] = trainer.trainModel()
+    val classifier = new SSVMClassifier(crfModel)
+    classifier.train(trainData, valData, solver)
 
     // Create directories for image out, if it doesn't exist
     val imageOutDir = Paths.get(dataDir, "debug", appname)
@@ -79,7 +67,7 @@ object ImageSegRunner {
     println("Test time!")
     for (lo <- trainDataSeq) {
       val t0 = System.currentTimeMillis()
-      val prediction = model.predict(lo.pattern)
+      val prediction = classifier.predict(lo.pattern)
       val t1 = System.currentTimeMillis()
 
       val filename = lo.pattern.filename
@@ -118,7 +106,7 @@ object ImageSegRunner {
 
     for (lo <- valDataSeq) {
       val t0 = System.currentTimeMillis()
-      val prediction = model.predict(lo.pattern)
+      val prediction = classifier.predict(lo.pattern)
       val t1 = System.currentTimeMillis()
 
       val filename = lo.pattern.filename
@@ -161,14 +149,14 @@ object ImageSegRunner {
     val transDebugPath =
       Paths.get("/home/torekond/dev-local/dissolve-struct/data/generated/msrc/debug",
         "%s-trans.csv".format(appname))
-    val weights = model.getWeights().toDenseVector
+    val weights = classifier.getWeights().toDenseVector
 
     val xi = trainDataSeq(0).pattern
     val d =
-    if (xi.globalFeatures == null)
-      xi.unaryFeatures.rows
-    else
-     xi.unaryFeatures.rows + xi.globalFeatures.size
+      if (xi.globalFeatures == null)
+        xi.unaryFeatures.rows
+      else
+        xi.unaryFeatures.rows + xi.globalFeatures.size
     val (unaryMat, transMat) = ImageSeg.unpackWeightVec(weights, d)
 
     breeze.linalg.csvwrite(unaryDebugPath.toFile(), unaryMat)

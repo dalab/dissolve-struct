@@ -1,10 +1,6 @@
 package ch.ethz.dalab.dissolve.examples.binaryclassification
 
 import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.optimization.SolverOptions
-import ch.ethz.dalab.dissolve.classification.StructSVMWithDBCFW
-import ch.ethz.dalab.dissolve.classification.BinarySVMWithDBCFW
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.optimization.SolverUtils
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.SparkConf
@@ -14,6 +10,8 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.classification.SVMWithSGD
 import breeze.linalg._
 import breeze.numerics.abs
+import ch.ethz.dalab.dissolve.optimization.BinaryClassifier
+import ch.ethz.dalab.dissolve.optimization.DistBCFW
 
 /**
  *
@@ -29,6 +27,9 @@ object AdultBinary {
    */
   def dbcfwAdult() {
     val a1aPath = "../data/generated/a1a"
+    val appname = "a1a"
+    val debugPath = "a1a-%d.csv".format(System.currentTimeMillis() / 1000)
+    val numPartitions = 6
 
     // Fix seed for reproducibility
     util.Random.setSeed(1)
@@ -37,79 +38,21 @@ object AdultBinary {
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
-    val solverOptions: SolverOptions[Vector[Double], Double] = new SolverOptions()
-
-    solverOptions.roundLimit = 20 // After these many passes, each slice of the RDD returns a trained model
-    solverOptions.debug = true
-    solverOptions.lambda = 0.01
-    solverOptions.doWeightedAveraging = false
-    solverOptions.doLineSearch = true
-    solverOptions.debug = false
-
-    solverOptions.sampleWithReplacement = false
-
-    solverOptions.enableManualPartitionSize = true
-    solverOptions.NUM_PART = 1
-
-    solverOptions.sample = "frac"
-    solverOptions.sampleFrac = 0.5
-
-    solverOptions.enableOracleCache = false
-
-    solverOptions.debugInfoPath = "../debug/debugInfo-a1a-%d.csv".format(System.currentTimeMillis())
-
-
-    val data = MLUtils.loadLibSVMFile(sc, a1aPath)
+    val data = MLUtils.loadLibSVMFile(sc, a1aPath, numPartitions)
 
     // Split data into training and test set
     val splits = data.randomSplit(Array(0.8, 0.2), seed = 1L)
     val training = splits(0)
     val test = splits(1)
 
-    val objectifiedTraining: RDD[LabeledObject[Vector[Double], Double]] =
-      training.map {
-        case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], Double](x.label, Vector(x.features.toArray)) // Is the asInstanceOf required?
-      }
+    val classifier = new BinaryClassifier(invFreqLoss = true)
+    val model = classifier.getModel()
+    val solver = new DistBCFW(model, roundLimit = 50,
+      useCocoaPlus = false, debug = true,
+      debugMultiplier = 1, debugOutPath = debugPath,
+      samplePerRound = 1.0, doWeightedAveraging = false)
+    classifier.train(training, test, solver)
 
-    val objectifiedTest: RDD[LabeledObject[Vector[Double], Double]] =
-      test.map {
-        case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], Double](x.label, Vector(x.features.toArray)) // Is the asInstanceOf required?
-      }
-
-    solverOptions.testDataRDD = Some(objectifiedTest)
-    val model = BinarySVMWithDBCFW.train(training, solverOptions)
-
-    // Training Errors
-    val trueTrainingPredictions =
-      objectifiedTraining.map {
-        case x: LabeledObject[Vector[Double], Double] =>
-          val prediction = model.predict(x.pattern)
-          if (prediction == x.label)
-            1
-          else
-            0
-      }.fold(0)((acc, ele) => acc + ele)
-
-    println("Accuracy on Training set = %d/%d = %.4f".format(trueTrainingPredictions,
-      objectifiedTraining.count(),
-      (trueTrainingPredictions.toDouble / objectifiedTraining.count().toDouble) * 100))
-
-    // Test Errors
-    val trueTestPredictions =
-      objectifiedTest.map {
-        case x: LabeledObject[Vector[Double], Double] =>
-          val prediction = model.predict(x.pattern)
-          if (prediction == x.label)
-            1
-          else
-            0
-      }.fold(0)((acc, ele) => acc + ele)
-
-    println("Accuracy on Test set = %d/%d = %.4f".format(trueTestPredictions,
-      objectifiedTest.count(),
-      (trueTestPredictions.toDouble / objectifiedTest.count().toDouble) * 100))
   }
 
   /**

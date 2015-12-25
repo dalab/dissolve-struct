@@ -13,7 +13,6 @@ import cc.factorie.model._
 import cc.factorie.singleFactorIterable
 import cc.factorie.variable.DiscreteDomain
 import cc.factorie.variable.DiscreteVariable
-import ch.ethz.dalab.dissolve.classification.StructSVMModel
 import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegTypes.AdjacencyList
 import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegTypes.Label
 import ch.ethz.dalab.dissolve.examples.imageseg.ImageSegTypes.RGB_INT

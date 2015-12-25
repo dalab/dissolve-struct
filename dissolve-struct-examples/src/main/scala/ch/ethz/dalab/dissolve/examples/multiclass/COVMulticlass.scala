@@ -7,11 +7,10 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
-import breeze.linalg.Vector
-import ch.ethz.dalab.dissolve.classification.MultiClassLabel
-import ch.ethz.dalab.dissolve.classification.MultiClassSVMWithDBCFW
-import ch.ethz.dalab.dissolve.regression.LabeledObject
-import ch.ethz.dalab.dissolve.utils.cli.CLAParser
+import breeze.linalg._
+
+import ch.ethz.dalab.dissolve.optimization.DistBCFW
+import ch.ethz.dalab.dissolve.optimization.MulticlassClassifier
 
 object COVMulticlass {
 
@@ -20,15 +19,10 @@ object COVMulticlass {
     /**
      * Load all options
      */
-    val (solverOptions, kwargs) = CLAParser.argsToOptions[Vector[Double], MultiClassLabel](args)
-    val covPath = kwargs.getOrElse("input_path", "../data/generated/covtype.scale")
-    val appname = kwargs.getOrElse("appname", "cov_multi")
-    val debugPath = kwargs.getOrElse("debug_file", "cov_multi-%d.csv".format(System.currentTimeMillis() / 1000))
-    solverOptions.debugInfoPath = debugPath
-    
-    println(covPath)
-    println(kwargs)
-
+    val appname = "covmul"
+    val covPath = "../data/generated/covtype.scale"
+    val debugPath = "covmul-%d.csv".format(System.currentTimeMillis() / 1000)
+    val numPartitions = 6
     // Fix seed for reproducibility
     util.Random.setSeed(1)
 
@@ -57,39 +51,22 @@ object COVMulticlass {
 
     val numClasses = 7
 
-    val objectifiedTest: RDD[LabeledObject[Vector[Double], MultiClassLabel]] =
-      test.map {
-        case x: LabeledPoint =>
-          new LabeledObject[Vector[Double], MultiClassLabel](MultiClassLabel(x.label, numClasses),
-            Vector(x.features.toArray))
-      }
-
-    solverOptions.testDataRDD = Some(objectifiedTest)
-    val model = MultiClassSVMWithDBCFW.train(data, numClasses, solverOptions)
-
-    // Test Errors
-    val trueTestPredictions =
-      objectifiedTest.map {
-        case x: LabeledObject[Vector[Double], MultiClassLabel] =>
-          val prediction = model.predict(x.pattern)
-          if (prediction == x.label)
-            1
-          else
-            0
-      }.fold(0)((acc, ele) => acc + ele)
-
-    println("Accuracy on Test set = %d/%d = %.4f".format(trueTestPredictions,
-      objectifiedTest.count(),
-      (trueTestPredictions.toDouble / objectifiedTest.count().toDouble) * 100))
+    val classifier = new MulticlassClassifier(numClasses, invFreqLoss = true)
+    val model = classifier.getModel()
+    val solver = new DistBCFW(model, roundLimit = 50,
+      useCocoaPlus = false, debug = true,
+      debugMultiplier = 2, debugOutPath = debugPath,
+      samplePerRound = 0.5, doWeightedAveraging = false)
+    classifier.train(training, test, solver)
 
   }
 
   def main(args: Array[String]): Unit = {
 
     PropertyConfigurator.configure("conf/log4j.properties")
-    
+
     System.setProperty("spark.akka.frameSize", "512")
-    
+
     dissoveCovMulti(args)
   }
 
