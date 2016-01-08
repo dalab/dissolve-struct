@@ -1,0 +1,14 @@
+\begin{abstract}%   <- trailing '%' for backward compatibility of .sty file
+This paper describes \algname, a modular and flexible
+open source software package for distributed training of structured
+prediction models, such as structured SVMs. 
+Project website: \href{http://github.com/dalab/dissolve}{github.com/dalab/dissolve}.
+
+We support a broad range of applications, and interfaces to scala, java and python. Our framework is empowered by the fault tolerant \spark computing platform, and automatically adopts to the existing tradeoffs of computation vs communication cost on real world systems. 
+The proposed distributed algorithm combines the recent communication efficient \cocoa scheme \citep{Jaggi:2014vi,Ma:2015ti} with the state of the art primal-dual structured prediction solvers \citep{LacosteJulien:2013ue}, and improves further by adding some new ideas for caching oracle answers. 
+The framework allows approximate inference, and provides a similar standard interface as \svmstruct for the user.
+\end{abstract}
+
+\begin{keywords}
+  Structured Prediction, Structured SVM, Distributed Training
+\end{keywords}

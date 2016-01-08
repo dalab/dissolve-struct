@@ -1,0 +1,13 @@
+\section{Introduction}
+
+The era of "big data" we are currently in accentuates the need for efficient distributed optimization methods. The past few years have seen lots of progress in this field (CITE). However, most of this recent advances have been made for traditional machine learning models such as SVM, logistic regression or deep neural networks, but largely ignoring structured models. This kind of models became popular with the introduction of Conditional Random Fields in 2001 and has since then been an active area of research (CITE), especially in computer vision and natural language processing (CITE).
+
+Structured prediction has gained a lot of popularity over the past few years due to its ability to process structured objects such as images or text documents. 
+
+The structured support vector machine (SSVM) is a particularly successful variant of this approach that can be optimized in various ways, including cutting-plane methods (CITE), stochastic gradient descent (CITE), or a primal-dual scheme such as \citep{LacosteJulien:2013ue}. 
+
+The main contribution of our work is to extend the primal-dual \cocoap framework~\citep{Jaggi:2014vi,Ma:2015ti} to the structured SVM case, and combine it with BCFW \citep{LacosteJulien:2013ue} used as a local solver. We will also release a new framework that exploits Spark to distribute the code.
+
+Can we derive a analysis to show convergence?
+
+{\noindent \em Remainder omitted in this sample. See http://www.jmlr.org/papers/ for full paper.}

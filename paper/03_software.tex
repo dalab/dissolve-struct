@@ -1,0 +1,32 @@
+\section{Software package}
+
+The use of the \algname requires users to implement the following functions:
+\begin{itemize}
+\item The joint feature map $\Psi(X,Y)$ which encodes the input/output pairs.
+\item The structured loss function $\Delta(Y_i,Y)$.
+\item A maximization oracle which computes the most violating constraint by solving Eq. X.
+\item A prediction function that computes $X$. This operation is usually performed with the maximization oracle.
+\end{itemize}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{table}[h]
+\caption{Comparison of structured prediction software packages}
+\label{tab:datasets}
+   \begin{center}
+      \begin{tabular}{l l l c c c c}
+       \vspace{.25em}
+    {\small\textbf{Package}} & {\small\textbf{Language}} & %
+    {\small\textbf{License}} & \small\textbf{Distributed} & \multicolumn{3}{c}{\small\textbf{Models}} \\
+    \hline
+    & & & & ML & Chain & Graph \\
+    \algname & Scala & ? & \checkmark & \xmark & \checkmark & \checkmark \\
+    PyStruct & Python & BSD & \checkmark & \xmark & \checkmark & \checkmark \\
+	SVM\textsuperscript{struct} & C++ & non-free & \checkmark & \xmark & \xmark & \xmark \\
+	Dlib & C++ & boost & \checkmark & \xmark & \checkmark & \checkmark \\
+	CRFsuite & C++ & BSD & \checkmark & \checkmark & \checkmark & \xmark \\
+      \end{tabular}
+   \end{center}\vspace{-2mm}
+\end{table}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+TODO: Can we show a simple example like the pystruct paper?
