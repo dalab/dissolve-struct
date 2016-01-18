@@ -7,7 +7,7 @@ import breeze.linalg._
  * @param ell Corresponds to l in Algorithm 4
  */
 class MutableWeightsEll(
-    var weights: Vector[Double], 
+    var weights: Vector[Double],
     var ell: Double) extends Serializable {
 
   def getWeights(): Vector[Double] = {
@@ -26,5 +26,10 @@ class MutableWeightsEll(
 
   override def clone(): MutableWeightsEll = {
     new MutableWeightsEll(this.weights.copy, ell)
+  }
+
+  def +(that: MutableWeightsEll): MutableWeightsEll = {
+    new MutableWeightsEll(this.weights + that.weights,
+      this.ell + that.ell)
   }
 }
