@@ -37,7 +37,6 @@ class DistBCFW[X, Y](
   doWeightedAveraging: Boolean = true,
   useCocoaPlus: Boolean = true, // TODO
   beta: Double = 1.0,
-  miniBatchUpdates: Boolean = false, // TODO
   timeBudget: Int = Integer.MAX_VALUE,
   debug: Boolean = false,
   debugMultiplier: Int = 100,
@@ -49,7 +48,6 @@ class DistBCFW[X, Y](
   oracleCacheSize: Int = 10,
   samplePerRound: Double = 0.5,
   sparse: Boolean = false,
-  numClasses: Int = 0,
   checkpointFreq: Int = 50)
     extends Serializable with DistributedSolver[X, Y] {
 
@@ -208,8 +206,6 @@ class DistBCFW[X, Y](
         indexedTestDataRDD.get.count().toInt
       else
         0
-
-    val verboseDebug: Boolean = false
 
     val d: Int = dissolveFunctions.featureFn(samplePoint.pattern, samplePoint.label).size
     // Let the initial model contain zeros for all weights

@@ -39,13 +39,23 @@ object SolverUtils {
                         model: MutableWeightsEll,
                         dataSize: Int): (Double, Double) = {
 
+    val featureFn = dissolveFunctions.featureFn _
+    val predictFn = dissolveFunctions.predictFn _
+    val oracleFn = dissolveFunctions.oracleFn _
+    val lossFn = dissolveFunctions.lossFn _
+    val classWeight = dissolveFunctions.classWeights _
+
     val (loss, hloss) =
       data.map {
         case datapoint =>
-          val ystar_i = dissolveFunctions.predictFn(model.getWeights(), datapoint.pattern)
-          val loss = dissolveFunctions.lossFn(ystar_i, datapoint.label)
-          val wFeatureDotProduct = model.getWeights().t * (dissolveFunctions.featureFn(datapoint.pattern, datapoint.label)
-            - dissolveFunctions.featureFn(datapoint.pattern, ystar_i))
+          val xi = datapoint.pattern
+          val yi = datapoint.label
+          
+          val ystar_i = predictFn(model.getWeights(), xi)
+          val loss = lossFn(ystar_i, datapoint.label)
+
+          val wFeatureDotProduct = model.getWeights().t * (featureFn(xi, yi)
+            - featureFn(xi, ystar_i))
           val structuredHingeLoss: Double = loss - wFeatureDotProduct
 
           (loss, structuredHingeLoss)
@@ -178,6 +188,42 @@ object SolverUtils {
     // Compute the primal and return it
     0.5 * lambda * (model.getWeights.t * model.getWeights) + hingeLosses / data.size
 
+  }
+
+  /**
+   * Primal objective.
+   * Requires one full pass of decoding over all data examples.
+   */
+  def primalObjective[X, Y](data: RDD[LabeledObject[X, Y]],
+                            dataSize: Int,
+                            dissolveFunctions: DissolveFunctions[X, Y],
+                            model: MutableWeightsEll,
+                            lambda: Double): (Double, Double) = {
+
+    val featureFn = dissolveFunctions.featureFn _
+    val oracleFn = dissolveFunctions.oracleFn _
+    val lossFn = dissolveFunctions.lossFn _
+    val classWeight = dissolveFunctions.classWeights _
+
+    val hingeLossSum = data.map {
+      case lo =>
+        val xi = lo.pattern
+        val yi = lo.label
+
+        val yStar_i = oracleFn(model.getWeights(), xi, yi)
+        val loss_i = lossFn(yStar_i, yi) * classWeight(yi)
+        val psi_i = featureFn(xi, yi) - featureFn(xi, yStar_i) * classWeight(yi)
+
+        val hingeloss_i = loss_i - model.getWeights().t * psi_i
+
+        hingeloss_i
+    }.reduce(_ + _)
+
+    val meanHingeLoss = hingeLossSum / dataSize
+    // Compute the primal and return it
+    val primal = 0.5 * lambda * (model.getWeights.t * model.getWeights) + meanHingeLoss
+
+    (primal, meanHingeLoss)
   }
 
   case class DataEval(gap: Double,
