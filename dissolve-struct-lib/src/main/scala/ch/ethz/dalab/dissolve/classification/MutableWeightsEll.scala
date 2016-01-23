@@ -28,8 +28,17 @@ class MutableWeightsEll(
     new MutableWeightsEll(this.weights.copy, ell)
   }
 
+  // FIXME Can we make do without this?
+  @deprecated
   def +(that: MutableWeightsEll): MutableWeightsEll = {
     new MutableWeightsEll(this.weights + that.weights,
       this.ell + that.ell)
+  }
+
+  def +=(that: MutableWeightsEll): MutableWeightsEll = {
+    this.weights += that.weights
+    this.ell += that.ell
+
+    this
   }
 }

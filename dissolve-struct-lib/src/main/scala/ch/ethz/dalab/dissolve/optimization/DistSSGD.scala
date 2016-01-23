@@ -13,6 +13,7 @@ import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
 import ch.ethz.dalab.dissolve.classification.Types.Index
 import ch.ethz.dalab.dissolve.regression.LabeledObject
 import ch.ethz.dalab.dissolve.classification.MutableWeightsEll
+import java.io.FileWriter
 
 class DistSSGD[X, Y](
   dissolveFunctions: DissolveFunctions[X, Y],
@@ -50,6 +51,27 @@ class DistSSGD[X, Y](
           trainError, testError, trainStructHingeLoss, testStructHingeLoss,
           w_t_norm, w_update_norm, cos_w_update)
     }
+  }
+
+  val solverParamsStr: String = {
+
+    val sb: StringBuilder = new StringBuilder()
+
+    sb ++= "# beta=%s\n".format(beta)
+    sb ++= "# eta=%s\n".format(eta)
+
+    sb ++= "# doWeightedAveraging=%s\n".format(doWeightedAveraging)
+    sb ++= "# timeBudget=%s\n".format(timeBudget)
+
+    sb ++= "# debug=%s\n".format(debug)
+    sb ++= "# debugMultiplier=%s\n".format(debugMultiplier)
+    sb ++= "# debugOutPath=%s\n".format(debugOutPath)
+
+    sb ++= "# lambda=%s\n".format(lambda)
+
+    sb ++= "# samplePerRound=%s\n".format(samplePerRound)
+
+    sb.toString()
   }
 
   val header: String =
@@ -210,7 +232,9 @@ class DistSSGD[X, Y](
 
           val deltaInfoRDD = indexedTrainDataRDD
             .sample(withReplacement = false, fraction = samplePerRound)
-            .mapPartitionsWithIndex((idx, dataIterator) => mapper((idx, numPartitions), dataIterator, globalModel, null), true)
+            .mapPartitionsWithIndex((idx, dataIterator) =>
+              mapper((idx, numPartitions), dataIterator,
+                globalModel, globalModelWeightedAverage, kAccum), true)
             .cache()
 
           // Trigger an action
@@ -286,6 +310,34 @@ class DistSSGD[X, Y](
 
       }
 
+    /**
+     * Write debug stats
+     */
+    // Create intermediate directories if necessary
+    val outFile = new java.io.File(debugOutPath)
+    val outDir = outFile.getAbsoluteFile().getParentFile()
+    if (!outDir.exists()) {
+      println("Directory %s does not exist. Creating required path.")
+      outDir.mkdirs()
+    }
+
+    // Dump debug information into a file
+    val fw = new FileWriter(outFile)
+    // Write the current parameters being used
+    fw.write(solverParamsStr)
+    fw.write("\n")
+
+    // Write spark-specific parameters
+    fw.write(SolverUtils.getSparkConfString(data.context.getConf))
+    fw.write("\n")
+
+    // Write values noted from the run
+    fw.write(header)
+    fw.write(debugSb.toString())
+    fw.close()
+
+    print(debugSb)
+
     globalModel.getWeights()
   }
 
@@ -295,6 +347,7 @@ class DistSSGD[X, Y](
   def mapper(partitionInfo: (Int, Int), // (partitionIdx, numPartitions)
              dataIterator: Iterator[(Index, LabeledObject[X, Y])],
              weightsObj: MutableWeightsEll,
+             weightsWeightedAverageObj: MutableWeightsEll,
              kAccum: Vector[Int]): Iterator[(Int, MutableWeightsEll, Int)] = {
 
     val (partitionIdx, numPartitions) = partitionInfo
@@ -316,7 +369,7 @@ class DistSSGD[X, Y](
 
             psi
         }
-        .reduce(_ + _)
+        .reduce(_ += _)
 
     val p = (lambda * w) - psiSum
     val gamma_t: Double = 1.0 / (eta * (k + 1.0))

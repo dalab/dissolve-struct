@@ -131,6 +131,8 @@ class DistBCFW[X, Y](
 
     sb ++= "# enableOracleCache=%s\n".format(enableOracleCache)
     sb ++= "# oracleCacheSize=%s\n".format(oracleCacheSize)
+    
+    sb ++= "# samplePerRound=%s\n".format(samplePerRound)
 
     sb.toString()
   }
