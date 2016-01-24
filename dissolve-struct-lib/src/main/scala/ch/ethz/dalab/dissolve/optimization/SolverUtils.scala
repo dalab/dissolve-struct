@@ -27,7 +27,7 @@ object SolverUtils {
       errorTerm += loss
 
       val wFeatureDotProduct = model.getWeights().t * dissolveFunctions.featureFn(data(i).pattern, data(i).label)
-      val structuredHingeLoss: Double = loss - wFeatureDotProduct
+      structuredHingeLoss += (loss - wFeatureDotProduct)
     }
 
     // Return average of loss terms

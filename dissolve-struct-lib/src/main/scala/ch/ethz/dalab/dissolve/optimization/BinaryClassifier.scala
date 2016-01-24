@@ -115,6 +115,9 @@ class BinaryClassifier(invFreqLoss: Boolean = true)
           bsvmModel.setClassFreq(+1, classFreq(+1))
         case _ => throw new Exception("Unrecognized Binary SVM Model")
       }
+
+      println("Using inverse frequency loss: ( -1 -> %f, +1 -> %f)"
+        .format(classFreq(-1), classFreq(+1)))
     }
 
     train(trainDataRDD, testDataRDD, solver)
@@ -149,6 +152,9 @@ class BinaryClassifier(invFreqLoss: Boolean = true)
           bsvmModel.setClassFreq(+1, classFreq(+1))
         case _ => throw new Exception("Unrecognized Binary SVM Model")
       }
+
+      println("Using inverse frequency loss: ( -1 -> %f, +1 -> %f)"
+        .format(classFreq(-1), classFreq(+1)))
     }
 
     weights = solver.train(trainData, testData)

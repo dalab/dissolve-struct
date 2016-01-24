@@ -112,12 +112,8 @@ class LocalBCFW[X, Y](
     var debugIter = if (debugMultiplier == 0) n else 1
     val debugModel: MutableWeightsEll = new MutableWeightsEll(DenseVector.zeros(d), 0.0)
 
-    if (debug) {
-      if (testData != null)
-        debugSb ++= "round,time,iter,primal,dual,gap,train_error,test_error\n"
-      else
-        debugSb ++= "round,time,iter,primal,dual,gap,train_error\n"
-    }
+    debugSb ++= "round,time,iter,primal,dual,gap,train_error,test_error,train_loss\n"
+    
     val startTimeMillis = System.currentTimeMillis()
 
     if (debug) {
@@ -244,8 +240,8 @@ class LocalBCFW[X, Y](
                   val gap = gapTup._1
                   val primal = f + gap
 
-                  val trainError = SolverUtils.averageLoss(data, dissolveFunctions, debugModel)
-                  val testError =
+                  val (trainError, trainLoss) = SolverUtils.averageLoss(data, dissolveFunctions, debugModel)
+                  val (testError, testLoss) =
                     if (testData.isDefined)
                       SolverUtils.averageLoss(testData.get, dissolveFunctions, debugModel)
                     else
@@ -254,12 +250,12 @@ class LocalBCFW[X, Y](
                   val curTime = (System.currentTimeMillis() - startTimeMillis) / 1000.0
 
                   println("Pass %d Iteration %d, SVM primal = %f, SVM dual = %f, Duality gap = %f, Train error = %f, Test error = %f"
-                    .format(passNum + 1, k, primal, f, gap, trainError._1, testError._1))
+                    .format(passNum + 1, k, primal, f, gap, trainError, testError))
 
-                  debugSb ++= "%d,%f,%d,%s,%s,%s,%f,%f\n"
+                  debugSb ++= "%d,%f,%d,%s,%s,%s,%f,%f,%s\n"
                     .format(passNum + 1, curTime, k,
                       primal, f, gap,
-                      trainError._1, testError._1)
+                      trainError, testError, trainLoss)
 
                   debugIter = min(debugIter + n, ceil(debugIter * (1 + debugMultiplierCor / 100)))
                 }
