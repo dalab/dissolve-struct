@@ -20,10 +20,9 @@ import scala.collection.mutable.ArrayBuffer
  * x_i is the data node, containing local features
  * i \in [0, nNodes)
  */
-class QImage(
+class GNodes(
   // Graph structure
   // Vertices numbered : [0 - nNodes)
-  val nNodes: Int,
   // Edges
   val adjacencyList: Array[Array[Index]],
   // x_i's
@@ -35,21 +34,20 @@ class QImage(
  * y_i is the label for the i'th node, y_i \in [0, nStates)
  * i \in [0, nNodes)
  */
-class QLabel(
+class GLabels(
   // Vertices numbered : [0 - nNodes)
-  val nNodes: Int,
   // Labels for each y_i
   val labelList: Array[Label]) extends Serializable
 
 class GraphCRF(nNodes: Int,
                nStates: Int,
                disablePairwise: Boolean = false,
-               invFreqLoss: Map[Int, Double] = null) extends DissolveFunctions[QImage, QLabel] {
+               invFreqLoss: Map[Int, Double] = null) extends DissolveFunctions[GNodes, GLabels] {
 
   /**
    * Feature map \phi
    */
-  def featureFn(xM: QImage, yM: QLabel): Vector[Double] = {
+  def featureFn(xM: GNodes, yM: GLabels): Vector[Double] = {
 
     val d = xM.localFeatures(0).size
     val labels = yM.labelList
@@ -108,7 +106,7 @@ class GraphCRF(nNodes: Int,
   /**
    * Structured loss \Delta
    */
-  def lossFn(yTruth: QLabel, yPredict: QLabel): Double = {
+  def lossFn(yTruth: GLabels, yPredict: GLabels): Double = {
 
     assert(yTruth.labelList.size == yPredict.labelList.size,
       "Failed: yTruth.labelList.size == yPredict.labelList.size")
@@ -224,7 +222,7 @@ class GraphCRF(nNodes: Int,
   /**
    * Maximization Oracle
    */
-  override def oracleFn(weightVec: Vector[Double], xi: QImage, yi: QLabel): QLabel = {
+  override def oracleFn(weightVec: Vector[Double], xi: GNodes, yi: GLabels): GLabels = {
 
     val d = xi.localFeatures.size
     val (unaryPot, pairwisePot) = unpackWeightVec(weightVec.toDenseVector, d)
@@ -242,7 +240,7 @@ class GraphCRF(nNodes: Int,
     // Decode
     val t0 = System.currentTimeMillis()
     val decodedLabels = decode(unaryPot, pairwisePot, xi.adjacencyList)
-    val oracleSol = new QLabel(nNodes, decodedLabels)
+    val oracleSol = new GLabels(decodedLabels)
     val t1 = System.currentTimeMillis()
 
     oracleSol
@@ -251,7 +249,7 @@ class GraphCRF(nNodes: Int,
   /**
    * Prediction function
    */
-  def predictFn(weightVec: Vector[Double], xi: QImage): QLabel = {
+  def predictFn(weightVec: Vector[Double], xi: GNodes): GLabels = {
     oracleFn(weightVec, xi, null)
   }
 
