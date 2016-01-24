@@ -135,7 +135,7 @@ object COVBinary {
 
       for (sampleFrac <- sampleFracList) {
 
-        println("Beginning Experiment with: nParts = %d, samplePerRound = %d".format(sampleFrac))
+        println("Beginning Experiment with: nParts = %d, samplePerRound = %f".format(numParts, sampleFrac))
 
         val thisTraining = training.repartition(numParts)
         val thisTest = test.repartition(numParts)
@@ -151,7 +151,7 @@ object COVBinary {
 
         classifier.train(training, test, solver)
 
-        classifier.saveWeights("%d-cov-parts_%d-frac_%f-weights.csv")
+        classifier.saveWeights("%d-cov-parts_%d-frac_%f-weights.csv".format(numParts, sampleFrac))
       }
     }
 
