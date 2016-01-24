@@ -140,7 +140,7 @@ object COVBinary {
         val thisTraining = training.repartition(numParts)
         val thisTest = test.repartition(numParts)
 
-        val debugPath = "%d-cov-parts_%d-frac_%f.csv".format(System.currentTimeMillis() / 1000)
+        val debugPath = "%d-cov-parts_%d-frac_%f.csv".format(System.currentTimeMillis() / 1000, numParts, sampleFrac)
 
         val classifier = new BinaryClassifier(invFreqLoss = true)
         val model = classifier.getModel()
@@ -151,7 +151,7 @@ object COVBinary {
 
         classifier.train(training, test, solver)
 
-        classifier.saveWeights("%d-cov-parts_%d-frac_%f-weights.csv".format(numParts, sampleFrac))
+        classifier.saveWeights("%d-cov-parts_%d-frac_%f-weights.csv".format(System.currentTimeMillis() / 1000, numParts, sampleFrac))
       }
     }
 
