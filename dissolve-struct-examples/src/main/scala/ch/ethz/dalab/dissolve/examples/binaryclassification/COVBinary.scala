@@ -149,7 +149,7 @@ object COVBinary {
           debugMultiplier = 2, debugOutPath = debugPath,
           samplePerRound = sampleFrac, doWeightedAveraging = false)
 
-        classifier.train(training, test, solver)
+        classifier.train(thisTraining, thisTest, solver)
 
         classifier.saveWeights("%d-cov-parts_%d-frac_%f-weights.csv".format(System.currentTimeMillis() / 1000, numParts, sampleFrac))
       }
