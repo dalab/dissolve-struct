@@ -161,9 +161,9 @@ object COVBinary {
     val appname = "cov"
     val covPath = "data/generated/covtype.libsvm.binary.scale"
 
-    val prefix = args(1)
-    val sampleFrac = args(2).toDouble
-    val numParts = args(3).toInt
+    val prefix = args(0)
+    val sampleFrac = args(1).toDouble
+    val numParts = args(2).toInt
 
     println("prefix = %s\tsampleFrac = %f\tnumParts = %d".format(prefix, sampleFrac, numParts))
 
