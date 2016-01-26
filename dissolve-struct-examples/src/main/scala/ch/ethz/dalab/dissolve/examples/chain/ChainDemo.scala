@@ -10,6 +10,7 @@ import breeze.linalg.Matrix
 import breeze.linalg.Vector
 import ch.ethz.dalab.dissolve.models.LinearChainCRF
 import ch.ethz.dalab.dissolve.optimization.DistBCFW
+import ch.ethz.dalab.dissolve.optimization.DistSSGD
 import ch.ethz.dalab.dissolve.optimization.DistributedSolver
 import ch.ethz.dalab.dissolve.optimization.LocalSSGD
 import ch.ethz.dalab.dissolve.optimization.SSVMClassifier
@@ -142,9 +143,15 @@ object ChainDemo {
      */
     val crfModel = new LinearChainCRF(numStates, disablePairwise = false, useBPDecoding = false)
 
-    val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
+    /*val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
       new DistBCFW(crfModel, roundLimit = 50,
         useCocoaPlus = false, debug = true,
+        debugMultiplier = 1, debugOutPath = debugPath,
+        samplePerRound = 1.0, doWeightedAveraging = false)*/
+
+    val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
+      new DistSSGD(crfModel, roundLimit = 10,
+        debug = true,
         debugMultiplier = 1, debugOutPath = debugPath,
         samplePerRound = 1.0, doWeightedAveraging = false)
 
@@ -154,6 +161,78 @@ object ChainDemo {
     val classifier = new SSVMClassifier(crfModel)
 
     classifier.train(trainDataRDD, testDataRDD, solver)
+
+    val x = trainData(0).pattern
+    val y = classifier.predict(x)
+
+    classifier.saveWeights("chain-weights.csv")
+
+    classifier.loadWeights("chain-weights.csv")
+
+  }
+
+  def dbcfwExpt(): Unit = {
+
+    val dataDir = "data/generated"
+    val appname = "chain"
+    val numStates = 26
+
+    /**
+     * Set and configure Spark
+     */
+    val conf = new SparkConf().setAppName(appname).setMaster("local[3]")
+    val sc = new SparkContext(conf)
+    sc.setCheckpointDir("checkpoint-files")
+
+    /**
+     * Load Data
+     */
+    val trainData: Array[LabeledObject[Matrix[Double], Vector[Double]]] =
+      loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
+    val testData: Array[LabeledObject[Matrix[Double], Vector[Double]]] =
+      loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
+
+    val testDataRDD =
+      sc.parallelize(testData)
+
+    val trainDataRDD =
+      sc.parallelize(trainData)
+
+    /**
+     * Train model
+     */
+    val crfModel = new LinearChainCRF(numStates, disablePairwise = false, useBPDecoding = false)
+
+    val classifier = new SSVMClassifier(crfModel)
+
+    val numPartsList = List(2, 4, 8, 16)
+    val sampleFracList = List(1.0)
+
+    for (numParts <- numPartsList) {
+
+      for (sampleFrac <- sampleFracList) {
+        
+        println("Beginning Experiment with: nParts = %d, samplePerRound = %f".format(numParts, sampleFrac))
+        
+        val debugPath = "%d-chain-parts_%d-frac_%f.csv".format(System.currentTimeMillis() / 1000, numParts, sampleFrac)
+        
+        val thisTraining = trainDataRDD.repartition(numParts)
+        val thisTest = testDataRDD.repartition(numParts)
+
+        val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
+          new DistBCFW(crfModel, roundLimit = 60,
+            useCocoaPlus = false, debug = true,
+            debugMultiplier = 1, debugOutPath = debugPath,
+            samplePerRound = sampleFrac, doWeightedAveraging = false)
+
+        classifier.train(thisTraining, thisTest, solver)
+        
+      }
+
+    }
+
+    println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1"
+      .format(trainData.size, trainData(0).pattern.rows, trainData(0).pattern.cols, trainData(0).label.size))
 
     val x = trainData(0).pattern
     val y = classifier.predict(x)

@@ -140,8 +140,8 @@ class DistBCFW[X, Y](
   val EPS: Double = 2.2204E-16
 
   // Beyond `DEBUG_THRESH` rounds, debug calculations occur every `DEBUG_STEP`-th round
-  val DEBUG_THRESH: Int = 100
-  val DEBUG_STEP: Int = 50
+  val DEBUG_THRESH: Int = 20
+  val DEBUG_STEP: Int = 10
   var nextDebugRound: Int = 1
 
   val header: String =
