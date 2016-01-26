@@ -180,7 +180,7 @@ object ChainDemo {
     /**
      * Set and configure Spark
      */
-    val conf = new SparkConf().setAppName(appname).setMaster("local[3]")
+    val conf = new SparkConf().setAppName(appname)
     val sc = new SparkContext(conf)
     sc.setCheckpointDir("checkpoint-files")
 
@@ -211,35 +211,88 @@ object ChainDemo {
     for (numParts <- numPartsList) {
 
       for (sampleFrac <- sampleFracList) {
-        
+
         println("Beginning Experiment with: nParts = %d, samplePerRound = %f".format(numParts, sampleFrac))
-        
+
         val debugPath = "%d-chain-parts_%d-frac_%f.csv".format(System.currentTimeMillis() / 1000, numParts, sampleFrac)
-        
+
         val thisTraining = trainDataRDD.repartition(numParts)
         val thisTest = testDataRDD.repartition(numParts)
 
         val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
           new DistBCFW(crfModel, roundLimit = 60,
             useCocoaPlus = false, debug = true,
-            debugMultiplier = 1, debugOutPath = debugPath,
+            debugMultiplier = 2, debugOutPath = debugPath,
             samplePerRound = sampleFrac, doWeightedAveraging = false)
 
         classifier.train(thisTraining, thisTest, solver)
-        
+
+        classifier.saveWeights("%d-chain-parts_%d-frac_%f-weights.csv".format(System.currentTimeMillis() / 1000, numParts, sampleFrac))
+
       }
 
     }
 
-    println("Running Distributed BCFW with CoCoA. Loaded data with %d rows, pattern=%dx%d, label=%dx1"
-      .format(trainData.size, trainData(0).pattern.rows, trainData(0).pattern.cols, trainData(0).label.size))
+  }
 
-    val x = trainData(0).pattern
-    val y = classifier.predict(x)
+  def dbcfw_speedup(args: Array[String]): Unit = {
 
-    classifier.saveWeights("chain-weights.csv")
+    val dataDir = "data/generated"
+    val appname = "chain"
+    val numStates = 26
 
-    classifier.loadWeights("chain-weights.csv")
+    val prefix = args(1)
+    val sampleFrac = args(2).toDouble
+    val numParts = args(3).toInt
+
+    println("prefix = %s\tsampleFrac = %f\tnumParts = %d".format(prefix, sampleFrac, numParts))
+
+    /**
+     * Set and configure Spark
+     */
+    val conf = new SparkConf().setAppName(appname)
+    val sc = new SparkContext(conf)
+    sc.setCheckpointDir("checkpoint-files")
+
+    /**
+     * Load Data
+     */
+    val trainData: Array[LabeledObject[Matrix[Double], Vector[Double]]] =
+      loadData(dataDir + "/patterns_train.csv", dataDir + "/labels_train.csv", dataDir + "/folds_train.csv")
+    val testData: Array[LabeledObject[Matrix[Double], Vector[Double]]] =
+      loadData(dataDir + "/patterns_test.csv", dataDir + "/labels_test.csv", dataDir + "/folds_test.csv")
+
+    val testDataRDD =
+      sc.parallelize(testData, numParts)
+
+    val trainDataRDD =
+      sc.parallelize(trainData, numParts)
+
+    /**
+     * Train model
+     */
+    val crfModel = new LinearChainCRF(numStates, disablePairwise = false, useBPDecoding = false)
+
+    val classifier = new SSVMClassifier(crfModel)
+
+    println("Beginning Experiment with: nParts = %d, samplePerRound = %f".format(numParts, sampleFrac))
+
+    val debugPath = "%d-chain-%s-parts_%d-frac_%f.csv"
+      .format(System.currentTimeMillis() / 1000, prefix, numParts, sampleFrac)
+
+    val thisTraining = trainDataRDD.repartition(numParts)
+    val thisTest = testDataRDD.repartition(numParts)
+
+    val solver: DistributedSolver[Matrix[Double], Vector[Double]] =
+      new DistBCFW(crfModel, roundLimit = 100,
+        useCocoaPlus = false, debug = true,
+        debugMultiplier = 2, debugOutPath = debugPath,
+        samplePerRound = sampleFrac, doWeightedAveraging = false)
+
+    classifier.train(thisTraining, thisTest, solver)
+
+    classifier.saveWeights("%d-chain-%s-parts_%d-frac_%f-weights.csv"
+      .format(System.currentTimeMillis() / 1000, prefix, numParts, sampleFrac))
 
   }
 
@@ -248,9 +301,11 @@ object ChainDemo {
 
     System.setProperty("spark.akka.frameSize", "512")
 
-    chainDBCFWSolver()
+    // chainDBCFWSolver()
 
     // chainBCFW()
+
+    dbcfw_speedup(args)
   }
 
 }

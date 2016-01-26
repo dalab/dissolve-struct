@@ -157,13 +157,73 @@ object COVBinary {
 
   }
 
+  def dbcfw_speedup(args: Array[String]): Unit = {
+    val appname = "cov"
+    val covPath = "data/generated/covtype.libsvm.binary.scale"
+
+    val prefix = args(1)
+    val sampleFrac = args(2).toDouble
+    val numParts = args(3).toInt
+
+    println("prefix = %s\tsampleFrac = %f\tnumParts = %d".format(prefix, sampleFrac, numParts))
+
+    println("Current directory:" + new File(".").getAbsolutePath)
+
+    // Fix seed for reproducibility
+    util.Random.setSeed(1)
+
+    val conf = new SparkConf().setAppName(appname)
+    val sc = new SparkContext(conf)
+    sc.setCheckpointDir("checkpoint-files")
+
+    // Labels needs to be in a +1/-1 format
+    val data = MLUtils
+      .loadLibSVMFile(sc, covPath)
+      .map {
+        case x: LabeledPoint =>
+          val label =
+            if (x.label == 1)
+              +1.00
+            else
+              -1.00
+          LabeledPoint(label, x.features)
+      }
+
+    // Split data into training and test set
+    val splits = data.randomSplit(Array(0.8, 0.2), seed = 1L)
+    // val splits = data.randomSplit(Array(0.1, 0.1, 0.8), seed = 1L)
+    val training = splits(0)
+    val test = splits(1)
+
+    val thisTraining = training.repartition(numParts)
+    val thisTest = test.repartition(numParts)
+
+    val debugPath = "%d-cov-%s-parts_%d-frac_%f.csv".format(System.currentTimeMillis() / 1000, prefix, numParts, sampleFrac)
+
+    println("Beginning Experiment with: nParts = %d, samplePerRound = %f".format(numParts, sampleFrac))
+
+    val classifier = new BinaryClassifier(invFreqLoss = true)
+    val model = classifier.getModel()
+    val solver = new DistBCFW(model, roundLimit = 100,
+      useCocoaPlus = false, debug = true,
+      debugMultiplier = 2, debugOutPath = debugPath,
+      samplePerRound = sampleFrac, doWeightedAveraging = false)
+
+    classifier.train(thisTraining, thisTest, solver)
+
+    classifier.saveWeights("%d-cov-%s-parts_%d-frac_%f-weights.csv".format(System.currentTimeMillis() / 1000, prefix, numParts, sampleFrac))
+
+  }
+
   def main(args: Array[String]): Unit = {
 
     PropertyConfigurator.configure("conf/log4j.properties")
 
     System.setProperty("spark.akka.frameSize", "512")
 
-    dbcfwExpt(args)
+    // dbcfwExpt(args)
+
+    dbcfw_speedup(args)
   }
 
 }
