@@ -47,7 +47,7 @@ class LinearChainCRF(numStates: Int,
     val numDims = x.rows // 129 in case of Chain OCR
     val numVars = x.cols
     // First term for unaries, Second term for first and last letter biases, Third term for Pairwise features
-    // Unaries are row-major ordered, i.e., [0,129) positions for 'a', [129, 258) for 'b' and so on 
+    // Unaries are row-major ordered, i.e., [0,129) positions for 'a', [129, 258) for 'b' and so on
     val phi: DenseVector[Double] =
       if (!disablePairwise)
         DenseVector.zeros[Double]((numStates * numDims) + (2 * numStates) + (numStates * numStates))
@@ -57,8 +57,7 @@ class LinearChainCRF(numStates: Int,
     /* Unaries */
     for (i <- 0 until numVars) {
       val idx = (y(i).toInt * numDims)
-      phi((idx) until (idx + numDims)) :=
-        phi((idx) until (idx + numDims)) + x(::, i)
+      phi((idx) until (idx + numDims)) :+= x(::, i)
     }
 
     phi(numStates * numDims + y(0).toInt) = 1.0
@@ -226,7 +225,7 @@ class LinearChainCRF(numStates: Int,
   def oracleFnWithDecode(weightVec: Vector[Double], xi: Matrix[Double], yi: Vector[Double],
                          decodeFn: (Matrix[Double], Matrix[Double]) => Vector[Double]): Vector[Double] = {
     // val xi = xiM.toDenseMatrix // 129 x n matrix, ex. 129 x 9 if len(word) = 9
-    val numDims = xi.rows // 129 in Chain example 
+    val numDims = xi.rows // 129 in Chain example
     val numVars = xi.cols // The length of word, say 9
 
     // Convert the lengthy weight vector into an object, to ease representation
@@ -245,7 +244,7 @@ class LinearChainCRF(numStates: Int,
     val thetaPairwise: DenseMatrix[Double] = weight.pairwise
 
     // Add loss-augmentation to the score (normalized Hamming distances used for loss)
-    if (yi != null) { // loss augmentation is only done if a label yi is given. 
+    if (yi != null) { // loss augmentation is only done if a label yi is given.
       val l: Int =
         if (normalizedHammingLoss) yi.size else 1
       for (i <- 0 until numVars) {
